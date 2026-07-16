@@ -1,9 +1,16 @@
-import type { Point } from '../../types/game';
+import { COLLISION_PHYSICS } from '../../config/vehiclePhysics';
+import type { CollisionSeverity, Point } from '../../types/game';
 
 export interface MovingBody {
   position: Point;
   heading: number;
   speed: number;
+}
+
+export interface ImpactMetrics {
+  relativeSpeedKmh: number;
+  severity: CollisionSeverity;
+  direction: 'front' | 'side' | 'rear';
 }
 
 export function distanceAhead(origin: Point, heading: number, target: Point, maxLateral: number) {
@@ -81,6 +88,56 @@ export function pointOverlapsVehicle(
   const lateral = Math.abs(dx * -Math.sin(vehicleHeading) + dy * Math.cos(vehicleHeading));
   return longitudinal < vehicleLength * 0.5 + pointLength * 0.42
     && lateral < vehicleWidth * 0.5 + pointWidth * 0.44;
+}
+
+export function sweptPointOverlapsVehicle(
+  from: Point,
+  to: Point,
+  vehiclePosition: Point,
+  vehicleHeading: number,
+  vehicleLength: number,
+  vehicleWidth: number,
+  pointLength: number,
+  pointWidth: number
+) {
+  const distance = Math.hypot(to.x - from.x, to.y - from.y);
+  const steps = Math.max(1, Math.ceil(distance / COLLISION_PHYSICS.sweepStepMeters));
+  for (let index = 0; index <= steps; index += 1) {
+    const progress = index / steps;
+    const point = {
+      x: from.x + (to.x - from.x) * progress,
+      y: from.y + (to.y - from.y) * progress
+    };
+    if (pointOverlapsVehicle(point, vehiclePosition, vehicleHeading, vehicleLength, vehicleWidth, pointLength, pointWidth)) {
+      return { point, progress };
+    }
+  }
+  return null;
+}
+
+export function impactMetrics(player: MovingBody, other: MovingBody): ImpactMetrics {
+  const relativeVelocity = {
+    x: Math.cos(player.heading) * player.speed - Math.cos(other.heading) * other.speed,
+    y: Math.sin(player.heading) * player.speed - Math.sin(other.heading) * other.speed
+  };
+  const relativeMagnitude = Math.hypot(relativeVelocity.x, relativeVelocity.y);
+  const centerDistance = Math.hypot(player.position.x - other.position.x, player.position.y - other.position.y);
+  const normal = centerDistance > 0.05
+    ? { x: (player.position.x - other.position.x) / centerDistance, y: (player.position.y - other.position.y) / centerDistance }
+    : { x: Math.cos(player.heading), y: Math.sin(player.heading) };
+  const normalSpeed = Math.abs(relativeVelocity.x * normal.x + relativeVelocity.y * normal.y);
+  const alignment = Math.cos(player.heading - other.heading);
+  const direction: ImpactMetrics['direction'] = alignment < -0.55 ? 'front' : alignment > 0.55 ? 'rear' : 'side';
+  const directionFactor = direction === 'front' ? 1.1 : direction === 'side' ? 0.88 : 0.72;
+  const relativeSpeedKmh = Math.max(normalSpeed, relativeMagnitude * 0.35) * 3.6 * directionFactor;
+  return { relativeSpeedKmh, severity: severityForImpact(relativeSpeedKmh), direction };
+}
+
+export function severityForImpact(relativeSpeedKmh: number): CollisionSeverity {
+  if (relativeSpeedKmh < COLLISION_PHYSICS.severityKmh.contact) return 'contact';
+  if (relativeSpeedKmh < COLLISION_PHYSICS.severityKmh.light) return 'light';
+  if (relativeSpeedKmh < COLLISION_PHYSICS.severityKmh.moderate) return 'moderate';
+  return 'severe';
 }
 
 function clamp(value: number, min: number, max: number) {

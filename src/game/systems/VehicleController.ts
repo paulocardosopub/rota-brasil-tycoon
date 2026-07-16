@@ -41,18 +41,24 @@ export class VehicleController {
       else if (canAccelerate) this.speed += input.throttle * config.reverseAccelerationMps2 * deltaSeconds;
     }
     if (!input.throttle) {
-      const drag = config.rollingResistance * deltaSeconds;
+      const drag = (config.rollingResistance + Math.abs(this.speed) * Math.abs(this.speed) * config.aerodynamicDrag) * deltaSeconds;
       this.speed = Math.abs(this.speed) <= drag ? 0 : this.speed - Math.sign(this.speed) * drag;
     }
-    if (input.handbrake) this.speed *= Math.max(0, 1 - 5.5 * deltaSeconds);
+    if (input.handbrake) {
+      const braking = config.handbrakeMps2 * deltaSeconds;
+      this.speed = Math.abs(this.speed) <= braking ? 0 : this.speed - Math.sign(this.speed) * braking;
+    }
     this.speed = Math.max(-config.maxReverseMps, Math.min(config.maxSpeedMps, this.speed));
 
     const speedRatio = Math.min(1, Math.abs(this.speed) / config.maxSpeedMps);
-    const lowSpeedGrip = 0.52 + Math.min(1, Math.abs(this.speed) / 5) * 0.48;
-    const highSpeedStability = 1 - speedRatio * 0.38;
+    const lowSpeedGrip = config.steeringLowSpeedGrip
+      + Math.min(1, Math.abs(this.speed) / config.steeringGripSpeedMps) * (1 - config.steeringLowSpeedGrip);
+    const highSpeedStability = 1 - speedRatio * config.steeringHighSpeedReduction;
     const reverseDirection = this.speed < 0 ? -1 : 1;
-    const steeringRate = config.steeringRadiansPerSecond * lowSpeedGrip * highSpeedStability * (input.handbrake ? 1.3 : 1);
-    this.rotation += input.steering * steeringRate * reverseDirection * deltaSeconds;
+    const steeringRate = config.steeringRadiansPerSecond * lowSpeedGrip * highSpeedStability
+      * (input.handbrake ? config.handbrakeSteeringMultiplier : 1);
+    const steering = Math.abs(input.steering) < config.steeringCenterDeadzone ? 0 : input.steering;
+    this.rotation += steering * steeringRate * reverseDirection * deltaSeconds;
 
     const preferredHeading = input.assistanceEnabled && Number.isFinite(input.assistanceHeading)
       ? input.assistanceHeading!
@@ -176,6 +182,10 @@ export class VehicleController {
     this.position = { ...this.safePosition };
     this.rotation = this.safeRotation;
     this.speed = 0;
+  }
+
+  resolveCollision(point: Point) {
+    this.position = { ...point };
   }
 
   teleport(point: Point) {

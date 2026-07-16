@@ -1,9 +1,9 @@
 import Phaser from 'phaser';
 import { GAME_CONFIG } from '../../config/gameConfig';
 import { isDrivableRoad, pointInTrafficLane } from '../../map/routing/roadRules';
-import type { GraphEdge, GraphNode, MapSignal, NavigationGraph, Point, RoadData } from '../../types/game';
+import type { CollisionSeverity, GraphEdge, GraphNode, MapSignal, NavigationGraph, Point, RoadData, TrafficDensity, TrafficVehicleState } from '../../types/game';
 import { createBusVisual, createCarVisual, createUtilityVehicleVisual } from '../entities/VehicleVisual';
-import { distanceAhead, distanceAlongRoute, pathsConflict, pointOverlapsVehicle, yieldingPathsConflict } from './TrafficPhysics';
+import { distanceAhead, distanceAlongRoute, impactMetrics, pathsConflict, pointOverlapsVehicle, sweptPointOverlapsVehicle, yieldingPathsConflict } from './TrafficPhysics';
 
 type Project = (point: Point) => Point;
 type SignalState = 'green' | 'yellow' | 'red';
@@ -31,9 +31,19 @@ type TrafficVehicle = {
   stunnedUntil: number;
   ghostWithPlayerUntil: number;
   headOnDeadlockSeconds: number;
+  state: TrafficVehicleState;
+  stopReason: 'clear' | 'signal' | 'traffic' | 'player' | 'collision';
 };
 
-export type PlayerCollisionResult = { impact: boolean; autopilotRecovery: boolean };
+export type PlayerCollisionResult = {
+  impact: boolean;
+  autopilotRecovery: boolean;
+  severity: CollisionSeverity | null;
+  relativeSpeedKmh: number;
+  conditionDamage: number;
+  retainedSpeed: number;
+  resolvedPosition: Point | null;
+};
 export type TrafficUpdateResult = { autopilotDeadlockRecovery: boolean };
 
 export type AutoBrakeReason = 'clear' | 'traffic' | 'red-signal';
@@ -55,6 +65,8 @@ export class TrafficSystem {
   private collisionCooldownUntil = 0;
   private playerBrakeReason: AutoBrakeReason = 'clear';
   private deadlockRecoveries = 0;
+  private activeVehicleLimit = Number.POSITIVE_INFINITY;
+  private signalOverride: SignalState | null = null;
 
   constructor(
     scene: Phaser.Scene,
@@ -126,6 +138,8 @@ export class TrafficSystem {
         stunnedUntil: 0,
         ghostWithPlayerUntil: 0,
         headOnDeadlockSeconds: 0,
+        state: 'cruising',
+        stopReason: 'clear',
         ...spec
       });
     }
@@ -139,6 +153,10 @@ export class TrafficSystem {
     }
     this.elapsed += deltaSeconds * this.timeScale;
     for (const vehicle of this.vehicles) {
+      if (vehicle.index >= this.activeVehicleLimit) {
+        vehicle.visual.setVisible(false);
+        continue;
+      }
       const distanceFromPlayer = Math.hypot(vehicle.position.x - playerPosition.x, vehicle.position.y - playerPosition.y);
       vehicle.visual.setVisible(distanceFromPlayer < 650);
       if (distanceFromPlayer > 900 && (Math.floor(this.elapsed * 10) + vehicle.index) % 4 !== 0) continue;
@@ -149,12 +167,18 @@ export class TrafficSystem {
       const travelHeading = remaining > 0.01 ? Math.atan2(dy, dx) : vehicle.heading;
       let desiredSpeed = vehicle.maxSpeed;
       let stopBeforeTarget = false;
+      vehicle.state = this.elapsed < vehicle.ghostWithPlayerUntil ? 'recovering' : 'cruising';
+      vehicle.stopReason = 'clear';
       const signal = this.signalByNode.get(vehicle.target.id);
-      if (signal && this.signalState(signal) !== 'green') {
+      if (signal) {
+        const state = this.signalState(signal);
         const brakingDistance = vehicle.speed * vehicle.speed / (2 * vehicle.braking) + 6;
-        if (remaining < brakingDistance + 8) {
+        const shouldStop = state === 'red' || (state === 'yellow' && remaining > Math.max(5, brakingDistance * 0.72));
+        if (shouldStop && remaining < brakingDistance + 8) {
           desiredSpeed = 0;
           stopBeforeTarget = true;
+          vehicle.state = 'stopped-signal';
+          vehicle.stopReason = 'signal';
         }
       }
 
@@ -162,20 +186,38 @@ export class TrafficSystem {
       if (leadGap < 32) {
         const safeGap = GAME_CONFIG.traffic.safetyDistanceMeters + vehicle.length * 0.45;
         desiredSpeed = Math.min(desiredSpeed, Math.max(0, (leadGap - safeGap) * 0.72));
+        vehicle.state = desiredSpeed < 0.4 ? 'stopped-traffic' : 'following';
+        vehicle.stopReason = 'traffic';
       }
       const ghostingPlayer = this.elapsed < vehicle.ghostWithPlayerUntil;
       if (!ghostingPlayer) {
         const playerGap = distanceAhead(vehicle.position, travelHeading, playerPosition, 3.4);
-        if (playerGap !== null && playerGap < 38) desiredSpeed = Math.min(desiredSpeed, Math.max(0, (playerGap - 10) * 0.55));
+        if (playerGap !== null && playerGap < 38) {
+          desiredSpeed = Math.min(desiredSpeed, Math.max(0, (playerGap - 10) * 0.55));
+          vehicle.state = desiredSpeed < 0.4 ? 'stopped-traffic' : 'following';
+          vehicle.stopReason = 'player';
+        }
         if (yieldingPathsConflict(
           { position: vehicle.position, heading: travelHeading, speed: vehicle.speed },
           { position: playerPosition, heading: playerHeading, speed: playerSpeed },
           3,
           3.8
-        )) desiredSpeed = 0;
+        )) {
+          desiredSpeed = 0;
+          vehicle.state = 'stopped-traffic';
+          vehicle.stopReason = 'player';
+        }
       }
-      if (this.hasIntersectionConflict(vehicle, travelHeading)) desiredSpeed = 0;
-      if ((!ghostingPlayer && vehicle.contactWithPlayer) || this.elapsed < vehicle.stunnedUntil) desiredSpeed = 0;
+      if (this.hasIntersectionConflict(vehicle, travelHeading)) {
+        desiredSpeed = 0;
+        vehicle.state = 'stopped-traffic';
+        vehicle.stopReason = 'traffic';
+      }
+      if ((!ghostingPlayer && vehicle.contactWithPlayer) || this.elapsed < vehicle.stunnedUntil) {
+        desiredSpeed = 0;
+        vehicle.state = 'stunned';
+        vehicle.stopReason = 'collision';
+      }
 
       const headOnGap = distanceAhead(playerPosition, playerHeading, vehicle.position, 2.8);
       const headOnDeadlock = autopilotEnabled
@@ -194,6 +236,7 @@ export class TrafficSystem {
       }
 
       const rate = desiredSpeed < vehicle.speed ? vehicle.braking : vehicle.acceleration;
+      if (desiredSpeed + 0.4 < vehicle.speed && vehicle.state === 'cruising') vehicle.state = 'braking';
       vehicle.speed += clamp(desiredSpeed - vehicle.speed, -rate * deltaSeconds, rate * deltaSeconds);
       if (stopBeforeTarget && remaining <= 6.2) vehicle.speed = 0;
 
@@ -217,6 +260,7 @@ export class TrafficSystem {
 
   signalState(signal: MapSignal): SignalState {
     if (!this.signalsEnabled) return 'green';
+    if (this.signalOverride) return this.signalOverride;
     const { greenSeconds, yellowSeconds, allRedSeconds } = GAME_CONFIG.traffic.signal;
     const phaseLength = greenSeconds + yellowSeconds + allRedSeconds;
     const index = this.signalIndex.get(signal.id) ?? 0;
@@ -227,12 +271,18 @@ export class TrafficSystem {
     return 'red';
   }
 
-  checkPlayerRedLight(position: Point, speedMps: number) {
-    if (speedMps < 2 || !this.signalsEnabled) return false;
+  checkPlayerRedLight(previousPosition: Point, position: Point, speedMps: number) {
+    if (speedMps < 2 || !this.signalsEnabled || Math.hypot(position.x - previousPosition.x, position.y - previousPosition.y) < 0.08) return false;
     const cycle = Math.floor(this.elapsed / 3);
     if (cycle === this.lastViolationCycle) return false;
     for (const signal of this.signals) {
-      if (this.signalState(signal) === 'red' && Math.hypot(position.x - signal.x, position.y - signal.y) < 5) {
+      const previousDistance = Math.hypot(previousPosition.x - signal.x, previousPosition.y - signal.y);
+      const currentDistance = Math.hypot(position.x - signal.x, position.y - signal.y);
+      if (
+        this.signalState(signal) === 'red'
+        && currentDistance <= previousDistance
+        && distanceToSegment(signal, previousPosition, position) < 1.8
+      ) {
         this.lastViolationCycle = cycle;
         return true;
       }
@@ -246,12 +296,14 @@ export class TrafficSystem {
     if (this.signalsEnabled) {
       const stoppingDistance = speed * speed / (2 * GAME_CONFIG.vehicle.brakeMps2) + 10;
       for (const signal of this.signals) {
-        if (this.signalState(signal) !== 'red') continue;
+        const state = this.signalState(signal);
+        if (state === 'green') continue;
         const gap = closestGap(
           distanceAhead(position, heading, signal, 5.5),
           route.length >= 2 ? distanceAlongRoute(position, route, signal, 5.5, stoppingDistance) : null
         );
-        if (gap !== null && gap < stoppingDistance) {
+        const canStopSafelyOnYellow = state === 'yellow' && gap !== null && gap > Math.max(4, speed * 0.45);
+        if (gap !== null && gap < stoppingDistance && (state === 'red' || canStopSafelyOnYellow)) {
           targetSpeed = 0;
           reason = 'red-signal';
           break;
@@ -290,11 +342,31 @@ export class TrafficSystem {
     this.playerBrakeReason = 'clear';
   }
 
-  handlePlayerCollision(position: Point, autopilotEnabled = false): PlayerCollisionResult {
+  cycleSignalOverride() {
+    this.signalOverride = this.signalOverride === null
+      ? 'green'
+      : this.signalOverride === 'green'
+        ? 'yellow'
+        : this.signalOverride === 'yellow'
+          ? 'red'
+          : null;
+    return this.signalOverride ?? 'automatic';
+  }
+
+  setDensity(density: TrafficDensity) {
+    const multiplier = GAME_CONFIG.traffic.densityMultipliers[density];
+    this.activeVehicleLimit = Math.max(8, Math.round(this.vehicles.length * multiplier));
+  }
+
+  handlePlayerCollision(previousPosition: Point, position: Point, playerSpeed = 0, playerHeading = 0, autopilotEnabled = false): PlayerCollisionResult {
     let contacts = 0;
     let autopilotRecovery = false;
+    let strongest: ReturnType<typeof impactMetrics> | null = null;
+    let resolvedPosition: Point | null = null;
     for (const vehicle of this.vehicles) {
-      const contact = pointOverlapsVehicle(
+      if (vehicle.index >= this.activeVehicleLimit) continue;
+      const sweptContact = sweptPointOverlapsVehicle(
+        previousPosition,
         position,
         vehicle.position,
         vehicle.heading,
@@ -303,8 +375,10 @@ export class TrafficSystem {
         GAME_CONFIG.vehicle.lengthMeters,
         GAME_CONFIG.vehicle.widthMeters
       );
+      const contact = Boolean(sweptContact);
       if (contact) {
         contacts += 1;
+        const npcSpeedBeforeImpact = vehicle.speed;
         if (vehicle.ghostWithPlayerUntil > 0) {
           // Keep the pair non-solid until it actually separates. This avoids a
           // second impact if a signal delays the automatic recovery.
@@ -323,6 +397,24 @@ export class TrafficSystem {
         if (!vehicle.contactWithPlayer) {
           vehicle.speed = 0;
           vehicle.stunnedUntil = Math.max(vehicle.stunnedUntil, this.elapsed + GAME_CONFIG.traffic.collisionStunSeconds);
+          vehicle.state = 'stunned';
+          vehicle.stopReason = 'collision';
+          const metrics = impactMetrics(
+            { position, heading: playerHeading, speed: playerSpeed },
+            { position: vehicle.position, heading: vehicle.heading, speed: npcSpeedBeforeImpact }
+          );
+          if (!strongest || metrics.relativeSpeedKmh > strongest.relativeSpeedKmh) strongest = metrics;
+          const previousOverlaps = pointOverlapsVehicle(
+            previousPosition, vehicle.position, vehicle.heading, vehicle.length, vehicle.width,
+            GAME_CONFIG.vehicle.lengthMeters, GAME_CONFIG.vehicle.widthMeters
+          );
+          if (!previousOverlaps && sweptContact && sweptContact.progress > 0) {
+            const safeProgress = Math.max(0, sweptContact.progress - GAME_CONFIG.traffic.collision.contactToleranceMeters);
+            resolvedPosition = {
+              x: previousPosition.x + (position.x - previousPosition.x) * safeProgress,
+              y: previousPosition.y + (position.y - previousPosition.y) * safeProgress
+            };
+          }
         }
       } else if (vehicle.ghostWithPlayerUntil > 0 && this.elapsed >= vehicle.ghostWithPlayerUntil) vehicle.ghostWithPlayerUntil = 0;
       vehicle.contactWithPlayer = contact;
@@ -332,9 +424,18 @@ export class TrafficSystem {
     this.collisionActive = contacts > 0;
     if (startedContact && this.elapsed >= this.collisionCooldownUntil) {
       this.collisionCooldownUntil = this.elapsed + GAME_CONFIG.traffic.collisionCooldownSeconds;
-      return { impact: true, autopilotRecovery };
+      const metrics = strongest ?? { relativeSpeedKmh: 0, severity: 'contact' as const, direction: 'front' as const };
+      return {
+        impact: true,
+        autopilotRecovery,
+        severity: metrics.severity,
+        relativeSpeedKmh: metrics.relativeSpeedKmh,
+        conditionDamage: GAME_CONFIG.traffic.collision.conditionDamage[metrics.severity],
+        retainedSpeed: GAME_CONFIG.traffic.collision.retainedSpeed[metrics.severity],
+        resolvedPosition
+      };
     }
-    return { impact: false, autopilotRecovery };
+    return { impact: false, autopilotRecovery, severity: null, relativeSpeedKmh: 0, conditionDamage: 0, retainedSpeed: 1, resolvedPosition: null };
   }
 
   debugPlaceVehicle(position: Point, heading: number, distance: number) {
@@ -375,15 +476,24 @@ export class TrafficSystem {
     vehicle.stunnedUntil = this.elapsed + 10;
   }
 
+  debugPlaceCollision(position: Point, heading: number) {
+    this.debugPlaceVehicle(position, heading + Math.PI, 0);
+    const vehicle = this.vehicles[0];
+    if (!vehicle) return;
+    vehicle.heading = heading + Math.PI;
+    vehicle.stunnedUntil = 0;
+  }
+
   stats() {
     return {
-      total: this.vehicles.length,
-      buses: this.vehicles.filter((vehicle) => vehicle.kind === 'bus').length,
-      utility: this.vehicles.filter((vehicle) => vehicle.kind === 'utility').length,
-      stunned: this.vehicles.filter((vehicle) => vehicle.contactWithPlayer || this.elapsed < vehicle.stunnedUntil).length,
-      ghosted: this.vehicles.filter((vehicle) => this.elapsed < vehicle.ghostWithPlayerUntil).length,
+      total: Math.min(this.vehicles.length, this.activeVehicleLimit),
+      buses: this.vehicles.filter((vehicle) => vehicle.index < this.activeVehicleLimit && vehicle.kind === 'bus').length,
+      utility: this.vehicles.filter((vehicle) => vehicle.index < this.activeVehicleLimit && vehicle.kind === 'utility').length,
+      stunned: this.vehicles.filter((vehicle) => vehicle.index < this.activeVehicleLimit && (vehicle.contactWithPlayer || this.elapsed < vehicle.stunnedUntil)).length,
+      ghosted: this.vehicles.filter((vehicle) => vehicle.index < this.activeVehicleLimit && this.elapsed < vehicle.ghostWithPlayerUntil).length,
       deadlockRecoveries: this.deadlockRecoveries,
-      brakeReason: this.playerBrakeReason
+      brakeReason: this.playerBrakeReason,
+      stopReason: mostCommonStopReason(this.vehicles.filter((vehicle) => vehicle.index < this.activeVehicleLimit))
     };
   }
 
@@ -437,6 +547,25 @@ export class TrafficSystem {
     }
     return false;
   }
+}
+
+function mostCommonStopReason(vehicles: TrafficVehicle[]) {
+  const stopped = vehicles.filter((vehicle) => vehicle.stopReason !== 'clear');
+  if (!stopped.length) return 'Livre';
+  const labels = { signal: 'Semáforo', traffic: 'Tráfego', player: 'Jogador', collision: 'Colisão', clear: 'Livre' };
+  const counts = new Map<TrafficVehicle['stopReason'], number>();
+  for (const vehicle of stopped) counts.set(vehicle.stopReason, (counts.get(vehicle.stopReason) ?? 0) + 1);
+  const reason = [...counts.entries()].sort((a, b) => b[1] - a[1])[0][0];
+  return labels[reason];
+}
+
+function distanceToSegment(point: Point, start: Point, end: Point) {
+  const dx = end.x - start.x;
+  const dy = end.y - start.y;
+  const lengthSq = dx * dx + dy * dy;
+  if (!lengthSq) return Math.hypot(point.x - start.x, point.y - start.y);
+  const progress = clamp(((point.x - start.x) * dx + (point.y - start.y) * dy) / lengthSq, 0, 1);
+  return Math.hypot(point.x - (start.x + dx * progress), point.y - (start.y + dy * progress));
 }
 
 function vehicleSpec(kind: VehicleKind, index: number) {
