@@ -94,25 +94,39 @@ export class MissionSystem {
     let bestIndex = 0;
     let bestPoint = this.route[0];
     let bestDistance = Number.POSITIVE_INFINITY;
-    // Only inspect the next part of the active route. This prevents a crossing
-    // avenue from snapping navigation to a much later portion of the trip.
+    let scannedDistance = 0;
+    const firstSegmentLength = Math.hypot(
+      this.route[1].x - this.route[0].x,
+      this.route[1].y - this.route[0].y
+    );
+    const maximumScanDistance = Math.max(45, firstSegmentLength + 35);
+    // Only inspect the nearby, upcoming part of the active route. Within that
+    // window the closest segment wins, so zero-length points and completed
+    // corners cannot pin navigation behind the vehicle.
     const lastIndex = Math.min(this.route.length - 1, 20);
     for (let index = 0; index < lastIndex; index += 1) {
-      const point = closestPointOnSegment(position, this.route[index], this.route[index + 1]);
+      const start = this.route[index];
+      const end = this.route[index + 1];
+      const segmentLength = Math.hypot(end.x - start.x, end.y - start.y);
+      if (scannedDistance > maximumScanDistance) break;
+      scannedDistance += segmentLength;
+      if (segmentLength < 0.1) continue;
+      const point = closestPointOnSegment(position, start, end);
       const distance = Math.hypot(position.x - point.x, position.y - point.y);
-      if (distance <= 24) {
-        bestDistance = distance;
-        bestIndex = index;
-        bestPoint = point;
-        break;
-      }
       if (distance < bestDistance) {
         bestDistance = distance;
         bestIndex = index;
         bestPoint = point;
       }
     }
-    if (bestDistance <= 24) this.route = [bestPoint, ...this.route.slice(bestIndex + 1)];
+    if (bestDistance <= 24) {
+      const remaining = this.route.slice(bestIndex + 1);
+      while (
+        remaining.length
+        && Math.hypot(remaining[0].x - bestPoint.x, remaining[0].y - bestPoint.y) < 0.1
+      ) remaining.shift();
+      this.route = [bestPoint, ...remaining];
+    }
     return bestDistance;
   }
 

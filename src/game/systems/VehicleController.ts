@@ -1,12 +1,13 @@
 import { GAME_CONFIG } from '../../config/gameConfig';
 import type { Point } from '../../types/game';
-import { RoadSurfaceIndex, type NearestRoad } from './RoadSurfaceIndex';
+import { RoadSurfaceIndex } from './RoadSurfaceIndex';
 
 export interface VehicleInput {
   throttle: number;
   steering: number;
   handbrake: boolean;
   assistanceEnabled?: boolean;
+  assistanceHeading?: number;
 }
 
 export class VehicleController {
@@ -53,23 +54,26 @@ export class VehicleController {
     const steeringRate = config.steeringRadiansPerSecond * lowSpeedGrip * highSpeedStability * (input.handbrake ? 1.3 : 1);
     this.rotation += input.steering * steeringRate * reverseDirection * deltaSeconds;
 
-    const roadBeforeMove = this.roads.nearestRoad(this.position, this.rotation);
+    const preferredHeading = input.assistanceEnabled && Number.isFinite(input.assistanceHeading)
+      ? input.assistanceHeading!
+      : this.rotation;
+    const roadBeforeMove = this.roads.nearestRoad(this.position, preferredHeading);
     if (input.assistanceEnabled && roadBeforeMove && Math.abs(input.steering) < 0.1 && Math.abs(this.speed) > 1.5) {
       const roadHeading = roadBeforeMove.oneway
         ? roadBeforeMove.tangentAngle
-        : closestRoadHeading(this.rotation, roadBeforeMove.tangentAngle);
+        : closestRoadHeading(preferredHeading, roadBeforeMove.tangentAngle);
       const headingError = angleDelta(this.rotation, roadHeading);
       if (Math.abs(headingError) < config.steeringAssistMaxAngle) {
         this.rotation += clamp(headingError, -config.steeringAssistRadiansPerSecond * deltaSeconds, config.steeringAssistRadiansPerSecond * deltaSeconds);
       }
     }
-    if (input.assistanceEnabled && roadBeforeMove) {
+    if (input.assistanceEnabled && roadBeforeMove && Math.abs(input.steering) < 0.65) {
       const edgeClearance = -roadBeforeMove.unionSurfaceDistance - config.widthMeters * 0.5;
       const recoveryStrength = clamp((1.4 - edgeClearance) / 1.4, 0, 1);
       if (recoveryStrength > 0) {
         const roadHeading = roadBeforeMove.oneway
           ? roadBeforeMove.tangentAngle
-          : closestRoadHeading(this.rotation, roadBeforeMove.tangentAngle);
+          : closestRoadHeading(preferredHeading, roadBeforeMove.tangentAngle);
         const laneCenter = this.roads.laneCenter(roadBeforeMove, roadHeading);
         const lookAhead = 6 + Math.min(8, Math.abs(this.speed) * 0.5);
         const recoveryTarget = {
@@ -89,27 +93,31 @@ export class VehicleController {
     this.position.x += Math.cos(this.rotation) * distance;
     this.position.y += Math.sin(this.rotation) * distance;
 
-    const requiredRoadInset = config.widthMeters * 0.5
-      + (input.assistanceEnabled ? config.autopilotRoadMarginMeters : 0);
-    let road = this.roads.nearestRoad(this.position, this.rotation);
+    const requiredRoadInset = config.widthMeters * 0.5;
+    let road = this.roads.nearestRoad(this.position, preferredHeading);
     let outsideReliableAsphalt = !road || road.unionSurfaceDistance > -requiredRoadInset;
     if (input.assistanceEnabled && outsideReliableAsphalt) {
       const guide = road ?? roadBeforeMove;
-      if (guide) {
-        constrainToRoad(this.position, guide, requiredRoadInset);
+      if (guide && Math.abs(input.steering) < 0.2) {
         const roadHeading = guide.oneway
           ? guide.tangentAngle
-          : closestRoadHeading(this.rotation, guide.tangentAngle);
+          : closestRoadHeading(preferredHeading, guide.tangentAngle);
+        const laneCenter = this.roads.laneCenter(guide, roadHeading);
+        const recoveryTarget = {
+          x: laneCenter.x + Math.cos(roadHeading) * 7,
+          y: laneCenter.y + Math.sin(roadHeading) * 7
+        };
         this.rotation += clamp(
-          angleDelta(this.rotation, roadHeading),
-          -config.autopilotRoadRecoveryRadiansPerSecond * deltaSeconds,
-          config.autopilotRoadRecoveryRadiansPerSecond * deltaSeconds
+          angleDelta(
+            this.rotation,
+            Math.atan2(recoveryTarget.y - this.position.y, recoveryTarget.x - this.position.x)
+          ),
+          -config.autopilotRoadRecoveryRadiansPerSecond * 0.5 * deltaSeconds,
+          config.autopilotRoadRecoveryRadiansPerSecond * 0.5 * deltaSeconds
         );
-      } else {
-        this.position = previous;
       }
       this.autopilotRoadCorrections += 1;
-      road = this.roads.nearestRoad(this.position, this.rotation);
+      road = this.roads.nearestRoad(this.position, preferredHeading);
       outsideReliableAsphalt = !road || road.unionSurfaceDistance > -requiredRoadInset;
     }
     if (outsideReliableAsphalt) {
@@ -132,10 +140,10 @@ export class VehicleController {
     return travelled;
   }
 
-  alignToRoad(snapToCenter = false) {
-    const road = this.roads.nearestRoad(this.position, this.rotation);
+  alignToRoad(snapToCenter = false, preferredHeading = this.rotation) {
+    const road = this.roads.nearestRoad(this.position, preferredHeading);
     if (!road) return false;
-    this.rotation = road.oneway ? road.tangentAngle : closestRoadHeading(this.rotation, road.tangentAngle);
+    this.rotation = road.oneway ? road.tangentAngle : closestRoadHeading(preferredHeading, road.tangentAngle);
     if (snapToCenter || road.surfaceDistance > -0.3) this.position = this.roads.laneCenter(road, this.rotation);
     this.safePosition = { ...this.position };
     this.safeRotation = this.rotation;
@@ -143,24 +151,24 @@ export class VehicleController {
     return true;
   }
 
-  engageAutopilot() {
+  engageAutopilot(preferredHeading = this.rotation) {
     const forwardSpeed = Math.max(0, this.speed);
-    const aligned = this.alignToRoad(true);
+    const aligned = this.alignToRoad(true, preferredHeading);
     if (aligned) this.speed = forwardSpeed;
     this.autopilotRoadCorrections = 0;
     this.minimumAutopilotRoadClearance = Number.POSITIVE_INFINITY;
     return aligned;
   }
 
-  recoverAutopilotToLane() {
+  recoverAutopilotToLane(preferredHeading = this.rotation) {
     const forwardSpeed = Math.max(0, this.speed);
-    const aligned = this.alignToRoad(true);
+    const aligned = this.alignToRoad(true, preferredHeading);
     if (aligned) this.speed = Math.max(forwardSpeed, GAME_CONFIG.vehicle.autopilotRecoverySpeedMps);
     return aligned;
   }
 
-  roadEdgeClearance() {
-    const road = this.roads.nearestRoad(this.position, this.rotation);
+  roadEdgeClearance(preferredHeading = this.rotation) {
+    const road = this.roads.nearestRoad(this.position, preferredHeading);
     return road ? -road.unionSurfaceDistance - GAME_CONFIG.vehicle.widthMeters * 0.5 : Number.NEGATIVE_INFINITY;
   }
 
@@ -188,19 +196,4 @@ function closestRoadHeading(current: number, tangent: number) {
 
 function clamp(value: number, min: number, max: number) {
   return Math.max(min, Math.min(max, value));
-}
-
-function constrainToRoad(point: Point, road: NearestRoad, requiredInset: number) {
-  const dx = point.x - road.closest.x;
-  const dy = point.y - road.closest.y;
-  const distance = Math.hypot(dx, dy);
-  const safeCenterDistance = Math.max(0, road.halfWidth - requiredInset);
-  if (distance <= safeCenterDistance) return;
-  if (!distance) {
-    point.x = road.closest.x;
-    point.y = road.closest.y;
-    return;
-  }
-  point.x = road.closest.x + dx / distance * safeCenterDistance;
-  point.y = road.closest.y + dy / distance * safeCenterDistance;
 }
