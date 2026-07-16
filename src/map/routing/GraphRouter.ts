@@ -1,10 +1,13 @@
-import type { GraphNode, NavigationGraph, Point } from '../../types/game';
+import type { GraphNode, NavigationGraph, Point, RoadData } from '../../types/game';
+import { pointInTrafficLane } from './roadRules';
 
 export class GraphRouter {
   private readonly nodes = new Map<string, GraphNode>();
+  private readonly roads = new Map<string, RoadData>();
 
-  constructor(graph: NavigationGraph) {
+  constructor(graph: NavigationGraph, roads: RoadData[] = []) {
     for (const node of graph.nodes) this.nodes.set(node.id, node);
+    for (const road of roads) this.roads.set(road.id, road);
   }
 
   nearest(point: Point): GraphNode {
@@ -22,6 +25,38 @@ export class GraphRouter {
   }
 
   route(from: Point, to: Point): Point[] {
+    const nodes = this.findRoute(from, to);
+    return nodes?.map(({ x, y }) => ({ x, y })) ?? [];
+  }
+
+  drivingRoute(from: Point, to: Point): Point[] {
+    const nodes = this.findRoute(from, to);
+    if (!nodes || nodes.length < 2 || !this.roads.size) return nodes?.map(({ x, y }) => ({ x, y })) ?? [];
+
+    const segments = nodes.slice(1).map((node, index) => {
+      const start = nodes[index];
+      const roadId = start.edges.find((edge) => edge.to === node.id)?.roadId;
+      const road = roadId ? this.roads.get(roadId) : undefined;
+      return {
+        start: pointInTrafficLane(start, start, node, road),
+        end: pointInTrafficLane(node, start, node, road)
+      };
+    });
+
+    const lanePoints = nodes.map((_, index) => {
+      if (index === 0) return segments[0].start;
+      if (index === nodes.length - 1) return segments[segments.length - 1].end;
+      const incoming = segments[index - 1].end;
+      const outgoing = segments[index].start;
+      return { x: (incoming.x + outgoing.x) / 2, y: (incoming.y + outgoing.y) / 2 };
+    });
+    if (Math.hypot(from.x - lanePoints[0].x, from.y - lanePoints[0].y) > 1) lanePoints.unshift({ ...from });
+    const last = lanePoints[lanePoints.length - 1];
+    if (Math.hypot(to.x - last.x, to.y - last.y) > 1) lanePoints.push({ ...to });
+    return lanePoints;
+  }
+
+  private findRoute(from: Point, to: Point): GraphNode[] | null {
     const start = this.nearest(from);
     const goal = this.nearest(to);
     const distances = new Map<string, number>([[start.id, 0]]);
@@ -54,11 +89,8 @@ export class GraphRouter {
       cursor = previous.get(cursor)!;
       ids.push(cursor);
     }
-    if (cursor !== start.id) return [from, to];
-    return ids.reverse().map((id) => {
-      const node = this.nodes.get(id)!;
-      return { x: node.x, y: node.y };
-    });
+    if (cursor !== start.id) return null;
+    return ids.reverse().map((id) => this.nodes.get(id)!);
   }
 
   distance(route: Point[]) {

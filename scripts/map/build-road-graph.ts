@@ -2,11 +2,14 @@ import { readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import type { GraphNode, RoadData } from '../../src/types/game';
 
+const nonDrivableHighways = new Set(['pedestrian', 'footway', 'path', 'cycleway', 'steps', 'track']);
+
 const outputDir = path.resolve('public/data/cities/brasilia/central');
 const roads = JSON.parse(await readFile(path.join(outputDir, 'roads.json'), 'utf8')) as RoadData[];
 const nodes = new Map<string, GraphNode>();
 
 for (const road of roads) {
+  if (nonDrivableHighways.has(road.highway)) continue;
   for (const point of road.points) {
     nodes.set(point.nodeId, nodes.get(point.nodeId) ?? { id: point.nodeId, x: point.x, y: point.y, edges: [] });
   }

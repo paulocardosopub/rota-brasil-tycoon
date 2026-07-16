@@ -1,0 +1,29 @@
+import { describe, expect, it } from 'vitest';
+import { MissionSystem } from './MissionSystem';
+
+function missionWithRoute(route: { x: number; y: number }[]) {
+  const mission = Object.create(MissionSystem.prototype) as MissionSystem;
+  mission.route = route;
+  return mission;
+}
+
+describe('progresso da rota', () => {
+  it('mantém o trecho inicial ao cruzar uma parte futura da rota', () => {
+    const mission = missionWithRoute([
+      { x: 0, y: 0 },
+      { x: 100, y: 0 },
+      { x: 100, y: -100 },
+      { x: 50, y: -100 },
+      { x: 50, y: 100 }
+    ]);
+    mission.advanceRoute({ x: 50, y: 1 });
+    expect(mission.route[1]).toEqual({ x: 100, y: 0 });
+    expect(mission.route).toHaveLength(5);
+  });
+
+  it('não troca a rota enquanto o carro apenas passa por uma avenida conectada', () => {
+    const mission = missionWithRoute([{ x: 0, y: 0 }, { x: 100, y: 0 }]);
+    expect(mission.advanceRoute({ x: 30, y: 30 })).toBeCloseTo(30);
+    expect(mission.route).toEqual([{ x: 0, y: 0 }, { x: 100, y: 0 }]);
+  });
+});

@@ -38,7 +38,7 @@ export class MissionSystem {
         break;
       }
     }
-    this.route = this.router.route(start, pickup);
+    this.route = this.router.drivingRoute(start, pickup);
     const labels = GAME_CONFIG.mission.locationLabels;
     return {
       id: `ride-${Date.now()}-${rideIndex}`,
@@ -63,7 +63,7 @@ export class MissionSystem {
     const stoppedCorrectly = distance <= GAME_CONFIG.mission.interactionRadiusMeters && speedKmh <= GAME_CONFIG.mission.maxInteractionSpeedKmh;
     if (this.mission.phase === 'pickup' && stoppedCorrectly) {
       this.mission.phase = 'passenger-on-board';
-      this.route = this.router.route(position, this.mission.destination);
+      this.route = this.router.drivingRoute(position, this.mission.destination);
       return 'picked-up' as const;
     }
     if (this.mission.phase === 'passenger-on-board' && stoppedCorrectly) {
@@ -78,7 +78,34 @@ export class MissionSystem {
   recalculate(position: Point) {
     if (this.mission.phase === 'completed' || this.mission.phase === 'cancelled') return;
     const target = this.mission.phase === 'pickup' ? this.mission.pickup : this.mission.destination;
-    this.route = this.router.route(position, target);
+    this.route = this.router.drivingRoute(position, target);
+  }
+
+  advanceRoute(position: Point) {
+    if (this.route.length < 2) return Number.POSITIVE_INFINITY;
+    let bestIndex = 0;
+    let bestPoint = this.route[0];
+    let bestDistance = Number.POSITIVE_INFINITY;
+    // Only inspect the next part of the active route. This prevents a crossing
+    // avenue from snapping navigation to a much later portion of the trip.
+    const lastIndex = Math.min(this.route.length - 1, 20);
+    for (let index = 0; index < lastIndex; index += 1) {
+      const point = closestPointOnSegment(position, this.route[index], this.route[index + 1]);
+      const distance = Math.hypot(position.x - point.x, position.y - point.y);
+      if (distance <= 24) {
+        bestDistance = distance;
+        bestIndex = index;
+        bestPoint = point;
+        break;
+      }
+      if (distance < bestDistance) {
+        bestDistance = distance;
+        bestIndex = index;
+        bestPoint = point;
+      }
+    }
+    if (bestDistance <= 24) this.route = [bestPoint, ...this.route.slice(bestIndex + 1)];
+    return bestDistance;
   }
 
   cancel() {
@@ -97,4 +124,13 @@ export class MissionSystem {
     if (!this.route.length) return 0;
     return Math.hypot(position.x - this.route[0].x, position.y - this.route[0].y) + this.router.distance(this.route);
   }
+}
+
+function closestPointOnSegment(point: Point, a: Point, b: Point): Point {
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const lengthSq = dx * dx + dy * dy;
+  if (!lengthSq) return { ...a };
+  const t = Math.max(0, Math.min(1, ((point.x - a.x) * dx + (point.y - a.y) * dy) / lengthSq));
+  return { x: a.x + dx * t, y: a.y + dy * t };
 }

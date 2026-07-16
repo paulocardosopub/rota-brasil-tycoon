@@ -75,17 +75,22 @@ async function main() {
       const highway = way.tags!.highway;
       const lanes = Math.max(1, Math.round(numberTag(way.tags!.lanes, laneDefaults[highway] ?? 1)));
       const width = numberTag(way.tags!.width, lanes * 3.25 + (lanes > 1 ? 1 : 0));
-      const points = (way.nodes ?? []).flatMap((id) => {
+      const onewayValue = way.tags!.oneway ?? '';
+      const oneway = ['yes', '1', 'true', '-1'].includes(onewayValue) || highway === 'motorway' || way.tags!.junction === 'roundabout';
+      let points = (way.nodes ?? []).flatMap((id) => {
         const node = nodes.get(id);
         if (node?.lat === undefined || node.lon === undefined) return [];
         const local = latLonToLocalMeters(node.lat, node.lon, origin);
         return [{ ...local, lat: node.lat, lon: node.lon, nodeId: String(id) }];
       });
+      // OSM oneway=-1 means traffic runs opposite to the stored way order.
+      // Normalize the points so every directed graph edge always follows legal traffic.
+      if (onewayValue === '-1') points = points.reverse();
       return {
         id: String(way.id),
         name: way.tags!.name ?? `Via ${way.id}`,
         highway,
-        oneway: ['yes', '1', 'true'].includes(way.tags!.oneway ?? '') || highway === 'motorway',
+        oneway,
         lanes,
         width,
         points

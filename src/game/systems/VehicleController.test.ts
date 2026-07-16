@@ -28,7 +28,7 @@ describe('VehicleController', () => {
     expect(vehicle.speed).toBeGreaterThanOrEqual(0);
   });
 
-  it('alinha e centraliza o carro na via ao carregar', () => {
+  it('alinha o carro na faixa correta ao carregar', () => {
     const diagonal: RoadData = {
       ...road,
       points: [
@@ -38,7 +38,37 @@ describe('VehicleController', () => {
     };
     const vehicle = new VehicleController({ x: 3, y: -3 }, 0, new RoadSurfaceIndex([diagonal]));
     expect(vehicle.alignToRoad(true)).toBe(true);
-    expect(Math.abs(vehicle.position.x - vehicle.position.y)).toBeLessThan(0.01);
+    expect(Math.abs(vehicle.position.x - vehicle.position.y) / Math.SQRT2).toBeCloseTo(2.5);
+    expect(vehicle.position.y).toBeGreaterThan(vehicle.position.x);
     expect(Math.abs(Math.sin(vehicle.rotation - Math.PI / 4))).toBeLessThan(0.01);
+  });
+
+  it('atravessa cruzamentos sem criar barreira invisível', () => {
+    const crossing: RoadData = {
+      ...road,
+      id: 'crossing',
+      points: [
+        { x: 0, y: -30, lat: 0, lon: 0, nodeId: 'c' },
+        { x: 0, y: 30, lat: 0, lon: 0, nodeId: 'd' }
+      ]
+    };
+    const vehicle = new VehicleController({ x: -20, y: 2.5 }, 0, new RoadSurfaceIndex([road, crossing]));
+    vehicle.speed = 8;
+    for (let frame = 0; frame < 240; frame += 1) {
+      vehicle.update({ throttle: 0, steering: 0, handbrake: false }, 1 / 60, 18);
+    }
+    expect(vehicle.position.x).toBeGreaterThan(6.5);
+    expect(Math.abs(vehicle.position.y)).toBeLessThan(4.2);
+  });
+
+  it('permite trocar de faixa manualmente sem correção lateral', () => {
+    const avenue: RoadData = { ...road, lanes: 4, width: 18 };
+    const vehicle = new VehicleController({ x: 0, y: 6.75 }, 0, new RoadSurfaceIndex([avenue]));
+    vehicle.speed = 10;
+    for (let frame = 0; frame < 30; frame += 1) {
+      vehicle.update({ throttle: 0, steering: -1, handbrake: false }, 1 / 60, 18);
+    }
+    expect(vehicle.position.y).toBeLessThan(5.5);
+    expect(vehicle.speed).toBeGreaterThan(8);
   });
 });

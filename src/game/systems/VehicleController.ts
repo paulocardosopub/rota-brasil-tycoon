@@ -45,15 +45,17 @@ export class VehicleController {
     this.speed = Math.max(-config.maxReverseMps, Math.min(config.maxSpeedMps, this.speed));
 
     const speedRatio = Math.min(1, Math.abs(this.speed) / config.maxSpeedMps);
-    const lowSpeedGrip = 0.34 + Math.min(1, Math.abs(this.speed) / 6) * 0.66;
-    const highSpeedStability = 1 - speedRatio * 0.48;
+    const lowSpeedGrip = 0.52 + Math.min(1, Math.abs(this.speed) / 5) * 0.48;
+    const highSpeedStability = 1 - speedRatio * 0.38;
     const reverseDirection = this.speed < 0 ? -1 : 1;
     const steeringRate = config.steeringRadiansPerSecond * lowSpeedGrip * highSpeedStability * (input.handbrake ? 1.3 : 1);
     this.rotation += input.steering * steeringRate * reverseDirection * deltaSeconds;
 
-    const roadBeforeMove = this.roads.nearestRoad(this.position);
+    const roadBeforeMove = this.roads.nearestRoad(this.position, this.rotation);
     if (roadBeforeMove && Math.abs(input.steering) < 0.1 && Math.abs(this.speed) > 1.5) {
-      const roadHeading = closestRoadHeading(this.rotation, roadBeforeMove.tangentAngle);
+      const roadHeading = roadBeforeMove.oneway
+        ? roadBeforeMove.tangentAngle
+        : closestRoadHeading(this.rotation, roadBeforeMove.tangentAngle);
       const headingError = angleDelta(this.rotation, roadHeading);
       if (Math.abs(headingError) < config.steeringAssistMaxAngle) {
         this.rotation += clamp(headingError, -config.steeringAssistRadiansPerSecond * deltaSeconds, config.steeringAssistRadiansPerSecond * deltaSeconds);
@@ -64,22 +66,13 @@ export class VehicleController {
     this.position.x += Math.cos(this.rotation) * distance;
     this.position.y += Math.sin(this.rotation) * distance;
 
-    const road = this.roads.nearestRoad(this.position);
+    const road = this.roads.nearestRoad(this.position, this.rotation);
     if (!road) {
       this.position = previous;
       this.speed *= 0.7;
     } else {
-      const desiredCenterLimit = Math.max(0.9, road.halfWidth * config.laneAssistStartRatio);
-      if (Math.abs(input.steering) < 0.55 && Math.abs(this.speed) > 1 && road.centerDistance > desiredCenterLimit) {
-        const correction = Math.min(
-          road.centerDistance - desiredCenterLimit,
-          (config.laneCenteringMetersPerSecond + Math.abs(this.speed) * 0.08) * deltaSeconds
-        );
-        moveToward(this.position, road.closest, correction);
-      }
-
       const curbLimit = Math.max(0.95, road.halfWidth - config.widthMeters * 0.48);
-      if (road.centerDistance > curbLimit) {
+      if (road.unionSurfaceDistance > -config.widthMeters * 0.48 && road.centerDistance > curbLimit) {
         const speedAtImpact = Math.abs(this.speed);
         moveToDistanceFrom(this.position, road.closest, curbLimit);
         const roadHeading = closestRoadHeading(this.rotation, road.tangentAngle);
@@ -91,10 +84,10 @@ export class VehicleController {
         this.curbContact = false;
       }
 
-      if (road.surfaceDistance > -0.25) {
+      if (road.unionSurfaceDistance > -0.25) {
       this.speed -= Math.sign(this.speed) * Math.min(Math.abs(this.speed), config.offRoadResistance * deltaSeconds);
       }
-      if (!this.curbContact && road.surfaceDistance < -0.4) {
+      if (!this.curbContact && road.unionSurfaceDistance < -0.4) {
         this.safePosition = { ...this.position };
         this.safeRotation = this.rotation;
       }
@@ -106,10 +99,10 @@ export class VehicleController {
   }
 
   alignToRoad(snapToCenter = false) {
-    const road = this.roads.nearestRoad(this.position);
+    const road = this.roads.nearestRoad(this.position, this.rotation);
     if (!road) return false;
-    this.rotation = closestRoadHeading(this.rotation, road.tangentAngle);
-    if (snapToCenter || road.surfaceDistance > -0.3) this.position = { ...road.closest };
+    this.rotation = road.oneway ? road.tangentAngle : closestRoadHeading(this.rotation, road.tangentAngle);
+    if (snapToCenter || road.surfaceDistance > -0.3) this.position = this.roads.laneCenter(road, this.rotation);
     this.safePosition = { ...this.position };
     this.safeRotation = this.rotation;
     this.speed = 0;
@@ -140,15 +133,6 @@ function closestRoadHeading(current: number, tangent: number) {
 
 function clamp(value: number, min: number, max: number) {
   return Math.max(min, Math.min(max, value));
-}
-
-function moveToward(point: Point, target: Point, distance: number) {
-  const dx = target.x - point.x;
-  const dy = target.y - point.y;
-  const length = Math.hypot(dx, dy);
-  if (!length) return;
-  point.x += dx / length * Math.min(distance, length);
-  point.y += dy / length * Math.min(distance, length);
 }
 
 function moveToDistanceFrom(point: Point, center: Point, distance: number) {

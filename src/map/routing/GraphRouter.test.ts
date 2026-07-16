@@ -13,6 +13,6 @@ describe('GraphRouter', () => {
   });
 
   it('não inventa caminho contra mão única', () => {
-    expect(router.route({ x: 20, y: 0 }, { x: 0, y: 0 })).toEqual([{ x: 20, y: 0 }, { x: 0, y: 0 }]);
+    expect(router.route({ x: 20, y: 0 }, { x: 0, y: 0 })).toEqual([]);
   });
 });

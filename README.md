@@ -1,4 +1,4 @@
-# Rota Brasil Tycoon — Playable 0.1.1
+# Rota Brasil Tycoon — Playable 0.2.0
 
 Protótipo realmente jogável no navegador de um tycoon de transporte brasileiro. Você começa com o **Hatch 1998**, busca um passageiro no centro de Brasília, segue uma rota calculada sobre vias reais e recebe pela corrida.
 
@@ -35,9 +35,11 @@ O teste de navegador abre o jogo, entra como visitante, aguarda o mapa, confirma
 
 - mapa 2.5D vetorial com escala interna de 1 unidade = 1 metro;
 - recorte de aproximadamente 2 × 2 km da Rodoviária do Plano Piloto e Eixo Monumental;
-- física arcade, ré, freio, combustível, condição, colisão com bordas da pista e reposicionamento;
-- missão completa com embarque, rota, recálculo, desembarque, recibo, dinheiro, XP e avaliação;
-- dez carros de trânsito, distância de segurança e respeito aos semáforos;
+- física arcade, direção manual mais rápida, ré, freio, combustível, condição e colisão com os limites reais do asfalto;
+- assistência de direção que acompanha a rota ao acelerar e libera o volante imediatamente quando o jogador usa os controles laterais;
+- missão completa com embarque, rota dirigida estável, recálculo somente ao sair do trajeto, desembarque, recibo, dinheiro, XP e avaliação;
+- 35 veículos de trânsito entre carros, táxis, ônibus e utilitários, com aceleração, frenagem, distância de segurança e respeito aos semáforos;
+- faixas separadas por sentido, tráfego pela direita, mãos únicas e rotas sem vias de pedestres;
 - semáforos com fases opostas, infração e pequena penalidade;
 - pontos de ônibus, abrigos e grupos de NPCs animados;
 - HUD e controles responsivos para desktop, celular vertical e horizontal;
@@ -80,7 +82,7 @@ Se ainda não houver remote:
 ```bash
 git init
 git add .
-git commit -m "feat: create playable 0.1.1"
+git commit -m "feat: create playable 0.2.0"
 git branch -M main
 git remote add origin https://github.com/SEU_USUARIO/rota-brasil-tycoon.git
 git push -u origin main
@@ -92,10 +94,10 @@ Phaser cuida da cidade, direção e simulação. React cuida apenas do HUD e das
 
 ## Limitações conhecidas
 
-- o trânsito 0.1 usa comportamento local simples, não uma simulação de faixas da cidade inteira;
+- o trânsito usa uma simulação local por faixas e reduz a atualização de veículos muito distantes;
 - colisões são focadas na superfície viária e veículos, sem dano visual complexo;
 - locais das corridas usam nós reais do grafo e rótulos de referência provisórios;
 - autenticação por e-mail pressupõe que o provedor esteja habilitado no projeto Supabase;
 - a câmera inclinada é uma projeção 2.5D estilizada, não renderização 3D.
 
-Próximo passo recomendado para 0.1.1: adicionar posto de combustível e oficina jogáveis, melhorar mudança de faixas e persistir a missão em andamento.
+Próximo passo recomendado: adicionar posto de combustível e oficina jogáveis e persistir a missão em andamento.

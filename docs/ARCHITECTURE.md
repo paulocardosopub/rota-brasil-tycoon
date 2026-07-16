@@ -1,4 +1,4 @@
-# Decisões de arquitetura — Playable 0.1.1
+# Decisões de arquitetura — Playable 0.2.0
 
 ## Limites dos módulos
 

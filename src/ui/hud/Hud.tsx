@@ -19,6 +19,9 @@ const initialHud: HudSnapshot = {
   vehicleHeading: 0,
   fps: 0,
   redLightWarning: false,
+  trafficVehicles: 0,
+  trafficBuses: 0,
+  routeRecalculations: 0,
   mission: null,
   receipt: null
 };
@@ -63,6 +66,9 @@ export function Hud() {
       data-vehicle-name={hud.ready ? 'Hatch 1998' : ''}
       data-speed-kmh={hud.speedKmh.toFixed(2)}
       data-vehicle-heading={hud.vehicleHeading.toFixed(4)}
+      data-traffic-vehicles={hud.trafficVehicles}
+      data-traffic-buses={hud.trafficBuses}
+      data-route-recalculations={hud.routeRecalculations}
     >
       <header className="top-hud">
         <div className="brand-chip"><span>RB</span><div><b>Brasília</b><small>Centro • Dia</small></div></div>
@@ -139,7 +145,7 @@ function PanelContent({ panel, hud, close }: { panel: Exclude<Panel, null>; hud:
       {panel === 'settings' && <>
         <div className="panel-kicker">CONFIGURAÇÕES</div><h2>Experiência de jogo</h2>
         <label className="quality-select">Qualidade gráfica<select defaultValue="automatic" onChange={(event) => setQuality(event.target.value as Quality)}><option value="automatic">Automática</option><option value="low">Baixa</option><option value="medium">Média</option><option value="high">Alta</option></select></label>
-        <p>Desktop: WASD ou setas • Espaço: freio de mão • R: reposicionar • Roda do mouse: zoom.</p>
+        <p>W/S aceleram e freiam. Sem comando lateral, a assistência acompanha a rota; A/D ou as setas assumem o volante imediatamente. Espaço: freio de mão • R: reposicionar.</p>
         <button className="danger-button" onClick={() => { if (confirm('Apagar todo o progresso local?')) { deleteSave(); location.reload(); } }}>Apagar progresso</button>
       </>}
     </aside>

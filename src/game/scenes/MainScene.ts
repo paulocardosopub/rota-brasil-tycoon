@@ -2,11 +2,13 @@ import Phaser from 'phaser';
 import { GAME_CONFIG } from '../../config/gameConfig';
 import { loadCityMap } from '../../map/loadCityMap';
 import { GraphRouter } from '../../map/routing/GraphRouter';
+import { visibleRoadWidth } from '../../map/routing/roadRules';
 import type { CityMapData, HudSnapshot, MapSignal, PlayerSave, Point } from '../../types/game';
 import { gameEvents, type GameCommand } from '../events';
 import { createCarVisual, createPassengerVisual } from '../entities/VehicleVisual';
 import { MissionSystem } from '../missions/MissionSystem';
 import { RoadSurfaceIndex } from '../systems/RoadSurfaceIndex';
+import { steeringForRoute } from '../systems/RouteSteeringAssist';
 import { VehicleController, type VehicleInput } from '../systems/VehicleController';
 import { TrafficSystem } from '../traffic/TrafficSystem';
 import { writeSave } from '../../services/storage/saveService';
@@ -27,10 +29,13 @@ export class MainScene extends Phaser.Scene {
   private signalVisuals: SignalVisual[] = [];
   private keys?: Record<string, Phaser.Input.Keyboard.Key>;
   private mobileInput: VehicleInput = { throttle: 0, steering: 0, handbrake: false };
-  private paused = false;
+  private manuallyPaused = false;
+  private visibilityPaused = false;
   private initialized = false;
   private lastHudUpdate = 0;
   private lastRouteUpdate = 0;
+  private offRouteSeconds = 0;
+  private routeRecalculations = 0;
   private lastSignalUpdate = 0;
   private lastCollisionAt = 0;
   private redLightWarningUntil = 0;
@@ -61,13 +66,14 @@ export class MainScene extends Phaser.Scene {
   }
 
   private handleVisibility = () => {
-    if (document.hidden) this.paused = true;
+    this.visibilityPaused = document.hidden;
+    if (document.hidden) this.mobileInput = { throttle: 0, steering: 0, handbrake: false };
   };
 
   private async initialize() {
     try {
       this.map = await loadCityMap();
-      this.router = new GraphRouter(this.map.graph);
+      this.router = new GraphRouter(this.map.graph, this.map.roads);
       const surface = new RoadSurfaceIndex(this.map.roads);
       let spawn = this.router.nearest({ x: 0, y: 0 });
       if (surface.distanceFromRoad(this.save.position) > 3 || Math.hypot(this.save.position.x, this.save.position.y) > 1_600) {
@@ -86,7 +92,7 @@ export class MainScene extends Phaser.Scene {
       this.cameras.main.setRotation(this.cameraRotation);
       this.cameras.main.startFollow(this.vehicleVisual, true, GAME_CONFIG.camera.followLerp, GAME_CONFIG.camera.followLerp);
       this.cameras.main.setZoom(GAME_CONFIG.camera.defaultZoom);
-      this.traffic = new TrafficSystem(this, this.map.graph, this.map.signals, this.project, spawn);
+      this.traffic = new TrafficSystem(this, this.map.graph, this.map.roads, this.map.signals, this.project, spawn);
       this.mission = new MissionSystem(this.router, this.vehicle.position, this.save.completedRides);
       this.routeGraphics = this.add.graphics().setDepth(18);
       this.passengerVisual = createPassengerVisual(this).setPosition(0, 0);
@@ -94,7 +100,7 @@ export class MainScene extends Phaser.Scene {
       this.syncMissionVisuals();
       this.time.addEvent({ delay: GAME_CONFIG.storage.autosaveMs, loop: true, callback: () => this.persist() });
       this.initialized = true;
-      this.emitToast('Sua primeira corrida está marcada. Siga a rota verde.', 'info');
+      this.emitToast('Acelere: a assistência segue a rota. Use A/D para assumir o volante.', 'info');
       this.emitHud();
     } catch (error) {
       console.error(error);
@@ -103,7 +109,7 @@ export class MainScene extends Phaser.Scene {
   }
 
   update(time: number, delta: number) {
-    if (!this.initialized || !this.vehicle || !this.mission || !this.traffic || !this.vehicleVisual || this.paused) return;
+    if (!this.initialized || !this.vehicle || !this.mission || !this.traffic || !this.vehicleVisual || this.manuallyPaused || this.visibilityPaused) return;
     const dt = Math.min(0.05, delta / 1000) * this.traffic.timeScale;
     const input = this.readInput();
     const previousConditionDamage = this.vehicle.conditionDamage;
@@ -141,10 +147,19 @@ export class MainScene extends Phaser.Scene {
       this.persist();
     }
 
-    if (time - this.lastRouteUpdate > 4_000 && this.mission.mission.phase !== 'completed') {
-      this.mission.recalculate(this.vehicle.position);
-      this.drawRoute();
-      this.lastRouteUpdate = time;
+    if (this.mission.mission.phase !== 'completed') {
+      const routeDeviation = this.mission.advanceRoute(this.vehicle.position);
+      this.offRouteSeconds = routeDeviation > 28 ? this.offRouteSeconds + dt : 0;
+      if (this.offRouteSeconds > 2.5) {
+        this.mission.recalculate(this.vehicle.position);
+        this.routeRecalculations += 1;
+        this.offRouteSeconds = 0;
+        this.emitToast('Rota recalculada: retomando o caminho principal.', 'info');
+      }
+      if (time - this.lastRouteUpdate > 500) {
+        this.drawRoute();
+        this.lastRouteUpdate = time;
+      }
     }
     if (time - this.lastSignalUpdate > 250) {
       this.updateSignals();
@@ -169,13 +184,21 @@ export class MainScene extends Phaser.Scene {
   }
 
   private readInput(): VehicleInput {
-    if (!this.keys) return this.mobileInput;
-    const throttle = Number(this.keys.W.isDown || this.keys.UP.isDown) - Number(this.keys.S.isDown || this.keys.DOWN.isDown);
-    const steering = Number(this.keys.D.isDown || this.keys.RIGHT.isDown) - Number(this.keys.A.isDown || this.keys.LEFT.isDown);
+    const keyboardThrottle = this.keys
+      ? Number(this.keys.W.isDown || this.keys.UP.isDown) - Number(this.keys.S.isDown || this.keys.DOWN.isDown)
+      : 0;
+    const keyboardSteering = this.keys
+      ? Number(this.keys.D.isDown || this.keys.RIGHT.isDown) - Number(this.keys.A.isDown || this.keys.LEFT.isDown)
+      : 0;
+    const throttle = Math.abs(this.mobileInput.throttle) > Math.abs(keyboardThrottle) ? this.mobileInput.throttle : keyboardThrottle;
+    const manualSteering = Math.abs(this.mobileInput.steering) > Math.abs(keyboardSteering) ? this.mobileInput.steering : keyboardSteering;
+    const steering = Math.abs(manualSteering) < 0.05 && throttle > 0 && this.vehicle && this.mission
+      ? steeringForRoute(this.vehicle.position, this.vehicle.rotation, this.vehicle.speed, this.mission.route)
+      : manualSteering;
     return {
-      throttle: Math.abs(this.mobileInput.throttle) > Math.abs(throttle) ? this.mobileInput.throttle : throttle,
-      steering: Math.abs(this.mobileInput.steering) > Math.abs(steering) ? this.mobileInput.steering : steering,
-      handbrake: this.keys.SPACE.isDown || this.mobileInput.handbrake
+      throttle,
+      steering,
+      handbrake: Boolean(this.keys?.SPACE.isDown) || this.mobileInput.handbrake
     };
   }
 
@@ -207,17 +230,26 @@ export class MainScene extends Phaser.Scene {
 
     const roads = this.add.graphics().setDepth(8);
     for (const road of map.roads) {
-      const width = Math.max(4.5, Math.min(18, road.width));
+      const width = visibleRoadWidth(road);
       roads.lineStyle(width + 2.2, 0xd7d3c8, 1);
       this.strokeRoad(roads, road.points);
     }
     for (const road of map.roads) {
-      const width = Math.max(4.5, Math.min(18, road.width));
+      const width = visibleRoadWidth(road);
       roads.lineStyle(width, road.highway === 'service' ? 0x5d6570 : 0x454e59, 1);
       this.strokeRoad(roads, road.points);
       if (road.lanes >= 2 && road.points.length > 1) {
-        roads.lineStyle(0.32, 0xf8d96a, 0.85);
-        this.strokeRoad(roads, road.points);
+        if (!road.oneway) {
+          roads.lineStyle(0.38, 0xf8d96a, 0.9);
+          this.strokeRoad(roads, road.points);
+        }
+        const laneWidth = width / road.lanes;
+        for (let separator = 1; separator < road.lanes; separator += 1) {
+          const offset = -width / 2 + separator * laneWidth;
+          if (!road.oneway && Math.abs(offset) < laneWidth * 0.35) continue;
+          roads.lineStyle(0.22, 0xe9eef2, 0.58);
+          this.strokeRoad(roads, this.offsetRoad(road.points, offset));
+        }
       }
     }
     this.renderBusStops(map);
@@ -235,6 +267,17 @@ export class MainScene extends Phaser.Scene {
       if (index === 0) graphics.moveTo(projected.x, projected.y); else graphics.lineTo(projected.x, projected.y);
     });
     graphics.strokePath();
+  }
+
+  private offsetRoad(points: Point[], offset: number) {
+    return points.map((point, index) => {
+      const previous = points[Math.max(0, index - 1)];
+      const next = points[Math.min(points.length - 1, index + 1)];
+      const dx = next.x - previous.x;
+      const dy = next.y - previous.y;
+      const length = Math.hypot(dx, dy);
+      return length ? { x: point.x - dy / length * offset, y: point.y + dx / length * offset } : { ...point };
+    });
   }
 
   private renderBusStops(map: CityMapData) {
@@ -338,8 +381,8 @@ export class MainScene extends Phaser.Scene {
       return;
     }
     if (command.type === 'pause') {
-      this.paused = !this.paused;
-      this.emitToast(this.paused ? 'Jogo pausado.' : 'De volta à rota.', 'info');
+      this.manuallyPaused = !this.manuallyPaused;
+      this.emitToast(this.manuallyPaused ? 'Jogo pausado.' : 'De volta à rota.', 'info');
       return;
     }
     if (command.type === 'camera') {
@@ -420,6 +463,7 @@ export class MainScene extends Phaser.Scene {
     const target = phase === 'pickup' ? this.mission.mission.pickup : this.mission.mission.destination;
     const desiredAngle = Math.atan2(target.y - this.vehicle.position.y, target.x - this.vehicle.position.x);
     const distanceRemaining = this.mission.remainingDistance(this.vehicle.position);
+    const trafficStats = this.traffic?.stats() ?? { total: 0, buses: 0, utility: 0 };
     const snapshot: HudSnapshot = {
       ready: this.initialized,
       money: this.save.money,
@@ -438,6 +482,9 @@ export class MainScene extends Phaser.Scene {
       vehicleHeading: this.vehicle.rotation,
       fps: Math.round(this.game.loop.actualFps),
       redLightWarning: time < this.redLightWarningUntil,
+      trafficVehicles: trafficStats.total,
+      trafficBuses: trafficStats.buses,
+      routeRecalculations: this.routeRecalculations,
       mission: this.mission.mission,
       receipt: this.mission.receipt
     };

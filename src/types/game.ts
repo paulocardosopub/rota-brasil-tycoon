@@ -136,6 +136,9 @@ export interface HudSnapshot {
   vehicleHeading: number;
   fps: number;
   redLightWarning: boolean;
+  trafficVehicles: number;
+  trafficBuses: number;
+  routeRecalculations: number;
   mission: MissionSnapshot | null;
   receipt: Receipt | null;
 }
