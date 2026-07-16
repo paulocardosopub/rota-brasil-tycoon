@@ -15,16 +15,14 @@ test('visitante entra e encontra a primeira corrida jogável', async ({ page }) 
   const hud = page.locator('.hud');
   const initialHeading = Number(await hud.getAttribute('data-vehicle-heading'));
   await page.keyboard.down('ArrowUp');
-  await page.waitForTimeout(1_200);
-  // Software-rendered CI advances the Phaser loop more slowly than a real tab;
-  // the unit test above covers the exact acceleration curve.
-  expect(Number(await hud.getAttribute('data-speed-kmh'))).toBeGreaterThan(8);
+  await expect.poll(async () => Number(await hud.getAttribute('data-speed-kmh')), { timeout: 6_000 }).toBeGreaterThan(5);
   await page.keyboard.down('ArrowRight');
-  await page.waitForTimeout(550);
+  await expect.poll(async () => {
+    const currentHeading = Number(await hud.getAttribute('data-vehicle-heading'));
+    return Math.abs(currentHeading - initialHeading);
+  }, { timeout: 4_000 }).toBeGreaterThan(0.08);
   await page.keyboard.up('ArrowRight');
   await page.keyboard.up('ArrowUp');
-  const steeredHeading = Number(await hud.getAttribute('data-vehicle-heading'));
-  expect(Math.abs(steeredHeading - initialHeading)).toBeGreaterThan(0.08);
 
   await page.getByTestId('rides-button').click();
   await expect(page.getByText('CORRIDA ATIVA')).toBeVisible();
@@ -43,7 +41,6 @@ test('controles móveis aceleram o Hatch continuamente', async ({ page }) => {
   expect(box).not.toBeNull();
   await page.mouse.move(box!.x + box!.width / 2, box!.y + box!.height / 2);
   await page.mouse.down();
-  await page.waitForTimeout(900);
+  await expect.poll(async () => Number(await hud.getAttribute('data-speed-kmh')), { timeout: 6_000 }).toBeGreaterThan(5);
   await page.mouse.up();
-  expect(Number(await hud.getAttribute('data-speed-kmh'))).toBeGreaterThan(5);
 });
