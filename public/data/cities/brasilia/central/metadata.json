@@ -1,0 +1,20 @@
+{
+  "city": "Brasília",
+  "area": "Rodoviária do Plano Piloto e Eixo Monumental",
+  "origin": {
+    "lat": -15.7942,
+    "lon": -47.8822
+  },
+  "bbox": {
+    "south": -15.8032,
+    "west": -47.89155,
+    "north": -15.7852,
+    "east": -47.87285
+  },
+  "importedAt": "2026-07-16T12:43:51.616Z",
+  "source": "OpenStreetMap",
+  "sourceUrl": "https://www.openstreetmap.org/copyright",
+  "license": "Open Database License (ODbL) 1.0",
+  "attribution": "© OpenStreetMap contributors",
+  "coordinateSystem": "Coordenadas locais em metros, projeção equiretangular centrada na origem declarada."
+}

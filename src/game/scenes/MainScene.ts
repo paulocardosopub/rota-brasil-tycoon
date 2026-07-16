@@ -1,0 +1,454 @@
+import Phaser from 'phaser';
+import { GAME_CONFIG } from '../../config/gameConfig';
+import { loadCityMap } from '../../map/loadCityMap';
+import { GraphRouter } from '../../map/routing/GraphRouter';
+import type { CityMapData, HudSnapshot, MapSignal, PlayerSave, Point } from '../../types/game';
+import { gameEvents, type GameCommand } from '../events';
+import { createCarVisual, createPassengerVisual } from '../entities/VehicleVisual';
+import { MissionSystem } from '../missions/MissionSystem';
+import { RoadSurfaceIndex } from '../systems/RoadSurfaceIndex';
+import { VehicleController, type VehicleInput } from '../systems/VehicleController';
+import { TrafficSystem } from '../traffic/TrafficSystem';
+import { writeSave } from '../../services/storage/saveService';
+
+type SignalVisual = { signal: MapSignal; graphics: Phaser.GameObjects.Graphics };
+
+export class MainScene extends Phaser.Scene {
+  private map?: CityMapData;
+  private router?: GraphRouter;
+  private vehicle?: VehicleController;
+  private vehicleVisual?: Phaser.GameObjects.Container;
+  private traffic?: TrafficSystem;
+  private mission?: MissionSystem;
+  private routeGraphics?: Phaser.GameObjects.Graphics;
+  private passengerVisual?: Phaser.GameObjects.Container;
+  private destinationVisual?: Phaser.GameObjects.Container;
+  private graphGraphics?: Phaser.GameObjects.Graphics;
+  private signalVisuals: SignalVisual[] = [];
+  private keys?: Record<string, Phaser.Input.Keyboard.Key>;
+  private mobileInput: VehicleInput = { throttle: 0, steering: 0, handbrake: false };
+  private paused = false;
+  private initialized = false;
+  private lastHudUpdate = 0;
+  private lastRouteUpdate = 0;
+  private lastSignalUpdate = 0;
+  private lastCollisionAt = 0;
+  private redLightWarningUntil = 0;
+  private unsubscribe?: () => void;
+  private save: PlayerSave;
+  private cameraMode: 'follow' | 'fixed';
+  private cameraRotation = 0;
+  private showGraph = false;
+
+  constructor(initialSave: PlayerSave) {
+    super('MainScene');
+    this.save = initialSave;
+    this.cameraMode = initialSave.settings.cameraMode;
+  }
+
+  create() {
+    this.cameras.main.setBackgroundColor('#8fb878');
+    this.keys = this.input.keyboard?.addKeys('W,A,S,D,UP,DOWN,LEFT,RIGHT,SPACE,R') as Record<string, Phaser.Input.Keyboard.Key>;
+    this.input.on('wheel', (_pointer: unknown, _objects: unknown, _dx: number, dy: number) => {
+      const camera = this.cameras.main;
+      camera.setZoom(Phaser.Math.Clamp(camera.zoom - dy * 0.0015, GAME_CONFIG.camera.minZoom, GAME_CONFIG.camera.maxZoom));
+    });
+    this.unsubscribe = gameEvents.on('command', (command) => this.handleCommand(command));
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.unsubscribe?.());
+    document.addEventListener('visibilitychange', this.handleVisibility);
+    this.events.once(Phaser.Scenes.Events.DESTROY, () => document.removeEventListener('visibilitychange', this.handleVisibility));
+    void this.initialize();
+  }
+
+  private handleVisibility = () => {
+    if (document.hidden) this.paused = true;
+  };
+
+  private async initialize() {
+    try {
+      this.map = await loadCityMap();
+      this.router = new GraphRouter(this.map.graph);
+      const surface = new RoadSurfaceIndex(this.map.roads);
+      let spawn = this.router.nearest({ x: 0, y: 0 });
+      if (surface.distanceFromRoad(this.save.position) > 3 || Math.hypot(this.save.position.x, this.save.position.y) > 1_600) {
+        this.save.position = { x: spawn.x, y: spawn.y };
+      } else {
+        spawn = this.router.nearest(this.save.position);
+      }
+      this.renderMap(this.map);
+      this.vehicle = new VehicleController(this.save.position, this.save.rotation, surface);
+      this.vehicleVisual = createCarVisual(this, 0xc97732, true).setScale(1.12);
+      this.updateVisualTransform(this.vehicleVisual, this.vehicle.position, this.vehicle.rotation);
+      this.cameras.main.startFollow(this.vehicleVisual, true, GAME_CONFIG.camera.followLerp, GAME_CONFIG.camera.followLerp);
+      this.cameras.main.setZoom(GAME_CONFIG.camera.defaultZoom);
+      this.traffic = new TrafficSystem(this, this.map.graph, this.map.signals, this.project, spawn);
+      this.mission = new MissionSystem(this.router, this.vehicle.position, this.save.completedRides);
+      this.routeGraphics = this.add.graphics().setDepth(18);
+      this.passengerVisual = createPassengerVisual(this).setPosition(0, 0);
+      this.destinationVisual = this.createDestinationMarker().setVisible(false);
+      this.syncMissionVisuals();
+      this.time.addEvent({ delay: GAME_CONFIG.storage.autosaveMs, loop: true, callback: () => this.persist() });
+      this.initialized = true;
+      this.emitToast('Sua primeira corrida está marcada. Siga a rota verde.', 'info');
+      this.emitHud();
+    } catch (error) {
+      console.error(error);
+      this.emitToast('Não foi possível carregar o mapa local. Recarregue a página.', 'warning');
+    }
+  }
+
+  update(time: number, delta: number) {
+    if (!this.initialized || !this.vehicle || !this.mission || !this.traffic || !this.vehicleVisual || this.paused) return;
+    const dt = Math.min(0.05, delta / 1000) * this.traffic.timeScale;
+    const input = this.readInput();
+    const previousConditionDamage = this.vehicle.conditionDamage;
+    const travelled = this.vehicle.update(input, dt, this.save.fuel);
+    const fuelDelta = this.vehicle.fuelUsed;
+    this.vehicle.fuelUsed = 0;
+    this.save.fuel = Math.max(0, this.save.fuel - fuelDelta);
+    this.save.condition = Math.max(0, this.save.condition - (this.vehicle.conditionDamage - previousConditionDamage));
+
+    this.traffic.update(dt, this.vehicle.position);
+    if (this.traffic.collisionWithPlayer(this.vehicle.position) && time - this.lastCollisionAt > 900) {
+      this.vehicle.speed *= -0.18;
+      this.save.condition = Math.max(0, this.save.condition - 0.35);
+      this.lastCollisionAt = time;
+      this.emitToast('Batida leve: a condição do Hatch caiu.', 'warning');
+    }
+    if (this.traffic.checkPlayerRedLight(this.vehicle.position, Math.abs(this.vehicle.speed))) {
+      this.save.money = Math.max(0, this.save.money - GAME_CONFIG.traffic.redLightPenalty);
+      this.redLightWarningUntil = time + 3_500;
+      this.emitToast('Sinal vermelho avançado: -R$ 2,00', 'warning');
+    }
+
+    const speedKmh = Math.abs(this.vehicle.speed) * 3.6;
+    const missionEvent = this.mission.update(this.vehicle.position, speedKmh, dt, travelled, this.save.rating);
+    if (missionEvent === 'picked-up') {
+      this.emitToast(`${this.mission.mission.passengerName}: ${this.pickLine(GAME_CONFIG.mission.pickupLines)}`, 'success');
+      this.syncMissionVisuals();
+    } else if (missionEvent === 'completed' && this.mission.receipt) {
+      this.save.money += this.mission.receipt.total;
+      this.save.xp += this.mission.receipt.xp;
+      this.save.rating = this.mission.receipt.rating;
+      this.save.completedRides += 1;
+      this.emitToast(this.pickLine(GAME_CONFIG.mission.dropoffLines), 'success');
+      this.syncMissionVisuals();
+      this.persist();
+    }
+
+    if (time - this.lastRouteUpdate > 4_000 && this.mission.mission.phase !== 'completed') {
+      this.mission.recalculate(this.vehicle.position);
+      this.drawRoute();
+      this.lastRouteUpdate = time;
+    }
+    if (time - this.lastSignalUpdate > 250) {
+      this.updateSignals();
+      this.lastSignalUpdate = time;
+    }
+    this.updateVisualTransform(this.vehicleVisual, this.vehicle.position, this.vehicle.rotation);
+    if (this.cameraMode === 'follow') {
+      const targetRotation = -this.projectedAngle(this.vehicle.rotation) + Math.PI / 2;
+      this.cameraRotation = Phaser.Math.Angle.RotateTo(this.cameraRotation, targetRotation, 0.012);
+    } else {
+      this.cameraRotation = Phaser.Math.Angle.RotateTo(this.cameraRotation, 0, 0.02);
+    }
+    this.cameras.main.setRotation(this.cameraRotation);
+    if (time - this.lastHudUpdate > 100) {
+      this.emitHud(time);
+      this.lastHudUpdate = time;
+    }
+    if (this.keys?.R && Phaser.Input.Keyboard.JustDown(this.keys.R)) {
+      this.vehicle.reposition();
+      this.emitToast('Hatch reposicionado em segurança.', 'info');
+    }
+  }
+
+  private readInput(): VehicleInput {
+    if (!this.keys) return this.mobileInput;
+    const throttle = Number(this.keys.W.isDown || this.keys.UP.isDown) - Number(this.keys.S.isDown || this.keys.DOWN.isDown);
+    const steering = Number(this.keys.D.isDown || this.keys.RIGHT.isDown) - Number(this.keys.A.isDown || this.keys.LEFT.isDown);
+    return {
+      throttle: Math.abs(this.mobileInput.throttle) > Math.abs(throttle) ? this.mobileInput.throttle : throttle,
+      steering: Math.abs(this.mobileInput.steering) > Math.abs(steering) ? this.mobileInput.steering : steering,
+      handbrake: this.keys.SPACE.isDown || this.mobileInput.handbrake
+    };
+  }
+
+  private renderMap(map: CityMapData) {
+    const ground = this.add.graphics().setDepth(-20);
+    ground.fillStyle(0x8fb878).fillRect(-2_000, -1_600, 4_000, 3_200);
+    ground.fillStyle(0x7da66d, 0.55);
+    for (let index = 0; index < 130; index += 1) {
+      const x = ((index * 173) % 2_100) - 1_050;
+      const y = ((index * 347) % 2_050) - 1_025;
+      const p = this.project({ x, y });
+      ground.fillCircle(p.x, p.y, 2.1);
+      ground.fillStyle(index % 3 ? 0x3d7848 : 0x557d3a, 0.7).fillCircle(p.x, p.y - 1.7, 3.1);
+      ground.fillStyle(0x7da66d, 0.55);
+    }
+
+    const buildings = this.add.graphics().setDepth(3);
+    for (const building of map.buildings) {
+      const points = building.points.map((point) => {
+        const projected = this.project(point);
+        return new Phaser.Math.Vector2(projected.x, projected.y);
+      });
+      if (points.length < 3) continue;
+      const height = Math.min(10, 1.4 + building.levels * 0.55);
+      buildings.fillStyle(0x31485b, 0.24).fillPoints(points.map((point) => new Phaser.Math.Vector2(point.x + height, point.y + height)), true);
+      buildings.fillStyle(building.levels > 5 ? 0xc9d2d8 : 0xe5dfd0).fillPoints(points, true);
+      buildings.lineStyle(0.55, 0x687987, 0.75).strokePoints(points, true);
+    }
+
+    const roads = this.add.graphics().setDepth(8);
+    for (const road of map.roads) {
+      const width = Math.max(4.5, Math.min(18, road.width));
+      roads.lineStyle(width + 2.2, 0xd7d3c8, 1);
+      this.strokeRoad(roads, road.points);
+    }
+    for (const road of map.roads) {
+      const width = Math.max(4.5, Math.min(18, road.width));
+      roads.lineStyle(width, road.highway === 'service' ? 0x5d6570 : 0x454e59, 1);
+      this.strokeRoad(roads, road.points);
+      if (road.lanes >= 2 && road.points.length > 1) {
+        roads.lineStyle(0.32, 0xf8d96a, 0.85);
+        this.strokeRoad(roads, road.points);
+      }
+    }
+    this.renderBusStops(map);
+    this.renderSignals(map);
+
+    this.add.text(0, 0, '© OpenStreetMap contributors', {
+      fontFamily: 'Inter, sans-serif', fontSize: '10px', color: '#f8fafc', backgroundColor: '#102a43aa', padding: { x: 5, y: 3 }
+    }).setScrollFactor(0).setPosition(8, this.scale.height - 92).setDepth(1000);
+  }
+
+  private strokeRoad(graphics: Phaser.GameObjects.Graphics, points: Point[]) {
+    graphics.beginPath();
+    points.forEach((point, index) => {
+      const projected = this.project(point);
+      if (index === 0) graphics.moveTo(projected.x, projected.y); else graphics.lineTo(projected.x, projected.y);
+    });
+    graphics.strokePath();
+  }
+
+  private renderBusStops(map: CityMapData) {
+    for (const [index, stop] of map.busStops.entries()) {
+      const p = this.project(stop);
+      const container = this.add.container(p.x, p.y).setDepth(22);
+      const shelter = this.add.graphics();
+      shelter.fillStyle(0x102a43, 0.92).fillRect(-3.7, -4.4, 0.55, 5.4).fillRect(3.2, -4.4, 0.55, 5.4);
+      shelter.fillStyle(0x1fb997, 0.9).fillRoundedRect(-4.2, -5, 8.4, 1.1, 0.3);
+      shelter.fillStyle(0x8fd3e8, 0.42).fillRect(-3.1, -3.9, 6.2, 3.8);
+      shelter.fillStyle(0xf7c948).fillCircle(4.8, -4.3, 1.25);
+      container.add(shelter);
+      const count = 1 + (index * 3) % 5;
+      for (let personIndex = 0; personIndex < count; personIndex += 1) {
+        const person = this.add.graphics();
+        person.fillStyle(0x5b3b2e).fillCircle(0, -1.5, 0.45);
+        person.fillStyle([0xe85d75, 0x4f86c6, 0xf3b33d, 0x704c9f][(index + personIndex) % 4]).fillRoundedRect(-0.45, -1.05, 0.9, 1.7, 0.25);
+        person.setPosition(-2.3 + personIndex * 1.1, 1.3);
+        container.add(person);
+        this.tweens.add({ targets: person, y: person.y - 0.3, duration: 650 + personIndex * 100, yoyo: true, repeat: -1, ease: 'Sine.inOut' });
+      }
+      container.setSize(12, 10).setInteractive({ useHandCursor: true }).on('pointerdown', () => {
+        this.emitToast('Empresa de ônibus ainda não adquirida.', 'info');
+      });
+    }
+  }
+
+  private renderSignals(map: CityMapData) {
+    for (const signal of map.signals) {
+      const p = this.project(signal);
+      const graphics = this.add.graphics().setPosition(p.x, p.y).setDepth(26);
+      this.signalVisuals.push({ signal, graphics });
+    }
+    this.updateSignals();
+  }
+
+  private updateSignals() {
+    if (!this.traffic) return;
+    for (const { signal, graphics } of this.signalVisuals) {
+      const state = this.traffic.signalState(signal);
+      graphics.clear();
+      graphics.fillStyle(0x18232e).fillRoundedRect(-1.1, -6.2, 2.2, 5.3, 0.45);
+      graphics.fillStyle(0x222b33).fillRect(-0.18, -0.9, 0.36, 4.4);
+      graphics.fillStyle(state === 'red' ? 0xff4d4d : 0x512929).fillCircle(0, -5.25, 0.62);
+      graphics.fillStyle(state === 'yellow' ? 0xffd23f : 0x514b29).fillCircle(0, -3.65, 0.62);
+      graphics.fillStyle(state === 'green' ? 0x2fe081 : 0x264e39).fillCircle(0, -2.05, 0.62);
+    }
+  }
+
+  private createDestinationMarker() {
+    const container = this.add.container(0, 0).setDepth(27);
+    const graphics = this.add.graphics();
+    graphics.lineStyle(0.65, 0xf8fafc, 0.9).strokeCircle(0, 0, 6.4);
+    graphics.lineStyle(1.4, 0x3dd6d0, 0.95).strokeCircle(0, 0, 4.8);
+    graphics.fillStyle(0x3dd6d0, 0.18).fillCircle(0, 0, 4.6);
+    container.add(graphics);
+    this.tweens.add({ targets: container, scale: 1.18, duration: 700, yoyo: true, repeat: -1 });
+    return container;
+  }
+
+  private syncMissionVisuals() {
+    if (!this.mission || !this.passengerVisual || !this.destinationVisual) return;
+    const phase = this.mission.mission.phase;
+    const pickup = this.project(this.mission.mission.pickup);
+    const destination = this.project(this.mission.mission.destination);
+    this.passengerVisual.setPosition(pickup.x, pickup.y).setVisible(phase === 'pickup');
+    this.destinationVisual.setPosition(destination.x, destination.y).setVisible(phase === 'passenger-on-board');
+    this.drawRoute();
+  }
+
+  private drawRoute() {
+    if (!this.routeGraphics || !this.mission) return;
+    this.routeGraphics.clear();
+    const route = this.mission.route;
+    if (route.length < 2) return;
+    this.routeGraphics.lineStyle(2.25, 0x0c2e38, 0.55);
+    this.strokeRoad(this.routeGraphics, route);
+    this.routeGraphics.lineStyle(1.15, this.mission.mission.phase === 'pickup' ? 0x3fe0a6 : 0x51c9ff, 0.98);
+    this.strokeRoad(this.routeGraphics, route);
+  }
+
+  private updateVisualTransform(visual: Phaser.GameObjects.Container, position: Point, rotation: number) {
+    const projected = this.project(position);
+    visual.setPosition(projected.x, projected.y).setRotation(this.projectedAngle(rotation));
+  }
+
+  private projectedAngle(rotation: number) {
+    const origin = this.project({ x: 0, y: 0 });
+    const direction = this.project({ x: Math.cos(rotation), y: Math.sin(rotation) });
+    return Math.atan2(direction.y - origin.y, direction.x - origin.x);
+  }
+
+  private project = (point: Point): Point => ({
+    x: point.x - point.y * GAME_CONFIG.map.projectionSkew,
+    y: point.y * GAME_CONFIG.map.projectionYScale
+  });
+
+  private handleCommand(command: GameCommand) {
+    if (command.type === 'mobile-input') {
+      this.mobileInput = { throttle: command.throttle, steering: command.steering, handbrake: command.handbrake };
+      return;
+    }
+    if (command.type === 'pause') {
+      this.paused = !this.paused;
+      this.emitToast(this.paused ? 'Jogo pausado.' : 'De volta à rota.', 'info');
+      return;
+    }
+    if (command.type === 'camera') {
+      this.cameraMode = this.cameraMode === 'follow' ? 'fixed' : 'follow';
+      this.save.settings.cameraMode = this.cameraMode;
+      this.emitToast(this.cameraMode === 'follow' ? 'Câmera acompanhando a direção.' : 'Câmera fixa para o norte.', 'info');
+      return;
+    }
+    if (command.type === 'set-quality') {
+      this.save.settings.quality = command.quality;
+      this.emitToast(`Qualidade: ${command.quality}.`, 'info');
+      return;
+    }
+    if (command.type === 'cancel-ride' && this.mission) {
+      const penalized = this.mission.cancel();
+      if (penalized) this.save.money = Math.max(0, this.save.money - GAME_CONFIG.fare.cancellationPenalty);
+      this.emitToast(penalized ? 'Corrida cancelada: -R$ 3,00' : 'Corrida cancelada.', 'warning');
+      this.mission.next(this.vehicle?.position ?? { x: 0, y: 0 }, this.save.completedRides + 1);
+      this.syncMissionVisuals();
+      return;
+    }
+    if (command.type === 'dismiss-receipt' && this.mission && this.vehicle) {
+      this.mission.next(this.vehicle.position, this.save.completedRides);
+      this.syncMissionVisuals();
+      return;
+    }
+    if (command.type === 'dev') this.handleDevAction(command.action);
+  }
+
+  private handleDevAction(action: string) {
+    if (!import.meta.env.DEV || !this.vehicle || !this.mission || !this.traffic) return;
+    if (action === 'money-add') this.save.money += 1_000;
+    if (action === 'money-remove') this.save.money = Math.max(0, this.save.money - 100);
+    if (action === 'refuel') this.save.fuel = GAME_CONFIG.vehicle.fuelCapacityLiters;
+    if (action === 'repair') this.save.condition = 100;
+    if (action === 'teleport-pickup') this.vehicle.teleport(this.mission.mission.pickup);
+    if (action === 'teleport-destination') this.vehicle.teleport(this.mission.mission.destination);
+    if (action === 'complete') {
+      if (this.mission.mission.phase === 'pickup') this.vehicle.teleport(this.mission.mission.pickup);
+      else this.vehicle.teleport(this.mission.mission.destination);
+    }
+    if (action === 'generate') {
+      this.mission.next(this.vehicle.position, this.save.completedRides + 1);
+      this.syncMissionVisuals();
+    }
+    if (action === 'traffic') this.traffic.enabled = !this.traffic.enabled;
+    if (action === 'signals') this.traffic.signalsEnabled = !this.traffic.signalsEnabled;
+    if (action === 'taxi') this.emitToast('Táxi desbloqueado temporariamente para testes.', 'success');
+    if (action === 'time') this.traffic.timeScale = this.traffic.timeScale === 1 ? 2 : this.traffic.timeScale === 2 ? 0.5 : 1;
+    if (action === 'graph') {
+      this.showGraph = !this.showGraph;
+      this.renderDebugGraph();
+    }
+    if (action === 'colliders') this.emitToast('Colisores de pista: limite claro das vias.', 'info');
+    if (action === 'reset') localStorage.clear();
+    this.emitHud();
+  }
+
+  private renderDebugGraph() {
+    this.graphGraphics?.destroy();
+    if (!this.showGraph || !this.map) return;
+    this.graphGraphics = this.add.graphics().setDepth(50).lineStyle(0.25, 0x24f2ff, 0.45);
+    for (const node of this.map.graph.nodes) {
+      const from = this.project(node);
+      for (const edge of node.edges.slice(0, 2)) {
+        const target = this.map.graph.nodes.find((candidate) => candidate.id === edge.to);
+        if (target) {
+          const to = this.project(target);
+          this.graphGraphics.lineBetween(from.x, from.y, to.x, to.y);
+        }
+      }
+    }
+  }
+
+  private emitHud(time = 0) {
+    if (!this.vehicle || !this.mission) return;
+    const phase = this.mission.mission.phase;
+    const target = phase === 'pickup' ? this.mission.mission.pickup : this.mission.mission.destination;
+    const desiredAngle = Math.atan2(target.y - this.vehicle.position.y, target.x - this.vehicle.position.x);
+    const distanceRemaining = this.mission.remainingDistance(this.vehicle.position);
+    const snapshot: HudSnapshot = {
+      ready: this.initialized,
+      money: this.save.money,
+      speedKmh: Math.abs(this.vehicle.speed) * 3.6,
+      fuel: this.save.fuel,
+      fuelCapacity: GAME_CONFIG.vehicle.fuelCapacityLiters,
+      condition: this.save.condition,
+      objective: phase === 'pickup'
+        ? `Busque ${this.mission.mission.passengerName} • ${this.mission.mission.pickupLabel}`
+        : phase === 'passenger-on-board'
+          ? `Leve até ${this.mission.mission.destinationLabel}`
+          : 'Corrida concluída',
+      distanceRemaining,
+      etaSeconds: distanceRemaining / 9,
+      headingDelta: Phaser.Math.Angle.Wrap(desiredAngle - this.vehicle.rotation),
+      fps: Math.round(this.game.loop.actualFps),
+      redLightWarning: time < this.redLightWarningUntil,
+      mission: this.mission.mission,
+      receipt: this.mission.receipt
+    };
+    gameEvents.emit('hud', snapshot);
+  }
+
+  private emitToast(message: string, tone: 'info' | 'success' | 'warning') {
+    gameEvents.emit('toast', { message, tone });
+  }
+
+  private persist() {
+    if (!this.vehicle) return;
+    this.save = writeSave({ ...this.save, position: { ...this.vehicle.position }, rotation: this.vehicle.rotation });
+    gameEvents.emit('save', this.save);
+  }
+
+  private pickLine(lines: readonly string[]) {
+    return lines[this.save.completedRides % lines.length];
+  }
+}
