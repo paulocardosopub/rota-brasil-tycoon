@@ -1,7 +1,7 @@
 import { COLLISION_PHYSICS, VEHICLE_PHYSICS } from './vehiclePhysics';
 
 export const GAME_CONFIG = {
-  version: '0.6.0',
+  version: '0.6.1',
   saveVersion: 4,
   map: {
     city: 'Brasília',

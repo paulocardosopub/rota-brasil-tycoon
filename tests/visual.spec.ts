@@ -27,3 +27,30 @@ test('auditoria visual mobile com piloto', async ({ page }, testInfo) => {
   }
   await page.screenshot({ path: testInfo.outputPath('mobile-pilot.png'), fullPage: true });
 });
+
+test('auditoria visual do funcionário identificado em rota', async ({ page }, testInfo) => {
+  test.setTimeout(60_000);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto('./');
+  await page.getByTestId('guest-button').click();
+  const hud = page.locator('[data-game-ready="true"]');
+  await expect(hud).toBeVisible({ timeout: 25_000 });
+
+  await page.keyboard.press('Control+Shift+D');
+  await page.getByRole('button', { name: 'Cumprir requisitos' }).click();
+  await page.getByRole('button', { name: 'Regularizar', exact: true }).click();
+  await page.getByRole('button', { name: 'Converter Hatch' }).click();
+  await page.getByRole('button', { name: 'Contratar Bia' }).click();
+  await page.getByRole('button', { name: 'Comprar Sedan' }).click();
+  await page.getByRole('button', { name: 'Atribuir motorista' }).click();
+  await page.getByRole('button', { name: 'Iniciar turno' }).click();
+  await page.keyboard.press('Control+Shift+D');
+
+  await page.getByTestId('fleet-button').click();
+  await page.getByRole('button', { name: 'Localizar veículo' }).click();
+  await expect(hud).toHaveAttribute('data-fleet-driver-identification', 'Motorista Bia Rocha');
+  await expect.poll(async () => Number(await hud.getAttribute('data-fleet-route-remaining')), { timeout: 10_000 }).toBeGreaterThan(120);
+  await page.getByTestId('fleet-button').click();
+  await page.waitForTimeout(1_000);
+  await page.screenshot({ path: testInfo.outputPath('fleet-driver.png'), fullPage: true });
+});

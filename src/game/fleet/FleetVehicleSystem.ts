@@ -9,6 +9,7 @@ import { guidanceForRoute } from '../systems/RouteSteeringAssist';
 import { VehicleController } from '../systems/VehicleController';
 import { TrafficSystem } from '../traffic/TrafficSystem';
 import { fleetSimulationLevel } from './FleetService';
+import { buildFleetWaypoints, employeeIdentification, FleetRoutePlan } from './FleetRoutePlan';
 
 type Project = (point: Point) => Point;
 
@@ -20,9 +21,14 @@ type Project = (point: Point) => Point;
 export class FleetVehicleSystem {
   private controller?: VehicleController;
   private visual?: Phaser.GameObjects.Container;
+  private driverLabel?: Phaser.GameObjects.Text;
   private activeVehicleId: string | null = null;
+  private activeShiftId: string | null = null;
   private route: Point[] = [];
-  private waypointIndex = 0;
+  private readonly routePlan = new FleetRoutePlan();
+  private destinationRemaining = 0;
+  private completedStops = 0;
+  private identification: string | null = null;
   private stuckSeconds = 0;
   private followEnabled = false;
   private playerContact = false;
@@ -38,8 +44,11 @@ export class FleetVehicleSystem {
     taxiPoints: TaxiPoint[],
     garage: Point
   ) {
-    const candidates = router.candidates(100).filter((_, index) => index % 17 === 0).slice(0, 10);
-    this.waypoints = [garage, ...taxiPoints.map((point) => point.entrance), ...candidates].map(({ x, y }) => ({ x, y }));
+    this.waypoints = buildFleetWaypoints(
+      router.candidates(100),
+      taxiPoints.map((point) => point.entrance),
+      garage
+    );
   }
 
   update(save: PlayerSave, playerPosition: Point, deltaSeconds: number) {
@@ -49,9 +58,21 @@ export class FleetVehicleSystem {
     this.syncParkedVehicles(save, shift?.vehicleId ?? null);
 
     if (!shift || !employee || !vehicle) {
+      if (this.activeShiftId) this.routePlan.reset();
+      this.activeShiftId = null;
+      this.identification = null;
+      this.destinationRemaining = 0;
       this.releaseActiveVehicle();
       return;
     }
+
+    if (this.activeShiftId !== shift.id) {
+      this.activeShiftId = shift.id;
+      this.routePlan.reset();
+      this.route = [];
+      this.completedStops = 0;
+    }
+    this.identification = employeeIdentification(employee.name);
 
     const distance = Math.hypot(vehicle.position.x - playerPosition.x, vehicle.position.y - playerPosition.y);
     const level = this.followEnabled ? 'detailed' : fleetSimulationLevel(distance);
@@ -82,6 +103,16 @@ export class FleetVehicleSystem {
     return this.controller ? { ...this.controller.position } : null;
   }
 
+  routeTelemetry() {
+    const target = this.routePlan.current(this.waypoints);
+    return {
+      target: target ? { ...target } : null,
+      remaining: this.destinationRemaining,
+      completedStops: this.completedStops,
+      identification: this.identification
+    };
+  }
+
   handlePlayerCollision(playerPosition: Point, playerSpeed: number) {
     if (!this.controller || !this.visual?.visible) {
       this.playerContact = false;
@@ -103,7 +134,7 @@ export class FleetVehicleSystem {
   }
 
   private updateDetailed(vehicle: FleetVehicle, employee: FleetEmployee, deltaSeconds: number) {
-    this.ensureDetailedVehicle(vehicle);
+    this.ensureDetailedVehicle(vehicle, employee);
     if (!this.controller || !this.visual) return;
     this.visual.setVisible(true);
     this.traffic.setReservedSlots(1);
@@ -111,7 +142,7 @@ export class FleetVehicleSystem {
     const route = this.route;
     if (route.length < 2) return;
 
-    const target = route[route.length - 1];
+    const target = this.routePlan.current(this.waypoints) ?? route[route.length - 1];
     const guidance = guidanceForRoute(
       this.controller.position,
       this.controller.rotation,
@@ -158,6 +189,9 @@ export class FleetVehicleSystem {
     vehicle.rotation = this.controller.rotation;
     vehicle.updatedAt = new Date().toISOString();
     this.placeVisual(this.visual, vehicle.position, vehicle.rotation);
+    this.placeDriverLabel(vehicle.position);
+    const activeTarget = this.routePlan.current(this.waypoints);
+    this.destinationRemaining = activeTarget ? Math.hypot(vehicle.position.x - activeTarget.x, vehicle.position.y - activeTarget.y) : 0;
     this.traffic.setPriorityVehicles([{
       id: vehicle.id,
       position: vehicle.position,
@@ -184,34 +218,48 @@ export class FleetVehicleSystem {
       }
     }
     if (this.route.length < 2) this.advanceWaypoint(employee, vehicle);
+    const activeTarget = this.routePlan.current(this.waypoints);
+    this.destinationRemaining = activeTarget ? Math.hypot(vehicle.position.x - activeTarget.x, vehicle.position.y - activeTarget.y) : 0;
     vehicle.updatedAt = new Date().toISOString();
   }
 
-  private ensureDetailedVehicle(vehicle: FleetVehicle) {
-    if (this.activeVehicleId === vehicle.id && this.controller && this.visual) return;
+  private ensureDetailedVehicle(vehicle: FleetVehicle, employee: FleetEmployee) {
+    if (this.activeVehicleId === vehicle.id && this.controller && this.visual) {
+      this.driverLabel?.setText(employeeIdentification(employee.name));
+      return;
+    }
     this.releaseActiveVehicle();
     this.activeVehicleId = vehicle.id;
     this.controller = new VehicleController(vehicle.position, vehicle.rotation, this.surface);
     this.controller.alignToRoad(false, vehicle.rotation);
     this.visual = this.createFleetVisual(vehicle).setDepth(29);
+    this.driverLabel = this.scene.add.text(0, 0, employeeIdentification(employee.name), {
+      fontFamily: 'Inter, Arial, sans-serif', fontSize: '12px', fontStyle: '600', color: '#eafff8',
+      backgroundColor: '#071722e8', padding: { x: 4, y: 2 }
+    }).setOrigin(0.5, 1).setDepth(43).setVisible(false);
     this.route = [];
   }
 
   private ensureRoute(position: Point) {
     if (this.route.length >= 2 || !this.waypoints.length) return;
     for (let attempt = 0; attempt < this.waypoints.length; attempt += 1) {
-      const target = this.waypoints[this.waypointIndex % this.waypoints.length];
-      this.waypointIndex = (this.waypointIndex + 1) % this.waypoints.length;
+      const target = this.routePlan.current(this.waypoints)!;
       this.route = this.router.drivingRoute(position, target);
       if (this.route.length >= 2) break;
+      if (Math.hypot(position.x - target.x, position.y - target.y) <= 15) {
+        this.route = [{ ...position }, { ...target }];
+        break;
+      }
+      this.routePlan.skipUnreachable(this.waypoints.length);
     }
   }
 
   private advanceWaypoint(employee: FleetEmployee, vehicle: FleetVehicle) {
     this.route = [];
-    const pickingUp = employee.state === 'seeking-trip' || employee.state === 'en-route';
-    employee.state = pickingUp ? 'with-passenger' : 'seeking-trip';
-    vehicle.state = pickingUp ? 'on-trip' : 'employee-driving';
+    const nextStage = this.routePlan.arrive(this.waypoints.length);
+    this.completedStops += 1;
+    employee.state = nextStage === 'to-destination' ? 'with-passenger' : 'seeking-trip';
+    vehicle.state = nextStage === 'to-destination' ? 'on-trip' : 'employee-driving';
   }
 
   private syncParkedVehicles(save: PlayerSave, activeShiftVehicleId: string | null) {
@@ -247,9 +295,27 @@ export class FleetVehicleSystem {
     visual.setPosition(projected.x, projected.y).setRotation(Math.atan2(direction.y - origin.y, direction.x - origin.x));
   }
 
+  private placeDriverLabel(position: Point) {
+    if (!this.driverLabel) return;
+    const projected = this.project(position);
+    const camera = this.scene.cameras.main;
+    const cameraRotation = (camera as unknown as { rotation: number }).rotation;
+    const inverseZoom = 1 / Math.max(0.1, camera.zoom);
+    const offset = 20 * inverseZoom;
+    this.driverLabel
+      .setPosition(
+        projected.x - Math.sin(cameraRotation) * offset,
+        projected.y - Math.cos(cameraRotation) * offset
+      )
+      .setRotation(-cameraRotation)
+      .setScale(inverseZoom)
+      .setVisible(true);
+  }
+
   private hideDetailedVehicle() {
     if (this.controller && this.activeVehicleId) {
       this.visual?.setVisible(false);
+      this.driverLabel?.setVisible(false);
       this.controller = undefined;
       this.activeVehicleId = null;
     }
@@ -260,7 +326,9 @@ export class FleetVehicleSystem {
     this.traffic.setPriorityVehicles([]);
     this.controller = undefined;
     this.visual?.destroy();
+    this.driverLabel?.destroy();
     this.visual = undefined;
+    this.driverLabel = undefined;
     this.activeVehicleId = null;
     this.route = [];
   }
@@ -274,5 +342,7 @@ function advanceRoute(route: Point[], position: Point) {
     const distance = Math.hypot(position.x - route[index].x, position.y - route[index].y);
     if (distance < closestDistance) { closest = index; closestDistance = distance; }
   }
-  return closestDistance < 20 ? [{ ...position }, ...route.slice(closest + 1)] : route;
+  if (closestDistance >= 20) return route;
+  const remaining = route.slice(closest + 1);
+  return [{ ...position }, ...(remaining.length ? remaining : [{ ...route[route.length - 1] }])];
 }
