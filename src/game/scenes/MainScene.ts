@@ -31,8 +31,9 @@ export class MainScene extends Phaser.Scene {
   private keys?: Record<string, Phaser.Input.Keyboard.Key>;
   private mobileInput: VehicleInput = { throttle: 0, steering: 0, handbrake: false };
   private manuallyPaused = false;
-  private visibilityPaused = false;
   private initialized = false;
+  private pendingSimulationSeconds = 0;
+  private simulationSeconds = 0;
   private lastHudUpdate = 0;
   private lastRouteUpdate = 0;
   private offRouteSeconds = 0;
@@ -41,6 +42,7 @@ export class MainScene extends Phaser.Scene {
   private collisionEvents = 0;
   private autopilotEnabled = false;
   private autopilotNextMissionAt = 0;
+  private autopilotCollisionRecoveryUntil = 0;
   private redLightWarningUntil = 0;
   private unsubscribe?: () => void;
   private save: PlayerSave;
@@ -69,8 +71,9 @@ export class MainScene extends Phaser.Scene {
   }
 
   private handleVisibility = () => {
-    this.visibilityPaused = document.hidden;
-    if (document.hidden) this.mobileInput = { throttle: 0, steering: 0, handbrake: false };
+    if (!document.hidden) return;
+    this.mobileInput = { throttle: 0, steering: 0, handbrake: false };
+    for (const key of Object.values(this.keys ?? {})) key.reset();
   };
 
   private async initialize() {
@@ -112,8 +115,45 @@ export class MainScene extends Phaser.Scene {
   }
 
   update(time: number, delta: number) {
-    if (!this.initialized || !this.vehicle || !this.mission || !this.traffic || !this.vehicleVisual || this.manuallyPaused || this.visibilityPaused) return;
-    const dt = Math.min(0.05, delta / 1000) * this.traffic.timeScale;
+    if (!this.initialized || !this.vehicle || !this.mission || !this.traffic || !this.vehicleVisual || this.manuallyPaused) return;
+    this.pendingSimulationSeconds += Math.min(30, Math.max(0, delta / 1000)) * this.traffic.timeScale;
+    let simulationSteps = 0;
+    while (this.pendingSimulationSeconds > 0.0001 && simulationSteps < 120) {
+      const dt = Math.min(0.05, this.pendingSimulationSeconds);
+      this.simulateStep(dt, time);
+      this.pendingSimulationSeconds -= dt;
+      simulationSteps += 1;
+    }
+
+    if (this.mission.mission.phase !== 'completed' && time - this.lastRouteUpdate > 500) {
+      this.drawRoute();
+      this.lastRouteUpdate = time;
+    }
+    if (time - this.lastSignalUpdate > 250) {
+      this.updateSignals();
+      this.lastSignalUpdate = time;
+    }
+    this.updateVisualTransform(this.vehicleVisual, this.vehicle.position, this.vehicle.rotation);
+    if (this.cameraMode === 'follow') {
+      const targetRotation = -this.projectedAngle(this.vehicle.rotation) + Math.PI / 2;
+      this.cameraRotation = Phaser.Math.Angle.RotateTo(this.cameraRotation, targetRotation, 0.035);
+    } else {
+      this.cameraRotation = Phaser.Math.Angle.RotateTo(this.cameraRotation, 0, 0.02);
+    }
+    this.cameras.main.setRotation(this.cameraRotation);
+    if (time - this.lastHudUpdate > 100) {
+      this.emitHud(time);
+      this.lastHudUpdate = time;
+    }
+    if (this.keys?.R && Phaser.Input.Keyboard.JustDown(this.keys.R)) {
+      this.vehicle.reposition();
+      this.emitToast('Hatch reposicionado em segurança.', 'info');
+    }
+  }
+
+  private simulateStep(dt: number, time: number) {
+    if (!this.vehicle || !this.mission || !this.traffic) return;
+    this.simulationSeconds += dt;
     const input = this.readInput();
     const previousConditionDamage = this.vehicle.conditionDamage;
     const travelled = this.vehicle.update(input, dt, this.save.fuel);
@@ -122,8 +162,27 @@ export class MainScene extends Phaser.Scene {
     this.save.fuel = Math.max(0, this.save.fuel - fuelDelta);
     this.save.condition = Math.max(0, this.save.condition - (this.vehicle.conditionDamage - previousConditionDamage));
 
-    this.traffic.update(dt, this.vehicle.position, this.vehicle.speed, this.vehicle.rotation);
-    if (this.traffic.handlePlayerCollision(this.vehicle.position)) {
+    const trafficUpdate = this.traffic.update(
+      dt,
+      this.vehicle.position,
+      this.vehicle.speed,
+      this.vehicle.rotation,
+      this.autopilotEnabled
+    );
+    if (trafficUpdate.autopilotDeadlockRecovery) {
+      this.vehicle.recoverAutopilotToLane();
+      this.mission.recalculate(this.vehicle.position);
+      this.syncMissionVisuals();
+      this.autopilotCollisionRecoveryUntil = this.simulationSeconds + GAME_CONFIG.traffic.autopilotCollisionGhostSeconds;
+    }
+    const collision = this.traffic.handlePlayerCollision(this.vehicle.position, this.autopilotEnabled);
+    if (collision.autopilotRecovery) {
+      this.vehicle.recoverAutopilotToLane();
+      this.mission.recalculate(this.vehicle.position);
+      this.syncMissionVisuals();
+      this.autopilotCollisionRecoveryUntil = this.simulationSeconds + GAME_CONFIG.traffic.autopilotCollisionGhostSeconds;
+    }
+    if (collision.impact) {
       this.vehicle.speed *= 0.55;
       this.save.condition = Math.max(0, this.save.condition - 0.35);
       this.collisionEvents += 1;
@@ -136,7 +195,15 @@ export class MainScene extends Phaser.Scene {
     }
 
     const speedKmh = Math.abs(this.vehicle.speed) * 3.6;
-    const missionEvent = this.mission.update(this.vehicle.position, speedKmh, dt, travelled, this.save.rating);
+    const missionEvent = this.mission.update(
+      this.vehicle.position,
+      speedKmh,
+      dt,
+      travelled,
+      this.save.rating,
+      this.autopilotEnabled ? GAME_CONFIG.mission.autopilotInteractionRadiusMeters : GAME_CONFIG.mission.interactionRadiusMeters,
+      this.autopilotEnabled ? GAME_CONFIG.mission.autopilotMaxInteractionSpeedKmh : GAME_CONFIG.mission.maxInteractionSpeedKmh
+    );
     if (missionEvent === 'picked-up') {
       this.emitToast(`${this.mission.mission.passengerName}: ${this.pickLine(GAME_CONFIG.mission.pickupLines)}`, 'success');
       this.syncMissionVisuals();
@@ -178,30 +245,6 @@ export class MainScene extends Phaser.Scene {
         this.offRouteSeconds = 0;
         this.emitToast('Rota recalculada: retomando o caminho principal.', 'info');
       }
-      if (time - this.lastRouteUpdate > 500) {
-        this.drawRoute();
-        this.lastRouteUpdate = time;
-      }
-    }
-    if (time - this.lastSignalUpdate > 250) {
-      this.updateSignals();
-      this.lastSignalUpdate = time;
-    }
-    this.updateVisualTransform(this.vehicleVisual, this.vehicle.position, this.vehicle.rotation);
-    if (this.cameraMode === 'follow') {
-      const targetRotation = -this.projectedAngle(this.vehicle.rotation) + Math.PI / 2;
-      this.cameraRotation = Phaser.Math.Angle.RotateTo(this.cameraRotation, targetRotation, 0.035);
-    } else {
-      this.cameraRotation = Phaser.Math.Angle.RotateTo(this.cameraRotation, 0, 0.02);
-    }
-    this.cameras.main.setRotation(this.cameraRotation);
-    if (time - this.lastHudUpdate > 100) {
-      this.emitHud(time);
-      this.lastHudUpdate = time;
-    }
-    if (this.keys?.R && Phaser.Input.Keyboard.JustDown(this.keys.R)) {
-      this.vehicle.reposition();
-      this.emitToast('Hatch reposicionado em segurança.', 'info');
     }
   }
 
@@ -226,21 +269,29 @@ export class MainScene extends Phaser.Scene {
 
     if (this.autopilotEnabled && this.vehicle && this.mission && this.traffic) {
       const routeAvailable = this.mission.route.length >= 2;
-      const advice = this.traffic.playerDrivingAdvice(this.vehicle.position, this.vehicle.rotation, Math.abs(this.vehicle.speed));
+      const advice = this.traffic.playerDrivingAdvice(
+        this.vehicle.position,
+        this.vehicle.rotation,
+        Math.abs(this.vehicle.speed),
+        this.mission.route
+      );
       const phase = this.mission.mission.phase;
-      const missionDistance = this.mission.remainingDistance(this.vehicle.position);
+      const missionDistance = this.mission.targetDistance(this.vehicle.position);
+      const insideArrivalArea = missionDistance <= GAME_CONFIG.mission.autopilotInteractionRadiusMeters;
       const missionTargetSpeed = phase === 'completed'
         ? 0
+        : insideArrivalArea
+          ? 0
         : missionApproachTargetSpeed(
           missionDistance,
-          GAME_CONFIG.mission.interactionRadiusMeters,
+          GAME_CONFIG.mission.autopilotInteractionRadiusMeters,
           GAME_CONFIG.vehicle.brakeMps2,
           GAME_CONFIG.vehicle.autopilotCruiseSpeedMps
         );
       const targetSpeed = routeAvailable ? Math.min(advice.targetSpeed, missionTargetSpeed) : 0;
       return {
         throttle: automaticThrottle(Math.abs(this.vehicle.speed), targetSpeed),
-        steering: routeAvailable
+        steering: routeAvailable && !insideArrivalArea
           ? steeringForRoute(this.vehicle.position, this.vehicle.rotation, this.vehicle.speed, this.mission.route)
           : 0,
         handbrake: false,
@@ -444,6 +495,10 @@ export class MainScene extends Phaser.Scene {
       this.autopilotEnabled = !this.autopilotEnabled;
       if (this.autopilotEnabled) {
         this.mobileInput = { throttle: 0, steering: 0, handbrake: false };
+        if (this.vehicle?.engageAutopilot() && this.mission) {
+          this.mission.recalculate(this.vehicle.position);
+          this.syncMissionVisuals();
+        }
         if (this.mission?.mission.phase === 'completed') {
           this.autopilotNextMissionAt = this.time.now + GAME_CONFIG.mission.newRideDelayMs;
         }
@@ -506,6 +561,7 @@ export class MainScene extends Phaser.Scene {
     if (action === 'signals') this.traffic.signalsEnabled = !this.traffic.signalsEnabled;
     if (action === 'traffic-ahead') this.traffic.debugPlaceVehicle(this.vehicle.position, this.vehicle.rotation, 16);
     if (action === 'traffic-collision') this.traffic.debugPlaceVehicle(this.vehicle.position, this.vehicle.rotation, 0);
+    if (action === 'traffic-head-on') this.traffic.debugPlaceHeadOnVehicle(this.vehicle.position, this.vehicle.rotation);
     if (action === 'taxi') this.emitToast('Táxi desbloqueado temporariamente para testes.', 'success');
     if (action === 'time') this.traffic.timeScale = this.traffic.timeScale === 1 ? 2 : this.traffic.timeScale === 2 ? 0.5 : 1;
     if (action === 'graph') {
@@ -539,7 +595,9 @@ export class MainScene extends Phaser.Scene {
     const target = phase === 'pickup' ? this.mission.mission.pickup : this.mission.mission.destination;
     const desiredAngle = Math.atan2(target.y - this.vehicle.position.y, target.x - this.vehicle.position.x);
     const distanceRemaining = this.mission.remainingDistance(this.vehicle.position);
-    const trafficStats = this.traffic?.stats() ?? { total: 0, buses: 0, utility: 0, stunned: 0, brakeReason: 'clear' as const };
+    const trafficStats = this.traffic?.stats() ?? {
+      total: 0, buses: 0, utility: 0, stunned: 0, ghosted: 0, deadlockRecoveries: 0, brakeReason: 'clear' as const
+    };
     const snapshot: HudSnapshot = {
       ready: this.initialized,
       money: this.save.money,
@@ -561,11 +619,19 @@ export class MainScene extends Phaser.Scene {
       trafficVehicles: trafficStats.total,
       trafficBuses: trafficStats.buses,
       trafficStunned: trafficStats.stunned,
+      trafficGhosted: trafficStats.ghosted,
+      autopilotDeadlockRecoveries: trafficStats.deadlockRecoveries,
       collisionEvents: this.collisionEvents,
       autopilotEnabled: this.autopilotEnabled,
       autopilotNextMissionSeconds: this.autopilotNextMissionAt > 0
         ? Math.max(0, Math.ceil((this.autopilotNextMissionAt - (time || this.time.now)) / 1_000))
         : 0,
+      autopilotRoadCorrections: this.vehicle.autopilotRoadCorrections,
+      autopilotMinRoadClearance: Number.isFinite(this.vehicle.minimumAutopilotRoadClearance)
+        ? this.vehicle.minimumAutopilotRoadClearance
+        : this.vehicle.roadEdgeClearance(),
+      simulationSeconds: this.simulationSeconds,
+      autopilotCollisionRecovery: this.simulationSeconds < this.autopilotCollisionRecoveryUntil,
       autoBrakeReason: trafficStats.brakeReason,
       routeRecalculations: this.routeRecalculations,
       mission: this.mission.mission,

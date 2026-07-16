@@ -16,7 +16,9 @@ export function steeringForRoute(position: Point, rotation: number, speedMps: nu
     }
   }
 
-  const lookAhead = 6 + Math.min(18, Math.abs(speedMps) * 1.35);
+  // A shorter look-ahead follows the actual bend instead of cutting a chord
+  // through the sidewalk on sharp corners.
+  const lookAhead = 4 + Math.min(11, Math.abs(speedMps) * 0.72);
   let target = interpolate(route[segmentIndex], route[segmentIndex + 1], segmentProgress);
   let remainingLookAhead = lookAhead;
   for (let index = segmentIndex; index < route.length - 1; index += 1) {

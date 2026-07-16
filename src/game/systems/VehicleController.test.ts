@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
+import { GAME_CONFIG } from '../../config/gameConfig';
 import type { RoadData } from '../../types/game';
 import { RoadSurfaceIndex } from './RoadSurfaceIndex';
+import { steeringForRoute } from './RouteSteeringAssist';
 import { VehicleController } from './VehicleController';
 
 const road: RoadData = {
@@ -80,5 +82,59 @@ describe('VehicleController', () => {
       vehicle.update({ throttle: 0, steering: 0, handbrake: false, assistanceEnabled: false }, 1 / 60, 18);
     }
     expect(vehicle.rotation).toBeCloseTo(0.2);
+  });
+
+  it('recoloca o carro na faixa ao ligar o piloto automático', () => {
+    const surface = new RoadSurfaceIndex([road]);
+    const vehicle = new VehicleController({ x: 0, y: 7 }, 0, surface);
+    vehicle.speed = 8;
+    expect(vehicle.engageAutopilot()).toBe(true);
+    expect(vehicle.roadEdgeClearance()).toBeGreaterThan(0);
+    expect(vehicle.speed).toBe(8);
+  });
+
+  it('recentraliza e volta a andar após um acidente no piloto automático', () => {
+    const surface = new RoadSurfaceIndex([road]);
+    const vehicle = new VehicleController({ x: 0, y: 4 }, 0.35, surface);
+    vehicle.speed = 0;
+    expect(vehicle.recoverAutopilotToLane()).toBe(true);
+    expect(vehicle.roadEdgeClearance()).toBeGreaterThan(0);
+    expect(vehicle.speed).toBe(GAME_CONFIG.vehicle.autopilotRecoverySpeedMps);
+  });
+
+  it('mantém todo o carro no asfalto durante uma curva automática fechada', () => {
+    const east: RoadData = {
+      ...road,
+      id: 'east',
+      points: [
+        { x: 0, y: 0, lat: 0, lon: 0, nodeId: 'a' },
+        { x: 30, y: 0, lat: 0, lon: 0, nodeId: 'b' }
+      ]
+    };
+    const north: RoadData = {
+      ...road,
+      id: 'north',
+      points: [
+        { x: 30, y: 0, lat: 0, lon: 0, nodeId: 'b' },
+        { x: 30, y: 35, lat: 0, lon: 0, nodeId: 'c' }
+      ]
+    };
+    const surface = new RoadSurfaceIndex([east, north]);
+    const vehicle = new VehicleController({ x: 0, y: 2.5 }, 0, surface);
+    const route = [{ x: 0, y: 2.5 }, { x: 28.75, y: 1.25 }, { x: 27.5, y: 30 }];
+    vehicle.speed = 12;
+    let minimumClearance = Number.POSITIVE_INFINITY;
+    for (let frame = 0; frame < 360 && vehicle.position.y < 16; frame += 1) {
+      vehicle.update({
+        throttle: vehicle.speed < 12 ? 1 : 0,
+        steering: steeringForRoute(vehicle.position, vehicle.rotation, vehicle.speed, route),
+        handbrake: false,
+        assistanceEnabled: true
+      }, 1 / 60, 18);
+      minimumClearance = Math.min(minimumClearance, vehicle.roadEdgeClearance());
+    }
+    expect(vehicle.position.y).toBeGreaterThan(12);
+    expect(minimumClearance).toBeGreaterThanOrEqual(-0.001);
+    expect(vehicle.minimumAutopilotRoadClearance).toBeGreaterThanOrEqual(-0.001);
   });
 });

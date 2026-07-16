@@ -53,14 +53,22 @@ export class MissionSystem {
     };
   }
 
-  update(position: Point, speedKmh: number, deltaSeconds: number, travelled: number, rating: number) {
+  update(
+    position: Point,
+    speedKmh: number,
+    deltaSeconds: number,
+    travelled: number,
+    rating: number,
+    interactionRadiusMeters: number = GAME_CONFIG.mission.interactionRadiusMeters,
+    maxInteractionSpeedKmh: number = GAME_CONFIG.mission.maxInteractionSpeedKmh
+  ) {
     if (this.mission.phase === 'passenger-on-board') {
       this.mission.elapsedSeconds += deltaSeconds;
       this.mission.distanceTravelled += travelled;
     }
     const target = this.mission.phase === 'pickup' ? this.mission.pickup : this.mission.destination;
     const distance = Math.hypot(position.x - target.x, position.y - target.y);
-    const stoppedCorrectly = distance <= GAME_CONFIG.mission.interactionRadiusMeters && speedKmh <= GAME_CONFIG.mission.maxInteractionSpeedKmh;
+    const stoppedCorrectly = distance <= interactionRadiusMeters && speedKmh <= maxInteractionSpeedKmh;
     if (this.mission.phase === 'pickup' && stoppedCorrectly) {
       this.mission.phase = 'passenger-on-board';
       this.route = this.router.drivingRoute(position, this.mission.destination);
@@ -123,6 +131,11 @@ export class MissionSystem {
   remainingDistance(position: Point) {
     if (!this.route.length) return 0;
     return Math.hypot(position.x - this.route[0].x, position.y - this.route[0].y) + this.router.distance(this.route);
+  }
+
+  targetDistance(position: Point) {
+    const target = this.mission.phase === 'pickup' ? this.mission.pickup : this.mission.destination;
+    return Math.hypot(position.x - target.x, position.y - target.y);
   }
 }
 

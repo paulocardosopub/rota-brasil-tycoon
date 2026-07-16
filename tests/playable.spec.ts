@@ -38,10 +38,13 @@ test('controle volta após trocar de aba e uma nova corrida continua dirigível'
   const hud = page.locator('[data-game-ready="true"]');
   await expect(hud).toBeVisible({ timeout: 25_000 });
 
+  const simulationBeforeTabChange = Number(await hud.getAttribute('data-simulation-seconds'));
   const otherPage = await context.newPage();
   await otherPage.goto('about:blank');
   await otherPage.bringToFront();
+  await otherPage.waitForTimeout(2_500);
   await page.bringToFront();
+  await expect.poll(async () => Number(await hud.getAttribute('data-simulation-seconds'))).toBeGreaterThan(simulationBeforeTabChange + 1.5);
   await page.keyboard.down('ArrowUp');
   await expect.poll(async () => Number(await hud.getAttribute('data-speed-kmh')), { timeout: 6_000 }).toBeGreaterThan(5);
   await page.keyboard.up('ArrowUp');
@@ -94,6 +97,7 @@ test('piloto automático dirige sozinho e recolhe os controles no celular', asyn
   expect(menuBox).not.toBeNull();
   expect(pilotBox!.y + pilotBox!.height).toBeLessThanOrEqual(menuBox!.y + 3);
   await expect.poll(async () => Number(await hud.getAttribute('data-speed-kmh')), { timeout: 8_000 }).toBeGreaterThan(10);
+  await expect.poll(async () => Number(await hud.getAttribute('data-autopilot-min-road-clearance'))).toBeGreaterThanOrEqual(0.1);
 
   await page.getByTestId('autopilot-button').click();
   await expect(hud).toHaveAttribute('data-autopilot-enabled', 'false');
@@ -153,9 +157,38 @@ test('piloto automático freia para tráfego à frente sem bater', async ({ page
   const hud = page.locator('[data-game-ready="true"]');
   await expect(hud).toBeVisible({ timeout: 25_000 });
   await page.keyboard.press('Control+Shift+D');
-  await page.getByRole('button', { name: 'NPC à frente' }).click();
-  await page.keyboard.press('Control+Shift+D');
   await page.getByTestId('autopilot-button').click();
+  await page.getByRole('button', { name: 'NPC à frente' }).click();
   await expect.poll(async () => await hud.getAttribute('data-auto-brake-reason'), { timeout: 8_000 }).toBe('traffic');
   expect(Number(await hud.getAttribute('data-collision-events'))).toBe(0);
+});
+
+test('piloto automático se solta depois de uma colisão sem repetir impactos', async ({ page }) => {
+  await page.goto('./');
+  await page.getByTestId('guest-button').click();
+  const hud = page.locator('[data-game-ready="true"]');
+  await expect(hud).toBeVisible({ timeout: 25_000 });
+  await page.keyboard.press('Control+Shift+D');
+  await page.getByTestId('autopilot-button').click();
+  await page.getByRole('button', { name: 'NPC sobre o carro' }).click();
+
+  await expect.poll(async () => Number(await hud.getAttribute('data-collision-events')), { timeout: 5_000 }).toBe(1);
+  await expect.poll(async () => Number(await hud.getAttribute('data-traffic-ghosted'))).toBeGreaterThanOrEqual(1);
+  await expect.poll(async () => Number(await hud.getAttribute('data-speed-kmh')), { timeout: 7_000 }).toBeGreaterThan(5);
+  expect(Number(await hud.getAttribute('data-collision-events'))).toBe(1);
+  await expect(hud).toHaveAttribute('data-autopilot-enabled', 'true');
+});
+
+test('piloto automático resolve um impasse de frente com outro veículo', async ({ page }) => {
+  await page.goto('./');
+  await page.getByTestId('guest-button').click();
+  const hud = page.locator('[data-game-ready="true"]');
+  await expect(hud).toBeVisible({ timeout: 25_000 });
+  await page.keyboard.press('Control+Shift+D');
+  await page.getByTestId('autopilot-button').click();
+  await page.getByRole('button', { name: 'NPC de frente' }).click();
+
+  await expect.poll(async () => Number(await hud.getAttribute('data-autopilot-deadlock-recoveries')), { timeout: 9_000 }).toBeGreaterThanOrEqual(1);
+  await expect.poll(async () => Number(await hud.getAttribute('data-speed-kmh')), { timeout: 7_000 }).toBeGreaterThan(5);
+  await expect(hud).toHaveAttribute('data-autopilot-enabled', 'true');
 });

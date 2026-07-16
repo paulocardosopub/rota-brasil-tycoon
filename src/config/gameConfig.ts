@@ -1,5 +1,5 @@
 export const GAME_CONFIG = {
-  version: '0.3.0',
+  version: '0.3.1',
   saveVersion: 1,
   map: {
     city: 'Brasília',
@@ -21,6 +21,9 @@ export const GAME_CONFIG = {
     offRoadBrakingMps2: 14,
     offRoadMaxSpeedMps: 8,
     autopilotCruiseSpeedMps: 16,
+    autopilotRecoverySpeedMps: 3.5,
+    autopilotRoadMarginMeters: 0.25,
+    autopilotRoadRecoveryRadiansPerSecond: 3.2,
     steeringRadiansPerSecond: 2.65,
     steeringAssistRadiansPerSecond: 0.9,
     steeringAssistMaxAngle: 0.72,
@@ -49,6 +52,8 @@ export const GAME_CONFIG = {
   mission: {
     interactionRadiusMeters: 8,
     maxInteractionSpeedKmh: 5,
+    autopilotInteractionRadiusMeters: 12,
+    autopilotMaxInteractionSpeedKmh: 8,
     newRideDelayMs: 5_000,
     passengerNames: ['Ana Luz', 'Caio Nunes', 'Dandara Reis', 'João Viana', 'Lia Campos', 'Ravi Torres'],
     pickupLines: ['Bom dia! Vamos por um caminho tranquilo?', 'Oi! Ainda bem que você chegou.', 'Tudo certo? Pode seguir.'],
@@ -79,6 +84,8 @@ export const GAME_CONFIG = {
     npcSpeedMps: 8.5,
     safetyDistanceMeters: 9,
     collisionStunSeconds: 3.2,
+    autopilotCollisionGhostSeconds: 2.4,
+    autopilotHeadOnDeadlockSeconds: 0.45,
     collisionCooldownSeconds: 2.5,
     signal: { greenSeconds: 12, yellowSeconds: 3, allRedSeconds: 1 },
     redLightPenalty: 2

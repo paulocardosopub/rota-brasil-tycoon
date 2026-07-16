@@ -139,9 +139,15 @@ export interface HudSnapshot {
   trafficVehicles: number;
   trafficBuses: number;
   trafficStunned: number;
+  trafficGhosted: number;
+  autopilotDeadlockRecoveries: number;
   collisionEvents: number;
   autopilotEnabled: boolean;
   autopilotNextMissionSeconds: number;
+  autopilotRoadCorrections: number;
+  autopilotMinRoadClearance: number;
+  simulationSeconds: number;
+  autopilotCollisionRecovery: boolean;
   autoBrakeReason: 'clear' | 'traffic' | 'red-signal';
   routeRecalculations: number;
   mission: MissionSnapshot | null;

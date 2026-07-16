@@ -22,9 +22,15 @@ const initialHud: HudSnapshot = {
   trafficVehicles: 0,
   trafficBuses: 0,
   trafficStunned: 0,
+  trafficGhosted: 0,
+  autopilotDeadlockRecoveries: 0,
   collisionEvents: 0,
   autopilotEnabled: false,
   autopilotNextMissionSeconds: 0,
+  autopilotRoadCorrections: 0,
+  autopilotMinRoadClearance: 0,
+  simulationSeconds: 0,
+  autopilotCollisionRecovery: false,
   autoBrakeReason: 'clear',
   routeRecalculations: 0,
   mission: null,
@@ -74,9 +80,15 @@ export function Hud() {
       data-traffic-vehicles={hud.trafficVehicles}
       data-traffic-buses={hud.trafficBuses}
       data-traffic-stunned={hud.trafficStunned}
+      data-traffic-ghosted={hud.trafficGhosted}
+      data-autopilot-deadlock-recoveries={hud.autopilotDeadlockRecoveries}
       data-collision-events={hud.collisionEvents}
       data-autopilot-enabled={hud.autopilotEnabled ? 'true' : 'false'}
       data-autopilot-next-mission-seconds={hud.autopilotNextMissionSeconds}
+      data-autopilot-road-corrections={hud.autopilotRoadCorrections}
+      data-autopilot-min-road-clearance={hud.autopilotMinRoadClearance.toFixed(3)}
+      data-simulation-seconds={hud.simulationSeconds.toFixed(3)}
+      data-autopilot-collision-recovery={hud.autopilotCollisionRecovery ? 'true' : 'false'}
       data-auto-brake-reason={hud.autoBrakeReason}
       data-route-recalculations={hud.routeRecalculations}
     >
@@ -188,7 +200,7 @@ function DevPanel({ close }: { close: () => void }) {
   const actions = [
     ['money-add', '+ R$ 1.000'], ['money-remove', '- R$ 100'], ['refuel', 'Reabastecer'], ['repair', 'Reparar'],
     ['teleport-pickup', 'Ir ao passageiro'], ['teleport-destination', 'Ir ao destino'], ['complete', 'Concluir etapa'], ['generate', 'Gerar corrida'],
-    ['traffic', 'Alternar trânsito'], ['signals', 'Alternar semáforos'], ['traffic-ahead', 'NPC à frente'], ['traffic-collision', 'NPC sobre o carro'], ['taxi', 'Liberar táxi'], ['time', 'Velocidade do tempo'],
+    ['traffic', 'Alternar trânsito'], ['signals', 'Alternar semáforos'], ['traffic-ahead', 'NPC à frente'], ['traffic-collision', 'NPC sobre o carro'], ['traffic-head-on', 'NPC de frente'], ['taxi', 'Liberar táxi'], ['time', 'Velocidade do tempo'],
     ['graph', 'Grafo de rotas'], ['colliders', 'Mostrar colisores'], ['reset', 'Reiniciar save']
   ];
   return <aside className="dev-panel"><button onClick={close}>×</button><h3>Painel de desenvolvimento</h3><div>{actions.map(([action, label]) => <button key={action} onClick={() => gameEvents.emit('command', { type: 'dev', action })}>{label}</button>)}</div></aside>;

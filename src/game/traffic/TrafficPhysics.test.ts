@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { pathsConflict, pointOverlapsVehicle, yieldingPathsConflict } from './TrafficPhysics';
+import { distanceAlongRoute, pathsConflict, pointOverlapsVehicle, yieldingPathsConflict } from './TrafficPhysics';
 
 describe('física preventiva do trânsito', () => {
   it('detecta trajetórias que se cruzam em poucos segundos', () => {
@@ -30,5 +30,11 @@ describe('física preventiva do trânsito', () => {
   it('reconhece contato real sem ampliar para a faixa vizinha', () => {
     expect(pointOverlapsVehicle({ x: 1, y: 0.5 }, { x: 0, y: 0 }, 0, 4.4, 1.9, 4.1, 1.82)).toBe(true);
     expect(pointOverlapsVehicle({ x: 1, y: 3.5 }, { x: 0, y: 0 }, 0, 4.4, 1.9, 4.1, 1.82)).toBe(false);
+  });
+
+  it('enxerga sinais e veículos depois de uma curva da rota', () => {
+    const route = [{ x: 0, y: 0 }, { x: 20, y: 0 }, { x: 20, y: 30 }];
+    expect(distanceAlongRoute({ x: 0, y: 0 }, route, { x: 20, y: 12 }, 2, 40)).toBe(32);
+    expect(distanceAlongRoute({ x: 0, y: 0 }, route, { x: 27, y: 12 }, 2, 40)).toBeNull();
   });
 });

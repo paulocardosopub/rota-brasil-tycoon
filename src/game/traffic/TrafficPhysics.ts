@@ -16,6 +16,33 @@ export function distanceAhead(origin: Point, heading: number, target: Point, max
   return longitudinal > 0 && lateral < maxLateral ? longitudinal : null;
 }
 
+export function distanceAlongRoute(
+  origin: Point,
+  route: Point[],
+  target: Point,
+  maxLateral: number,
+  maxDistance = Number.POSITIVE_INFINITY
+) {
+  if (route.length < 2) return null;
+  let travelled = Math.hypot(origin.x - route[0].x, origin.y - route[0].y);
+  for (let index = 0; index < route.length - 1 && travelled <= maxDistance; index += 1) {
+    const start = route[index];
+    const end = route[index + 1];
+    const dx = end.x - start.x;
+    const dy = end.y - start.y;
+    const length = Math.hypot(dx, dy);
+    if (!length) continue;
+    const progress = clamp(((target.x - start.x) * dx + (target.y - start.y) * dy) / (length * length), 0, 1);
+    const projected = { x: start.x + dx * progress, y: start.y + dy * progress };
+    if (Math.hypot(target.x - projected.x, target.y - projected.y) <= maxLateral) {
+      const distance = travelled + length * progress;
+      return distance <= maxDistance ? distance : null;
+    }
+    travelled += length;
+  }
+  return null;
+}
+
 export function pathsConflict(a: MovingBody, b: MovingBody, horizonSeconds: number, clearanceMeters: number) {
   const relativeX = b.position.x - a.position.x;
   const relativeY = b.position.y - a.position.y;

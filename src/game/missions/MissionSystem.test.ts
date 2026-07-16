@@ -26,4 +26,23 @@ describe('progresso da rota', () => {
     expect(mission.advanceRoute({ x: 30, y: 30 })).toBeCloseTo(30);
     expect(mission.route).toEqual([{ x: 0, y: 0 }, { x: 100, y: 0 }]);
   });
+
+  it('aceita a tolerância maior apenas para a chegada do piloto automático', () => {
+    const mission = missionWithRoute([]);
+    mission.mission = {
+      id: 'arrival-test',
+      passengerName: 'Teste',
+      phase: 'passenger-on-board',
+      pickup: { x: -100, y: 0 },
+      destination: { x: 10, y: 0 },
+      pickupLabel: 'Origem',
+      destinationLabel: 'Destino',
+      distanceTravelled: 100,
+      elapsedSeconds: 10
+    };
+    mission.receipt = null;
+
+    expect(mission.update({ x: 0, y: 0 }, 6, 0.1, 0, 5)).toBeNull();
+    expect(mission.update({ x: 0, y: 0 }, 6, 0.1, 0, 5, 12, 8)).toBe('completed');
+  });
 });
