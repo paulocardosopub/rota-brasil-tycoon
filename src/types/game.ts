@@ -2,9 +2,18 @@ export type MissionPhase = 'offered' | 'pickup' | 'passenger-on-board' | 'comple
 export type RideCategory = 'popular' | 'urgent' | 'comfort';
 export type TransactionKind = 'income' | 'expense' | 'debt' | 'adjustment';
 export type TransactionCategory =
-  | 'ride' | 'tip' | 'fuel' | 'repair' | 'upgrade' | 'fine' | 'reposition' | 'emergency' | 'dev';
+  | 'ride' | 'tip' | 'fuel' | 'repair' | 'upgrade' | 'fine' | 'reposition' | 'emergency' | 'dev'
+  | 'license' | 'commission' | 'fleet-purchase' | 'fleet-revenue' | 'fleet-maintenance';
 export type VehicleUpgradeId = 'engine' | 'brakes' | 'tires' | 'suspension' | 'economy' | 'comfort';
 export type ServiceCategory = 'fuel' | 'workshop' | 'garage';
+export type ProfessionalStatus = 'clandestine' | 'licensed-taxi';
+export type RideMode = 'informal' | 'official-taxi';
+export type TaxiRequestType = 'taxi-rank' | 'street-hail' | 'dispatch';
+export type TaxiMeterState = 'free' | 'en-route' | 'boarding' | 'occupied' | 'waiting' | 'finished';
+export type FleetControllerType = 'PLAYER' | 'EMPLOYEE' | 'AMBIENT_NPC' | 'FUTURE_REMOTE_PLAYER' | 'FUTURE_REMOTE_EMPLOYEE';
+export type FleetSimulationLevel = 'detailed' | 'simplified' | 'economic';
+export type FleetVehicleState = 'available' | 'player-driving' | 'employee-driving' | 'on-trip' | 'returning' | 'refueling' | 'maintenance' | 'out-of-fuel' | 'damaged' | 'parked';
+export type EmployeeState = 'available' | 'waiting-vehicle' | 'starting-shift' | 'seeking-trip' | 'en-route' | 'with-passenger' | 'returning' | 'refueling' | 'break' | 'blocked' | 'ending-shift' | 'resting';
 
 export interface Point {
   x: number;
@@ -80,6 +89,29 @@ export interface CityMapData {
   busStops: BusStop[];
   buildings: MapBuilding[];
   services: MapServiceLocation[];
+  taxiPoints: TaxiPoint[];
+}
+
+export interface TaxiPoint {
+  id: string;
+  official: boolean;
+  realName: string;
+  gameName: string;
+  lat: number;
+  lon: number;
+  point: Point & { lat: number; lon: number };
+  entrance: Point & { lat: number; lon: number; graphNodeId: string };
+  exit: Point & { lat: number; lon: number; graphNodeId: string };
+  sourceType: 'node' | 'gameplay-zone';
+  sourceId: string;
+  sourceUrl: string;
+  accessRoad: string;
+  sideOfRoad: string;
+  queueArea: string;
+  capacity: number | null;
+  gameplayCapacity: number;
+  validatedAt: string;
+  confidence: 'high' | 'medium';
 }
 
 export interface MapServiceLocation {
@@ -143,6 +175,9 @@ export interface MissionSnapshot {
   requirements?: string[];
   quote?: FareQuote;
   quality?: RideQuality;
+  rideMode?: RideMode;
+  taxiRequestType?: TaxiRequestType;
+  taxiPointId?: string;
 }
 
 export interface Receipt {
@@ -175,6 +210,165 @@ export interface LedgerTransaction {
   origin: string;
   metadata: Record<string, string | number | boolean>;
   idempotencyKey: string;
+  vehicleId?: string;
+  driverId?: string;
+  fleetId?: string;
+  tripId?: string;
+  ownerId?: string;
+}
+
+export interface TaxiLicense {
+  status: 'not-eligible' | 'eligible' | 'licensed';
+  requestedAt: string | null;
+  issuedAt: string | null;
+  costPaid: number;
+  idempotencyKey: string | null;
+  gameplayDisclaimer: string;
+}
+
+export interface TaxiMeterSnapshot {
+  state: TaxiMeterState;
+  tripId: string | null;
+  currentFare: number;
+  distanceMeters: number;
+  elapsedSeconds: number;
+  waitingSeconds: number;
+  demandMultiplier: number;
+  category: RideCategory;
+  destinationLabel: string;
+  startedAt: string | null;
+  finishedAt: string | null;
+}
+
+export interface FleetVehicle {
+  id: string;
+  ownerId: string;
+  fleetId: string;
+  model: 'Hatch 1998' | 'Sedan 2012';
+  controllerType: FleetControllerType;
+  controllerId: string | null;
+  authority: 'local' | 'server';
+  state: FleetVehicleState;
+  simulationLevel: FleetSimulationLevel;
+  currentRegion: string;
+  currentChunk: string;
+  stateVersion: number;
+  updatedAt: string;
+  leaseExpiresAt: string | null;
+  taxiLicensed: boolean;
+  taxiVisualEnabled: boolean;
+  taxiRegistrationId: string | null;
+  fuel: number;
+  fuelCapacity: number;
+  condition: number;
+  collisionDamage: number;
+  maintenanceWear: number;
+  totalKm: number;
+  upgrades: UpgradeLevels;
+  position: Point;
+  rotation: number;
+  purchasePrice: number;
+  acquiredAt: string;
+  grossRevenue: number;
+  expenses: number;
+  nextMaintenanceKm: number;
+}
+
+export interface EmployeeCandidate {
+  id: string;
+  name: string;
+  avatar: string;
+  experience: number;
+  driving: number;
+  safety: number;
+  service: number;
+  efficiency: number;
+  commissionPercent: number;
+  hireCost: number;
+  description: string;
+}
+
+export interface FleetEmployee extends EmployeeCandidate {
+  fleetId: string;
+  ownerId: string;
+  state: EmployeeState;
+  vehicleId: string | null;
+  hiredAt: string;
+  grossRevenue: number;
+  commissionPaid: number;
+  tripsCompleted: number;
+}
+
+export interface ShiftPolicy {
+  minimumFuelPercent: number;
+  automaticRepairLimit: number;
+  minimumCondition: number;
+  categories: RideCategory[];
+  durationMinutes: number;
+  returnToGarage: boolean;
+  pauseOnLoss: boolean;
+}
+
+export interface FleetShift {
+  id: string;
+  fleetId: string;
+  ownerId: string;
+  employeeId: string;
+  vehicleId: string;
+  state: EmployeeState;
+  simulationLevel: FleetSimulationLevel;
+  startedAt: string;
+  lastSimulatedAt: string;
+  scheduledEndAt: string;
+  tripId: string | null;
+  routeProgress: number;
+  policy: ShiftPolicy;
+  rides: number;
+  kilometers: number;
+  grossRevenue: number;
+  fuelCost: number;
+  commission: number;
+  maintenanceCost: number;
+  fines: number;
+  netProfit: number;
+}
+
+export interface FleetReport {
+  id: string;
+  shiftId: string;
+  elapsedMinutes: number;
+  unvalidatedClock: boolean;
+  rides: number;
+  kilometers: number;
+  grossRevenue: number;
+  fuelCost: number;
+  commission: number;
+  repairs: number;
+  fines: number;
+  netProfit: number;
+  finalState: EmployeeState;
+  occurrences: string[];
+  createdAt: string;
+  acknowledged: boolean;
+}
+
+export interface PlayerFleet {
+  id: string;
+  ownerId: string;
+  name: string;
+  garageServiceId: string;
+  capacity: number;
+  vehicles: FleetVehicle[];
+  employees: FleetEmployee[];
+  activeShift: FleetShift | null;
+  lastReport: FleetReport | null;
+}
+
+export interface ClockGuard {
+  lastSeenAt: string;
+  lastTrustedAt: string;
+  rollbackDetected: boolean;
+  unvalidated: boolean;
 }
 
 export interface RideHistoryEntry {
@@ -233,6 +427,14 @@ export interface PlayerSave {
   goals: DriverGoals;
   regularizationReady: boolean;
   visitedServices: string[];
+  ownerId: string;
+  professionalStatus: ProfessionalStatus;
+  taxiLicense: TaxiLicense;
+  taxiMeter: TaxiMeterSnapshot;
+  officialTaxiRides: number;
+  activeVehicleId: string;
+  fleet: PlayerFleet;
+  clockGuard: ClockGuard;
 }
 
 export type Quality = 'automatic' | 'low' | 'medium' | 'high';
@@ -301,11 +503,24 @@ export interface HudSnapshot {
   totalSpent: number;
   tipsEarned: number;
   driverLevel: number;
+  rating: number;
+  completedRides: number;
   goals: DriverGoals;
   regularizationReady: boolean;
   nearbyService: MapServiceLocation | null;
   selectedService: MapServiceLocation | null;
   airTraffic: number;
   trafficCapacity: number;
+  trafficHardCeiling: number;
+  trafficReservedSlots: number;
   serviceLocations: MapServiceLocation[];
+  taxiPoints: TaxiPoint[];
+  professionalStatus: ProfessionalStatus;
+  taxiLicense: TaxiLicense;
+  taxiMeter: TaxiMeterSnapshot;
+  officialTaxiRides: number;
+  activeVehicleId: string;
+  fleet: PlayerFleet;
+  fleetVehicleVisible: boolean;
+  totalTerrestrialEntities: number;
 }

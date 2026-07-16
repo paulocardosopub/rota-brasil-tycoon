@@ -1,8 +1,8 @@
 import { COLLISION_PHYSICS, VEHICLE_PHYSICS } from './vehiclePhysics';
 
 export const GAME_CONFIG = {
-  version: '0.5.0',
-  saveVersion: 3,
+  version: '0.6.0',
+  saveVersion: 4,
   map: {
     city: 'Brasília',
     district: 'Rodoviária do Plano Piloto e Eixo Monumental',
@@ -60,9 +60,12 @@ export const GAME_CONFIG = {
     ]
   },
   traffic: {
-    npcVehicleCount: 260,
-    npcBusCount: 40,
-    npcUtilityCount: 50,
+    // A 0.6.0 mantém o teto técnico de 350, mas usa uma população padrão
+    // bem mais leve para evitar quedas de quadros em celulares e notebooks.
+    npcVehicleCount: 54,
+    npcBusCount: 9,
+    npcUtilityCount: 9,
+    maximumTerrestrialEntities: 350,
     npcSpeedMps: 8.5,
     safetyDistanceMeters: 9,
     collisionStunSeconds: COLLISION_PHYSICS.npcStunSeconds,
@@ -70,7 +73,7 @@ export const GAME_CONFIG = {
     autopilotHeadOnDeadlockSeconds: 0.45,
     collisionCooldownSeconds: COLLISION_PHYSICS.cooldownSeconds,
     collision: COLLISION_PHYSICS,
-    densityMultipliers: { low: 0.18, medium: 0.48, high: 1, automatic: 1 },
+    densityMultipliers: { low: 0.28, medium: 0.56, high: 1, automatic: 1 },
     signal: { greenSeconds: 12, yellowSeconds: 3, allRedSeconds: 1 },
     redLightPenalty: 2
   },
@@ -105,6 +108,28 @@ export const GAME_CONFIG = {
       totalKm: 18,
       money: 250
     }
+  },
+  taxi: {
+    regularizationCost: 220,
+    conversionCost: 75,
+    meter: {
+      initialFare: 6.5,
+      perKilometer: 4.6,
+      waitingPerMinute: 0.42,
+      minimumFare: 12,
+      safetyLimit: 85
+    }
+  },
+  fleet: {
+    capacity: 2,
+    maximumEmployees: 1,
+    secondVehiclePrice: 650,
+    secondVehicleCondition: 78,
+    offlineMaximumHours: 8,
+    reducedEfficiencyAfterHours: 4,
+    defaultShiftMinutes: 240,
+    physicalDetailRadiusMeters: 650,
+    simplifiedRadiusMeters: 1_600
   },
   environment: {
     aircraftCount: 7,

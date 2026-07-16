@@ -10,5 +10,5 @@
     "strict": true,
     "types": ["node"]
   },
-  "include": ["vite.config.ts", "playwright.config.ts", "scripts", "src/types", "src/map/projection", "src/config", "src/game/economy", "src/game/progression", "src/services/storage"]
+  "include": ["vite.config.ts", "playwright.config.ts", "scripts", "src/types", "src/map/projection", "src/config", "src/game/economy", "src/game/progression", "src/game/fleet/FleetConfig.ts", "src/game/fleet/FleetService.ts", "src/game/taxi/TaxiMeter.ts", "src/services/storage"]
 }

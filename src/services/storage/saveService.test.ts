@@ -31,7 +31,7 @@ describe('save local versionado', () => {
       rotation: 1.2,
       settings: { quality: 'high', cameraMode: 'fixed', audio: true }
     });
-    expect(migrated.saveVersion).toBe(3);
+    expect(migrated.saveVersion).toBe(4);
     expect(migrated.money).toBe(432);
     expect(migrated.completedRides).toBe(3);
     expect(migrated.settings.cameraZoom).toBe('normal');
@@ -77,7 +77,7 @@ describe('save local versionado', () => {
 
     const migrated = loadSave();
 
-    expect(migrated.saveVersion).toBe(3);
+    expect(migrated.saveVersion).toBe(4);
     expect(migrated.money).toBe(321);
     expect(localStorage.getItem(GAME_CONFIG.storage.backupKey)).toBe(legacy);
   });

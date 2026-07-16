@@ -1,7 +1,7 @@
 {
   "name": "rota-brasil-tycoon",
   "private": true,
-  "version": "0.5.0",
+  "version": "0.6.0",
   "type": "module",
   "scripts": {
     "dev": "vite --host 0.0.0.0",
@@ -15,7 +15,8 @@
     "map:import": "tsx scripts/map/import-osm.ts && tsx scripts/map/build-road-graph.ts",
     "map:graph": "tsx scripts/map/build-road-graph.ts",
     "map:validate": "tsx scripts/map/validate-map.ts",
-    "economy:simulate": "tsx scripts/economy/simulate.ts"
+    "economy:simulate": "tsx scripts/economy/simulate.ts",
+    "performance:benchmark": "tsx scripts/performance/benchmark.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "2.110.7",

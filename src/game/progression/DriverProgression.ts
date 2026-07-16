@@ -18,5 +18,8 @@ export function refreshProgression(save: PlayerSave) {
     && save.rating >= target.rating
     && save.totalKm >= target.totalKm
     && save.money >= target.money;
+  if (save.professionalStatus !== 'licensed-taxi') {
+    save.taxiLicense.status = save.regularizationReady ? 'eligible' : 'not-eligible';
+  }
   return save;
 }
