@@ -1344,7 +1344,8 @@ export class MainScene extends Phaser.Scene {
     };
     const nearbyService = this.services?.nearest(this.vehicle.position) ?? null;
     const fleetTelemetry = this.fleetVehicles?.routeTelemetry() ?? {
-      target: null, remaining: 0, completedStops: 0, identification: null
+      target: null, remaining: 0, routeRemaining: 0, completedStops: 0,
+      recoveries: 0, lastRecoveryReason: null, identification: null
     };
     if (this.simulationSeconds >= this.collisionFeedbackUntil) {
       this.collisionSeverity = null;
@@ -1430,7 +1431,10 @@ export class MainScene extends Phaser.Scene {
       fleetVehicleVisible: this.fleetVehicles?.isVisible() ?? false,
       fleetRouteTarget: fleetTelemetry.target,
       fleetRouteRemaining: fleetTelemetry.remaining,
+      fleetRoutePathRemaining: fleetTelemetry.routeRemaining,
       fleetCompletedStops: fleetTelemetry.completedStops,
+      fleetRouteRecoveries: fleetTelemetry.recoveries,
+      fleetLastRecoveryReason: fleetTelemetry.lastRecoveryReason,
       fleetDriverIdentification: fleetTelemetry.identification,
       totalTerrestrialEntities: Math.min(trafficStats.hardCeiling, trafficStats.total + 1 + (this.fleetVehicles?.isVisible() ? 1 : 0))
     };

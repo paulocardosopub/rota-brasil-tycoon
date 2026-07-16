@@ -1,4 +1,4 @@
-# Rota Brasil Tycoon — Playable 0.6.1
+# Rota Brasil Tycoon — Playable 0.6.2
 
 Jogo 2.5D de transporte brasileiro para navegador. Você começa com o Hatch 1998 no centro de Brasília, dirige corridas informais, regulariza-se como taxista, converte o carro sem perder seu histórico e monta a primeira frota com motorista e segundo veículo.
 
@@ -82,6 +82,7 @@ O workflow `.github/workflows/web.yml` testa, compila e publica `main`. Em **Set
 Phaser cuida da cidade e simulação; React, do HUD. Comandos/snapshots tipados ligam ambos. Economia, taxímetro, frota, missões, trânsito, física, rotas, persistência e backend são módulos separados.
 
 - [arquitetura](./docs/ARCHITECTURE.md)
+- [hotfix 0.6.2 — recuperação de órbita da frota](./docs/playable-0.6.2-audit.md)
 - [ajuste 0.6.1 — rotas dos funcionários](./docs/playable-0.6.1-audit.md)
 - [auditoria 0.6.0](./docs/playable-0.6.0-audit.md)
 - [pontos de táxi reais](./docs/real-taxi-points-brasilia.md)

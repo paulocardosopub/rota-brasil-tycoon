@@ -524,7 +524,10 @@ export interface HudSnapshot {
   fleetVehicleVisible: boolean;
   fleetRouteTarget: Point | null;
   fleetRouteRemaining: number;
+  fleetRoutePathRemaining: number;
   fleetCompletedStops: number;
+  fleetRouteRecoveries: number;
+  fleetLastRecoveryReason: string | null;
   fleetDriverIdentification: string | null;
   totalTerrestrialEntities: number;
 }

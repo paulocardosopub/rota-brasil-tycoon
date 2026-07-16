@@ -29,7 +29,8 @@ const initialHud: HudSnapshot = {
   trafficHardCeiling: GAME_CONFIG.traffic.maximumTerrestrialEntities, trafficReservedSlots: 0, serviceLocations: [], taxiPoints: [],
   professionalStatus: emptySave.professionalStatus, taxiLicense: emptySave.taxiLicense, taxiMeter: emptySave.taxiMeter,
   officialTaxiRides: 0, activeVehicleId: emptySave.activeVehicleId, fleet: emptySave.fleet,
-  fleetVehicleVisible: false, fleetRouteTarget: null, fleetRouteRemaining: 0, fleetCompletedStops: 0,
+  fleetVehicleVisible: false, fleetRouteTarget: null, fleetRouteRemaining: 0, fleetRoutePathRemaining: 0,
+  fleetCompletedStops: 0, fleetRouteRecoveries: 0, fleetLastRecoveryReason: null,
   fleetDriverIdentification: null, totalTerrestrialEntities: 1
 };
 
@@ -88,7 +89,9 @@ export function Hud() {
       data-fleet-vehicle-visible={hud.fleetVehicleVisible ? 'true' : 'false'} data-terrestrial-entities={hud.totalTerrestrialEntities}
       data-traffic-reserved-slots={hud.trafficReservedSlots} data-fleet-driver-identification={hud.fleetDriverIdentification ?? 'none'}
       data-fleet-route-target={hud.fleetRouteTarget ? `${hud.fleetRouteTarget.x.toFixed(2)},${hud.fleetRouteTarget.y.toFixed(2)}` : 'none'}
-      data-fleet-route-remaining={hud.fleetRouteRemaining.toFixed(2)} data-fleet-completed-stops={hud.fleetCompletedStops}
+      data-fleet-route-remaining={hud.fleetRouteRemaining.toFixed(2)} data-fleet-route-path-remaining={hud.fleetRoutePathRemaining.toFixed(2)}
+      data-fleet-completed-stops={hud.fleetCompletedStops} data-fleet-route-recoveries={hud.fleetRouteRecoveries}
+      data-fleet-last-recovery={hud.fleetLastRecoveryReason ?? 'none'}
     >
       <header className="top-hud">
         <div className="brand-chip"><span>RB</span><div><b>Brasília</b><small>Centro • Dia</small></div></div>
@@ -265,7 +268,7 @@ function DevPanel({ hud, close }: { hud: HudSnapshot; close: () => void }) {
     ['traffic-ahead','NPC à frente'],['traffic-collision','NPC sobre o carro'],['traffic-head-on','NPC de frente'],['collision-light','Colisão leve'],['collision-moderate','Colisão moderada'],['collision-severe','Colisão severa'],
     ['traffic','Alternar trânsito'],['signals','Alternar semáforos'],['signal-phase','Avançar fase dos sinais'],['graph','Grafo de rotas'],['reset','Reiniciar save']
   ];
-  return <aside className="dev-panel"><button onClick={close}>×</button><h3>Painel de desenvolvimento 0.6.1</h3><p className="dev-metrics">{hud.fps} FPS • {hud.trafficVehicles}/{hud.trafficCapacity} NPCs • teto {hud.trafficHardCeiling}<br />Frota: {hud.fleet.vehicles.length} veículos • {hud.fleet.employees.length} motorista • vaga reservada {hud.trafficReservedSlots}</p><div>{actions.map(([action,label]) => <button key={action} onClick={() => gameEvents.emit('command', { type: 'dev', action })}>{label}</button>)}</div></aside>;
+  return <aside className="dev-panel"><button onClick={close}>×</button><h3>Painel de desenvolvimento 0.6.2</h3><p className="dev-metrics">{hud.fps} FPS • {hud.trafficVehicles}/{hud.trafficCapacity} NPCs • teto {hud.trafficHardCeiling}<br />Frota: {hud.fleet.vehicles.length} veículos • {hud.fleet.employees.length} motorista • vaga reservada {hud.trafficReservedSlots}</p><div>{actions.map(([action,label]) => <button key={action} onClick={() => gameEvents.emit('command', { type: 'dev', action })}>{label}</button>)}</div></aside>;
 }
 
 type ConfirmFn = (label: string, command: GameCommand) => void;

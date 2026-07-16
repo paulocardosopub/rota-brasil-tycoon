@@ -2,6 +2,7 @@ import { GAME_CONFIG } from '../../config/gameConfig';
 import { GraphRouter } from '../../map/routing/GraphRouter';
 import type { GraphNode, MissionSnapshot, Point, Receipt, RideCategory, RideQuality, TaxiPoint } from '../../types/game';
 import { createFareQuote, settleFare } from '../economy/FareCalculator';
+import { advanceActiveRoute } from '../systems/RouteProgress';
 
 type MissionVehicleContext = {
   condition: number;
@@ -145,44 +146,9 @@ export class MissionSystem {
   }
 
   advanceRoute(position: Point) {
-    if (this.route.length < 2) return Number.POSITIVE_INFINITY;
-    let bestIndex = 0;
-    let bestPoint = this.route[0];
-    let bestDistance = Number.POSITIVE_INFINITY;
-    let scannedDistance = 0;
-    const firstSegmentLength = Math.hypot(
-      this.route[1].x - this.route[0].x,
-      this.route[1].y - this.route[0].y
-    );
-    const maximumScanDistance = Math.max(45, firstSegmentLength + 35);
-    // Only inspect the nearby, upcoming part of the active route. Within that
-    // window the closest segment wins, so zero-length points and completed
-    // corners cannot pin navigation behind the vehicle.
-    const lastIndex = Math.min(this.route.length - 1, 20);
-    for (let index = 0; index < lastIndex; index += 1) {
-      const start = this.route[index];
-      const end = this.route[index + 1];
-      const segmentLength = Math.hypot(end.x - start.x, end.y - start.y);
-      if (scannedDistance > maximumScanDistance) break;
-      scannedDistance += segmentLength;
-      if (segmentLength < 0.1) continue;
-      const point = closestPointOnSegment(position, start, end);
-      const distance = Math.hypot(position.x - point.x, position.y - point.y);
-      if (distance < bestDistance) {
-        bestDistance = distance;
-        bestIndex = index;
-        bestPoint = point;
-      }
-    }
-    if (bestDistance <= 24) {
-      const remaining = this.route.slice(bestIndex + 1);
-      while (
-        remaining.length
-        && Math.hypot(remaining[0].x - bestPoint.x, remaining[0].y - bestPoint.y) < 0.1
-      ) remaining.shift();
-      this.route = [bestPoint, ...remaining];
-    }
-    return bestDistance;
+    const progress = advanceActiveRoute(this.route, position);
+    this.route = progress.route;
+    return progress.deviationMeters;
   }
 
   cancel() {
@@ -282,13 +248,4 @@ function categoryForRide(index: number): RideCategory {
 
 function freshQuality(): RideQuality {
   return { collisions: 0, redLights: 0, deviationSeconds: 0, aggressiveSeconds: 0, startedAt: new Date().toISOString() };
-}
-
-function closestPointOnSegment(point: Point, a: Point, b: Point): Point {
-  const dx = b.x - a.x;
-  const dy = b.y - a.y;
-  const lengthSq = dx * dx + dy * dy;
-  if (!lengthSq) return { ...a };
-  const t = Math.max(0, Math.min(1, ((point.x - a.x) * dx + (point.y - a.y) * dy) / lengthSq));
-  return { x: a.x + dx * t, y: a.y + dy * t };
 }
