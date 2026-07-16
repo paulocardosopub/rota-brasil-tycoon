@@ -1,4 +1,4 @@
-import type { HudSnapshot, PlayerSave, Quality } from '../types/game';
+import type { CameraZoom, HudSnapshot, PlayerSave, Quality, TrafficDensity } from '../types/game';
 
 export type GameCommand =
   | { type: 'mobile-input'; throttle: number; steering: number; handbrake: boolean }
@@ -6,6 +6,10 @@ export type GameCommand =
   | { type: 'camera' }
   | { type: 'autopilot' }
   | { type: 'set-quality'; quality: Quality }
+  | { type: 'set-camera-zoom'; zoom: CameraZoom }
+  | { type: 'set-camera-shake'; enabled: boolean }
+  | { type: 'set-traffic-density'; density: TrafficDensity }
+  | { type: 'set-audio'; enabled: boolean; masterVolume?: number; engineVolume?: number; effectsVolume?: number }
   | { type: 'cancel-ride' }
   | { type: 'dismiss-receipt' }
   | { type: 'dev'; action: string };

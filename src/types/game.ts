@@ -112,18 +112,32 @@ export interface PlayerSave {
   position: Point;
   rotation: number;
   settings: PlayerSettings;
+  activeMission: MissionSnapshot | null;
+  autopilotEnabled: boolean;
 }
 
 export type Quality = 'automatic' | 'low' | 'medium' | 'high';
+export type TrafficDensity = 'automatic' | 'low' | 'medium' | 'high';
+export type CameraZoom = 'near' | 'normal' | 'far';
 
 export interface PlayerSettings {
   quality: Quality;
   cameraMode: 'follow' | 'fixed';
   audio: boolean;
+  masterVolume: number;
+  engineVolume: number;
+  effectsVolume: number;
+  cameraShake: boolean;
+  cameraZoom: CameraZoom;
+  trafficDensity: TrafficDensity;
 }
+
+export type CollisionSeverity = 'contact' | 'light' | 'moderate' | 'severe';
+export type TrafficVehicleState = 'cruising' | 'following' | 'braking' | 'stopped-signal' | 'stopped-traffic' | 'stunned' | 'recovering';
 
 export interface HudSnapshot {
   ready: boolean;
+  settings: PlayerSettings;
   money: number;
   speedKmh: number;
   fuel: number;
@@ -142,6 +156,8 @@ export interface HudSnapshot {
   trafficGhosted: number;
   autopilotDeadlockRecoveries: number;
   collisionEvents: number;
+  collisionSeverity: CollisionSeverity | null;
+  collisionRelativeSpeedKmh: number;
   autopilotEnabled: boolean;
   autopilotNextMissionSeconds: number;
   autopilotRoadCorrections: number;
@@ -149,6 +165,10 @@ export interface HudSnapshot {
   simulationSeconds: number;
   autopilotCollisionRecovery: boolean;
   autoBrakeReason: 'clear' | 'traffic' | 'red-signal';
+  autopilotState: 'off' | 'cruising' | 'braking' | 'arriving' | 'waiting' | 'recovering';
+  autopilotTargetSpeedKmh: number;
+  trafficStopReason: string;
+  repositionProgress: number;
   routeRecalculations: number;
   mission: MissionSnapshot | null;
   receipt: Receipt | null;

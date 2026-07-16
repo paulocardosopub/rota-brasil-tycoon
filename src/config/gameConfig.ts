@@ -1,6 +1,8 @@
+import { COLLISION_PHYSICS, VEHICLE_PHYSICS } from './vehiclePhysics';
+
 export const GAME_CONFIG = {
-  version: '0.3.2',
-  saveVersion: 1,
+  version: '0.4.0',
+  saveVersion: 2,
   map: {
     city: 'Brasília',
     district: 'Rodoviária do Plano Piloto e Eixo Monumental',
@@ -11,26 +13,7 @@ export const GAME_CONFIG = {
   },
   vehicle: {
     name: 'Hatch 1998',
-    maxSpeedMps: 25,
-    maxReverseMps: 5,
-    accelerationMps2: 9,
-    reverseAccelerationMps2: 4,
-    brakeMps2: 10,
-    rollingResistance: 0.65,
-    offRoadResistance: 3.5,
-    offRoadBrakingMps2: 14,
-    offRoadMaxSpeedMps: 8,
-    autopilotCruiseSpeedMps: 16,
-    autopilotRecoverySpeedMps: 3.5,
-    autopilotRoadRecoveryRadiansPerSecond: 3.2,
-    steeringRadiansPerSecond: 2.65,
-    steeringAssistRadiansPerSecond: 0.9,
-    steeringAssistMaxAngle: 0.72,
-    lengthMeters: 4.1,
-    widthMeters: 1.82,
-    fuelCapacityLiters: 40,
-    idleFuelLitersPerSecond: 0.0002,
-    movingFuelLitersPerMeter: 0.00011
+    ...VEHICLE_PHYSICS
   },
   initialPlayer: {
     money: 100,
@@ -82,10 +65,12 @@ export const GAME_CONFIG = {
     npcUtilityCount: 5,
     npcSpeedMps: 8.5,
     safetyDistanceMeters: 9,
-    collisionStunSeconds: 3.2,
-    autopilotCollisionGhostSeconds: 2.4,
+    collisionStunSeconds: COLLISION_PHYSICS.npcStunSeconds,
+    autopilotCollisionGhostSeconds: COLLISION_PHYSICS.autopilotGhostSeconds,
     autopilotHeadOnDeadlockSeconds: 0.45,
-    collisionCooldownSeconds: 2.5,
+    collisionCooldownSeconds: COLLISION_PHYSICS.cooldownSeconds,
+    collision: COLLISION_PHYSICS,
+    densityMultipliers: { low: 0.45, medium: 0.72, high: 1, automatic: 1 },
     signal: { greenSeconds: 12, yellowSeconds: 3, allRedSeconds: 1 },
     redLightPenalty: 2
   },
@@ -93,10 +78,13 @@ export const GAME_CONFIG = {
     defaultZoom: 4,
     minZoom: 1.5,
     maxZoom: 6,
-    followLerp: 0.08
+    followLerp: 0.08,
+    zoomPresets: { near: 4.8, normal: 4, far: 3.1 }
   },
   storage: {
     key: 'rota-brasil-tycoon-save',
+    backupKey: 'rota-brasil-tycoon-save-backup',
+    corruptKey: 'rota-brasil-tycoon-save-corrupt',
     autosaveMs: 5_000
   }
 } as const;

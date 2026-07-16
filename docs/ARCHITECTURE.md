@@ -1,4 +1,4 @@
-# Decisões de arquitetura — Playable 0.3.1
+# Decisões de arquitetura — Playable 0.4.0
 
 ## Limites dos módulos
 
@@ -10,6 +10,8 @@
 - `src/types`: contratos compartilhados de mapa, save, missão e telemetria.
 
 Phaser e React trocam apenas comandos e snapshots por `game/events.ts`. Isso mantém a futura substituição do HUD ou empacotamento via Capacitor sem acoplar a simulação ao DOM.
+
+`src/config/vehiclePhysics.ts` é a fonte única para aceleração, frenagem, direção, resistência, recuperação e resposta de colisão. `TrafficPhysics.ts` mantém cálculos puros (previsão, contato varrido, velocidade relativa e gravidade), enquanto `TrafficSystem.ts` administra o estado dos veículos e a política de sinais. O save v2 persiste progresso e preferências, mantém backup rotativo e nunca apaga automaticamente o conteúdo corrompido.
 
 ## Mapa e desempenho
 

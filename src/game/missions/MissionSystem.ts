@@ -9,9 +9,12 @@ export class MissionSystem {
   receipt: Receipt | null = null;
   private candidateNodes: GraphNode[] = [];
 
-  constructor(private readonly router: GraphRouter, start: Point, completedRides: number) {
+  constructor(private readonly router: GraphRouter, start: Point, completedRides: number, savedMission?: MissionSnapshot | null) {
     this.candidateNodes = this.pickReachableCandidates(start);
-    this.mission = this.createMission(start, completedRides);
+    this.mission = savedMission && (savedMission.phase === 'pickup' || savedMission.phase === 'passenger-on-board')
+      ? structuredClone(savedMission)
+      : this.createMission(start, completedRides);
+    if (savedMission) this.recalculate(start);
   }
 
   private pickReachableCandidates(start: Point) {
@@ -150,6 +153,12 @@ export class MissionSystem {
   targetDistance(position: Point) {
     const target = this.mission.phase === 'pickup' ? this.mission.pickup : this.mission.destination;
     return Math.hypot(position.x - target.x, position.y - target.y);
+  }
+
+  snapshot() {
+    return this.mission.phase === 'pickup' || this.mission.phase === 'passenger-on-board'
+      ? structuredClone(this.mission)
+      : null;
   }
 }
 

@@ -1,9 +1,25 @@
-import { useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import { gameEvents } from '../../game/events';
 
 export function MobileControls() {
   const state = useRef({ throttle: 0, steering: 0, handbrake: false });
   const send = () => gameEvents.emit('command', { type: 'mobile-input', ...state.current });
+  const releaseAll = () => {
+    state.current = { throttle: 0, steering: 0, handbrake: false };
+    send();
+  };
+  useEffect(() => {
+    const releaseWhenHidden = () => { if (document.hidden) releaseAll(); };
+    window.addEventListener('blur', releaseAll);
+    window.addEventListener('orientationchange', releaseAll);
+    document.addEventListener('visibilitychange', releaseWhenHidden);
+    return () => {
+      releaseAll();
+      window.removeEventListener('blur', releaseAll);
+      window.removeEventListener('orientationchange', releaseAll);
+      document.removeEventListener('visibilitychange', releaseWhenHidden);
+    };
+  }, []);
   const bind = (field: 'throttle' | 'steering', value: number) => ({
     onPointerDown: (event: React.PointerEvent) => {
       event.currentTarget.setPointerCapture(event.pointerId);
@@ -12,6 +28,7 @@ export function MobileControls() {
     },
     onPointerUp: () => { state.current[field] = 0; send(); },
     onPointerCancel: () => { state.current[field] = 0; send(); },
+    onLostPointerCapture: () => { state.current[field] = 0; send(); },
     onContextMenu: (event: React.MouseEvent) => event.preventDefault()
   });
 
@@ -26,6 +43,8 @@ export function MobileControls() {
         aria-label="Freio de mão"
         onPointerDown={() => { state.current.handbrake = true; send(); }}
         onPointerUp={() => { state.current.handbrake = false; send(); }}
+        onPointerCancel={() => { state.current.handbrake = false; send(); }}
+        onLostPointerCapture={() => { state.current.handbrake = false; send(); }}
       >P</button>
       <div className="pedals">
         <button className="brake" aria-label="Frear ou dar ré" {...bind('throttle', -1)}><span>FREIO</span></button>

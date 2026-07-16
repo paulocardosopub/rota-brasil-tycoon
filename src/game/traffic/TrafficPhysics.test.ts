@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { distanceAlongRoute, pathsConflict, pointOverlapsVehicle, yieldingPathsConflict } from './TrafficPhysics';
+import { distanceAlongRoute, impactMetrics, pathsConflict, pointOverlapsVehicle, severityForImpact, sweptPointOverlapsVehicle, yieldingPathsConflict } from './TrafficPhysics';
 
 describe('física preventiva do trânsito', () => {
   it('detecta trajetórias que se cruzam em poucos segundos', () => {
@@ -36,5 +36,27 @@ describe('física preventiva do trânsito', () => {
     const route = [{ x: 0, y: 0 }, { x: 20, y: 0 }, { x: 20, y: 30 }];
     expect(distanceAlongRoute({ x: 0, y: 0 }, route, { x: 20, y: 12 }, 2, 40)).toBe(32);
     expect(distanceAlongRoute({ x: 0, y: 0 }, route, { x: 27, y: 12 }, 2, 40)).toBeNull();
+  });
+
+  it('classifica contato, batida leve, moderada e severa pela velocidade relativa', () => {
+    expect(severityForImpact(2)).toBe('contact');
+    expect(severityForImpact(12)).toBe('light');
+    expect(severityForImpact(32)).toBe('moderate');
+    expect(severityForImpact(65)).toBe('severe');
+    const headOn = impactMetrics(
+      { position: { x: 0, y: 0 }, heading: 0, speed: 12 },
+      { position: { x: 1, y: 0 }, heading: Math.PI, speed: 8 }
+    );
+    expect(headOn.direction).toBe('front');
+    expect(headOn.severity).toBe('severe');
+  });
+
+  it('detecta colisão varrida mesmo quando o quadro atravessa o alvo', () => {
+    const hit = sweptPointOverlapsVehicle(
+      { x: -8, y: 0 }, { x: 8, y: 0 }, { x: 0, y: 0 }, 0, 4.4, 1.9, 4.1, 1.82
+    );
+    expect(hit).not.toBeNull();
+    expect(hit!.progress).toBeGreaterThan(0);
+    expect(hit!.progress).toBeLessThan(1);
   });
 });
