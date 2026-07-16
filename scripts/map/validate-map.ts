@@ -1,14 +1,15 @@
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
-import type { BusStop, GraphNode, MapBuilding, MapMetadata, MapServiceLocation, MapSignal, Point, RoadData } from '../../src/types/game';
+import type { BusStop, GraphNode, MapBuilding, MapMetadata, MapServiceLocation, MapSignal, Point, RoadData, TaxiPoint } from '../../src/types/game';
 
 const dataDir = path.resolve('public/data/cities/brasilia/central');
 const read = async <T>(name: string) => JSON.parse(await readFile(path.join(dataDir, name), 'utf8')) as T;
-const [metadata, roads, graph, signals, stops, buildings, fuel, workshops, garages, accessNodes, sourceMetadata] = await Promise.all([
+const [metadata, roads, graph, signals, stops, buildings, fuel, workshops, garages, taxiPoints, accessNodes, sourceMetadata] = await Promise.all([
   read<MapMetadata>('metadata.json'), read<RoadData[]>('roads.json'), read<{ nodes: GraphNode[] }>('navigation-graph.json'),
   read<MapSignal[]>('traffic-signals.json'), read<BusStop[]>('bus-stops.json'), read<MapBuilding[]>('buildings.json'),
   read<MapServiceLocation[]>('services/fuel-stations.json'), read<MapServiceLocation[]>('services/workshops.json'),
   read<MapServiceLocation[]>('services/garages.json'),
+  read<TaxiPoint[]>('services/taxi-points.json'),
   read<{ serviceId: string; entranceGraphNodeId: string; exitGraphNodeId: string; accessWayId: string }[]>('services/service-access-nodes.json'),
   read<{ source: string; license: string; attribution: string; validatedAt: string }>('services/source-metadata.json')
 ]);
@@ -56,6 +57,19 @@ for (const service of services) {
       errors.push(`${service.id}: acesso cruza o prédio ${candidate.id}.`); break;
     }
   }
+}
+
+if (taxiPoints.length < 3) errors.push('São necessários ao menos três pontos de táxi reais e roteáveis.');
+for (const taxiPoint of taxiPoints) {
+  if (!taxiPoint.official || taxiPoint.sourceType !== 'node' || !/^\d+$/.test(taxiPoint.sourceId)) errors.push(`${taxiPoint.id}: fonte OSM inválida.`);
+  if (!taxiPoint.sourceUrl.includes(`/node/${taxiPoint.sourceId}`)) errors.push(`${taxiPoint.id}: URL não corresponde ao nó OSM.`);
+  if (!taxiPoint.realName || !taxiPoint.accessRoad || !taxiPoint.sideOfRoad || !taxiPoint.queueArea || !taxiPoint.validatedAt) errors.push(`${taxiPoint.id}: documentação operacional incompleta.`);
+  if (taxiPoint.lat < metadata.bbox.south || taxiPoint.lat > metadata.bbox.north || taxiPoint.lon < metadata.bbox.west || taxiPoint.lon > metadata.bbox.east) errors.push(`${taxiPoint.id}: fora do recorte.`);
+  const entrance = nodeById.get(taxiPoint.entrance.graphNodeId);
+  const exit = nodeById.get(taxiPoint.exit.graphNodeId);
+  if (!entrance || !exit) errors.push(`${taxiPoint.id}: entrada ou saída sem ligação ao grafo.`);
+  if (entrance && distance(entrance, taxiPoint.entrance) > 1) errors.push(`${taxiPoint.id}: entrada diverge do nó roteável.`);
+  if (taxiPoint.gameplayCapacity < 1 || taxiPoint.gameplayCapacity > 4) errors.push(`${taxiPoint.id}: capacidade de gameplay fora do limite seguro.`);
 }
 
 if (errors.length) { console.error(errors.join('\n')); process.exitCode = 1; }

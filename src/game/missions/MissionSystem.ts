@@ -1,7 +1,15 @@
 import { GAME_CONFIG } from '../../config/gameConfig';
 import { GraphRouter } from '../../map/routing/GraphRouter';
-import type { GraphNode, MissionSnapshot, Point, Receipt, RideCategory, RideQuality } from '../../types/game';
+import type { GraphNode, MissionSnapshot, Point, Receipt, RideCategory, RideQuality, TaxiPoint } from '../../types/game';
 import { createFareQuote, settleFare } from '../economy/FareCalculator';
+
+type MissionVehicleContext = {
+  condition: number;
+  comfortLevel: number;
+  rating: number;
+  taxiLicensed?: boolean;
+  taxiPoints?: TaxiPoint[];
+};
 
 export class MissionSystem {
   mission: MissionSnapshot;
@@ -15,7 +23,7 @@ export class MissionSystem {
     start: Point,
     completedRides: number,
     savedMission?: MissionSnapshot | null,
-    private readonly vehicleContext = { condition: 70, comfortLevel: 0, rating: 5 }
+    private vehicleContext: MissionVehicleContext = { condition: 70, comfortLevel: 0, rating: 5 }
   ) {
     this.candidateNodes = this.pickReachableCandidates(start);
     this.mission = savedMission && (savedMission.phase === 'offered' || savedMission.phase === 'pickup' || savedMission.phase === 'passenger-on-board')
@@ -34,10 +42,15 @@ export class MissionSystem {
     }).sort((a, b) => a.distance - b.distance).slice(0, 64).map(({ node }) => node);
   }
 
-  private createMission(start: Point, rideIndex: number): MissionSnapshot {
+  private createMission(start: Point, rideIndex: number, forceOfficial = false): MissionSnapshot {
     const pool = this.candidateNodes.length >= 8 ? this.candidateNodes : this.router.candidates(40);
     const nearbyCount = Math.max(1, Math.min(16, pool.length));
-    const pickup = pool[(rideIndex * 7) % nearbyCount];
+    const taxiPoints = this.vehicleContext.taxiPoints ?? [];
+    const official = Boolean(this.vehicleContext.taxiLicensed && taxiPoints.length && (forceOfficial || rideIndex % 3 !== 0));
+    const requestTypes = ['taxi-rank', 'street-hail', 'dispatch'] as const;
+    const taxiRequestType = requestTypes[rideIndex % requestTypes.length];
+    const taxiPoint = official && taxiRequestType === 'taxi-rank' ? taxiPoints[rideIndex % taxiPoints.length] : undefined;
+    const pickup: Point = taxiPoint?.entrance ?? pool[(rideIndex * 7) % nearbyCount] ?? this.router.nearest(start);
     let destination = pool[(rideIndex * 11 + Math.floor(pool.length / 2)) % pool.length];
     for (let offset = 1; offset < pool.length; offset += 1) {
       const candidate = pool[(rideIndex * 11 + Math.floor(pool.length / 2) + offset) % pool.length];
@@ -48,6 +61,7 @@ export class MissionSystem {
         break;
       }
     }
+    destination ??= this.router.nearest({ x: -pickup.x * 0.55, y: -pickup.y * 0.55 });
     const pickupRoute = this.router.drivingRoute(start, pickup);
     const rideRoute = this.router.drivingRoute(pickup, destination);
     const rideDistance = this.router.distance(rideRoute);
@@ -59,7 +73,7 @@ export class MissionSystem {
       phase: 'offered',
       pickup: { x: pickup.x, y: pickup.y },
       destination: { x: destination.x, y: destination.y },
-      pickupLabel: labels[(rideIndex * 2) % labels.length],
+      pickupLabel: taxiPoint?.gameName ?? labels[(rideIndex * 2) % labels.length],
       destinationLabel: labels[(rideIndex * 2 + 5) % labels.length],
       distanceTravelled: 0,
       elapsedSeconds: 0,
@@ -79,7 +93,10 @@ export class MissionSystem {
         comfortLevel: this.vehicleContext.comfortLevel,
         rating: this.vehicleContext.rating
       }),
-      quality: freshQuality()
+      quality: freshQuality(),
+      rideMode: official ? 'official-taxi' : 'informal',
+      taxiRequestType: official ? taxiRequestType : undefined,
+      taxiPointId: taxiPoint?.id
     };
   }
 
@@ -180,6 +197,15 @@ export class MissionSystem {
     this.mission = this.createMission(position, completedRides);
   }
 
+  nextOfficial(position: Point, completedRides: number) {
+    this.receipt = null;
+    this.mission = this.createMission(position, completedRides, true);
+  }
+
+  updateVehicleContext(context: Partial<MissionVehicleContext>) {
+    this.vehicleContext = { ...this.vehicleContext, ...context };
+  }
+
   accept(position: Point) {
     if (this.mission.phase !== 'offered') return false;
     this.mission.phase = 'pickup';
@@ -230,6 +256,7 @@ export class MissionSystem {
 
   private ensureEconomyFields(mission: MissionSnapshot, rideIndex: number, currentPosition: Point) {
     mission.category ??= categoryForRide(rideIndex);
+    mission.rideMode ??= 'informal';
     mission.region ??= 'Plano Piloto — região central';
     mission.quality ??= freshQuality();
     mission.deadlineSeconds ??= 360;

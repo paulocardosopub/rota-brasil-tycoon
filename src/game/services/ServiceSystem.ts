@@ -34,6 +34,10 @@ export class ServiceSystem {
     return nearest;
   }
 
+  nearestAnywhere(position: Point, category: ServiceCategory) {
+    return this.nearest(position, category, Number.POSITIVE_INFINITY);
+  }
+
   update(elapsedSeconds: number) {
     this.visuals.forEach((visual, index) => {
       const marker = visual.getByName('service-marker');

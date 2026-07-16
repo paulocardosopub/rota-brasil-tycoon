@@ -1,9 +1,10 @@
 import Phaser from 'phaser';
 import { GAME_CONFIG } from '../../config/gameConfig';
-import { isDrivableRoad, pointInTrafficLane } from '../../map/routing/roadRules';
+import { directionalLaneCount, isDrivableRoad, pointInTrafficLane } from '../../map/routing/roadRules';
 import type { CollisionSeverity, GraphEdge, GraphNode, MapSignal, NavigationGraph, Point, RoadData, TrafficDensity, TrafficVehicleState } from '../../types/game';
 import { createBusVisual, createCarVisual, createUtilityVehicleVisual } from '../entities/VehicleVisual';
 import { distanceAhead, distanceAlongRoute, impactMetrics, pathsConflict, pointOverlapsVehicle, sweptPointOverlapsVehicle, yieldingPathsConflict } from './TrafficPhysics';
+import { selectMergeOwner } from './TrafficMerge';
 
 type Project = (point: Point) => Point;
 type SignalState = 'green' | 'yellow' | 'red';
@@ -31,6 +32,7 @@ type TrafficVehicle = {
   stunnedUntil: number;
   ghostWithPlayerUntil: number;
   headOnDeadlockSeconds: number;
+  mergeWaitSeconds: number;
   state: TrafficVehicleState;
   stopReason: 'clear' | 'signal' | 'traffic' | 'player' | 'collision';
   color: number;
@@ -48,6 +50,7 @@ export type PlayerCollisionResult = {
 export type TrafficUpdateResult = { autopilotDeadlockRecovery: boolean };
 
 export type AutoBrakeReason = 'clear' | 'traffic' | 'red-signal';
+export type PriorityTrafficVehicle = { id: string; position: Point; heading: number; speed: number };
 
 const MAJOR_ROADS = new Set(['trunk', 'trunk_link', 'primary', 'primary_link', 'secondary', 'secondary_link', 'tertiary']);
 
@@ -67,8 +70,12 @@ export class TrafficSystem {
   private playerBrakeReason: AutoBrakeReason = 'clear';
   private deadlockRecoveries = 0;
   private activeVehicleLimit = Number.POSITIVE_INFINITY;
+  private requestedVehicleLimit = Number.POSITIVE_INFINITY;
+  private reservedSlots = 0;
+  private priorityVehicles: PriorityTrafficVehicle[] = [];
   private signalOverride: SignalState | null = null;
   private readonly spatialVehicles = new Map<string, TrafficVehicle[]>();
+  private readonly mergeOwnerByNode = new Map<string, number>();
   private pendingUpdateSeconds = 0;
   private readonly crowdGraphics: Phaser.GameObjects.Graphics;
 
@@ -149,6 +156,7 @@ export class TrafficSystem {
         stunnedUntil: 0,
         ghostWithPlayerUntil: 0,
         headOnDeadlockSeconds: 0,
+        mergeWaitSeconds: 0,
         state: 'cruising',
         stopReason: 'clear',
         color,
@@ -201,9 +209,12 @@ export class TrafficSystem {
         }
       }
 
+      const narrowingMerge = this.isNarrowingMerge(vehicle);
       const leadGap = this.nearestLeadGap(vehicle, travelHeading);
       if (leadGap < 32) {
-        const safeGap = GAME_CONFIG.traffic.safetyDistanceMeters + vehicle.length * 0.45;
+        const safeGap = narrowingMerge
+          ? Math.max(4.5, GAME_CONFIG.traffic.safetyDistanceMeters * 0.55) + vehicle.length * 0.25
+          : GAME_CONFIG.traffic.safetyDistanceMeters + vehicle.length * 0.45;
         desiredSpeed = Math.min(desiredSpeed, Math.max(0, (leadGap - safeGap) * 0.72));
         vehicle.state = desiredSpeed < 0.4 ? 'stopped-traffic' : 'following';
         vehicle.stopReason = 'traffic';
@@ -225,6 +236,33 @@ export class TrafficSystem {
           desiredSpeed = 0;
           vehicle.state = 'stopped-traffic';
           vehicle.stopReason = 'player';
+        }
+      }
+
+      const hasMergePriority = !narrowingMerge || this.hasNodeEntryPriority(vehicle, remaining);
+      if (!hasMergePriority && remaining < 18) {
+        desiredSpeed = Math.min(desiredSpeed, Math.max(0, (remaining - 8) * 0.55));
+        stopBeforeTarget = remaining <= 8.5;
+        vehicle.state = desiredSpeed < 0.4 ? 'stopped-traffic' : 'following';
+        vehicle.stopReason = 'traffic';
+        vehicle.mergeWaitSeconds += deltaSeconds;
+      } else if (!narrowingMerge) vehicle.mergeWaitSeconds = 0;
+      for (const priority of this.priorityVehicles) {
+        const gap = distanceAhead(vehicle.position, travelHeading, priority.position, 3.4);
+        if (gap !== null && gap < 38) {
+          desiredSpeed = Math.min(desiredSpeed, Math.max(0, (gap - 10) * 0.55));
+          vehicle.state = desiredSpeed < 0.4 ? 'stopped-traffic' : 'following';
+          vehicle.stopReason = 'traffic';
+        }
+        if (yieldingPathsConflict(
+          { position: vehicle.position, heading: travelHeading, speed: vehicle.speed },
+          { position: priority.position, heading: priority.heading, speed: priority.speed },
+          3,
+          3.8
+        )) {
+          desiredSpeed = 0;
+          vehicle.state = 'stopped-traffic';
+          vehicle.stopReason = 'traffic';
         }
       }
       if (this.hasIntersectionConflict(vehicle, travelHeading)) {
@@ -310,7 +348,7 @@ export class TrafficSystem {
     return false;
   }
 
-  playerDrivingAdvice(position: Point, heading: number, speed: number, route: Point[] = []) {
+  playerDrivingAdvice(position: Point, heading: number, speed: number, route: Point[] = [], trackHud = true, ignorePriorityId?: string) {
     let targetSpeed = Number.POSITIVE_INFINITY;
     let reason: AutoBrakeReason = 'clear';
     if (this.signalsEnabled) {
@@ -355,7 +393,24 @@ export class TrafficSystem {
         reason = 'traffic';
       }
     }
-    this.playerBrakeReason = reason;
+    for (const priority of this.priorityVehicles) {
+      if (priority.id === ignorePriorityId) continue;
+      const gap = closestGap(
+        distanceAhead(position, heading, priority.position, 3.6),
+        route.length >= 2 ? distanceAlongRoute(position, route, priority.position, 3.6, 42) : null
+      );
+      if (gap !== null && gap < 42) {
+        const safeTarget = Math.min(priority.speed, Math.max(0, (gap - 10) * 0.65));
+        if (safeTarget < targetSpeed) { targetSpeed = safeTarget; reason = 'traffic'; }
+      }
+      if (yieldingPathsConflict(
+        { position, heading, speed },
+        { position: priority.position, heading: priority.heading, speed: priority.speed },
+        3,
+        4
+      )) { targetSpeed = 0; reason = 'traffic'; }
+    }
+    if (trackHud) this.playerBrakeReason = reason;
     return { targetSpeed, reason };
   }
 
@@ -376,7 +431,17 @@ export class TrafficSystem {
 
   setDensity(density: TrafficDensity) {
     const multiplier = GAME_CONFIG.traffic.densityMultipliers[density];
-    this.activeVehicleLimit = Math.max(8, Math.round(this.vehicles.length * multiplier));
+    this.requestedVehicleLimit = Math.max(8, Math.round(this.vehicles.length * multiplier));
+    this.activeVehicleLimit = Math.max(0, this.requestedVehicleLimit - this.reservedSlots);
+  }
+
+  setReservedSlots(count: number) {
+    this.reservedSlots = Math.max(0, Math.min(8, Math.floor(count)));
+    this.activeVehicleLimit = Math.max(0, this.requestedVehicleLimit - this.reservedSlots);
+  }
+
+  setPriorityVehicles(vehicles: PriorityTrafficVehicle[]) {
+    this.priorityVehicles = vehicles.slice(0, 8).map((vehicle) => ({ ...vehicle, position: { ...vehicle.position } }));
   }
 
   handlePlayerCollision(previousPosition: Point, position: Point, playerSpeed = 0, playerHeading = 0, autopilotEnabled = false): PlayerCollisionResult {
@@ -510,6 +575,8 @@ export class TrafficSystem {
     return {
       total: Math.min(this.vehicles.length, this.activeVehicleLimit),
       capacity: this.vehicles.length,
+      hardCeiling: GAME_CONFIG.traffic.maximumTerrestrialEntities,
+      reservedSlots: this.reservedSlots,
       buses: this.vehicles.filter((vehicle) => vehicle.index < this.activeVehicleLimit && vehicle.kind === 'bus').length,
       utility: this.vehicles.filter((vehicle) => vehicle.index < this.activeVehicleLimit && vehicle.kind === 'utility').length,
       stunned: this.vehicles.filter((vehicle) => vehicle.index < this.activeVehicleLimit && (vehicle.contactWithPlayer || this.elapsed < vehicle.stunnedUntil)).length,
@@ -529,6 +596,8 @@ export class TrafficSystem {
   }
 
   private advanceVehicle(vehicle: TrafficVehicle) {
+    if (this.mergeOwnerByNode.get(vehicle.target.id) === vehicle.index) this.mergeOwnerByNode.delete(vehicle.target.id);
+    vehicle.mergeWaitSeconds = 0;
     const previousId = vehicle.current.id;
     vehicle.current = vehicle.target;
     const preferred = this.validEdges(vehicle.current, vehicle.kind === 'bus');
@@ -542,10 +611,31 @@ export class TrafficSystem {
     const target = this.nodes.get(edge.to);
     if (!target) return;
     const road = this.roads.get(edge.roadId);
+    vehicle.laneIndex = Math.min(vehicle.laneIndex, directionalLaneCount(road) - 1);
     vehicle.previousId = previousId;
     vehicle.edge = edge;
     vehicle.target = target;
     vehicle.targetPosition = pointInTrafficLane(target, vehicle.current, target, road, vehicle.laneIndex);
+  }
+
+  private isNarrowingMerge(vehicle: TrafficVehicle) {
+    const incoming = directionalLaneCount(this.roads.get(vehicle.edge.roadId));
+    if (incoming <= 1) return false;
+    const outgoing = this.validEdges(vehicle.target).map((edge) => directionalLaneCount(this.roads.get(edge.roadId)));
+    return outgoing.length > 0 && Math.min(...outgoing) < incoming;
+  }
+
+  private hasNodeEntryPriority(vehicle: TrafficVehicle, remaining: number) {
+    const candidates = this.vehicles
+      .filter((other) => other.index < this.activeVehicleLimit && other.target.id === vehicle.target.id)
+      .map((other) => ({
+        index: other.index,
+        remaining: other === vehicle ? remaining : Math.hypot(other.targetPosition.x - other.position.x, other.targetPosition.y - other.position.y)
+      }));
+    const owner = selectMergeOwner(this.mergeOwnerByNode.get(vehicle.target.id), candidates);
+    if (owner === null) return true;
+    this.mergeOwnerByNode.set(vehicle.target.id, owner);
+    return owner === vehicle.index;
   }
 
   private nearestLeadGap(vehicle: TrafficVehicle, heading: number) {

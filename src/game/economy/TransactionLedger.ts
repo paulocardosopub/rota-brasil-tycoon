@@ -47,7 +47,12 @@ export function applyTransaction(save: PlayerSave, request: TransactionRequest):
     rideId: request.rideId,
     origin: request.origin,
     metadata: { ...(request.metadata ?? {}), ...(debtCreated ? { debtCreated } : {}) },
-    idempotencyKey: request.idempotencyKey
+    idempotencyKey: request.idempotencyKey,
+    vehicleId: metadataString(request.metadata?.vehicleId),
+    driverId: metadataString(request.metadata?.driverId),
+    fleetId: metadataString(request.metadata?.fleetId),
+    tripId: metadataString(request.metadata?.tripId),
+    ownerId: metadataString(request.metadata?.ownerId)
   };
   save.ledger = [transaction, ...save.ledger].slice(0, GAME_CONFIG.storage.ledgerLimit);
   return { applied: true, transaction };
@@ -59,4 +64,8 @@ export function roundMoney(value: number) {
 
 function finiteMoney(value: number) {
   return Number.isFinite(value) ? roundMoney(Math.max(0, value)) : 0;
+}
+
+function metadataString(value: unknown) {
+  return typeof value === 'string' ? value : undefined;
 }

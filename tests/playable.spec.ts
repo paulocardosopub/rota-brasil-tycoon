@@ -15,8 +15,8 @@ test('visitante entra e encontra a primeira corrida jogável', async ({ page }) 
   await expect(page.getByTestId('speedometer')).toContainText('km/h');
 
   const hud = page.locator('.hud');
-  await expect.poll(async () => Number(await hud.getAttribute('data-traffic-vehicles'))).toBe(350);
-  await expect.poll(async () => Number(await hud.getAttribute('data-traffic-buses'))).toBeGreaterThanOrEqual(40);
+  await expect.poll(async () => Number(await hud.getAttribute('data-traffic-vehicles'))).toBe(72);
+  await expect.poll(async () => Number(await hud.getAttribute('data-traffic-buses'))).toBe(9);
   await expect(hud).toHaveAttribute('data-air-traffic', '10');
   await page.keyboard.down('ArrowUp');
   await expect.poll(async () => Number(await hud.getAttribute('data-speed-kmh')), { timeout: 6_000 }).toBeGreaterThan(5);
@@ -226,7 +226,7 @@ test('recarregar preserva a corrida em andamento sem duplicar progresso', async 
   await expect(page.getByTestId('receipt-card')).toBeHidden();
 });
 
-test('pagamento da corrida entra uma vez no ledger e persiste no save v3', async ({ page }) => {
+test('pagamento da corrida entra uma vez no ledger e persiste no save v4', async ({ page }) => {
   await page.goto('./');
   await page.getByTestId('guest-button').click();
   const hud = page.locator('[data-game-ready="true"]');
@@ -252,7 +252,7 @@ test('piloto entra no posto real, para e abastece somente após confirmação', 
   const hud = page.locator('[data-game-ready="true"]');
   await expect(hud).toBeVisible({ timeout: 25_000 });
   const fuelBefore = Number(await hud.getAttribute('data-fuel'));
-  await page.getByRole('button', { name: /Serviços/ }).click();
+  await page.getByTestId('city-button').click();
   await page.getByRole('button', { name: /Posto Eixo Norte/ }).click();
   await expect(hud).toHaveAttribute('data-selected-service', 'fuel-shn-br');
   await page.keyboard.press('Control+Shift+D');
@@ -279,7 +279,7 @@ test('oficina real recebe o piloto e registra reparo sem atravessar prédio', as
   await page.keyboard.press('Control+Shift+D');
   await page.getByRole('button', { name: 'Dano +25' }).click();
   await page.keyboard.press('Control+Shift+D');
-  await page.getByRole('button', { name: /Serviços/ }).click();
+  await page.getByTestId('city-button').click();
   await page.getByRole('button', { name: /Oficina Central do Eixo/ }).click();
   await page.keyboard.press('Control+Shift+D');
   await page.getByRole('button', { name: 'Ir à entrada do serviço' }).click();
@@ -290,4 +290,86 @@ test('oficina real recebe o piloto e registra reparo sem atravessar prédio', as
   await page.locator('.confirm-strip').getByRole('button', { name: 'Confirmar' }).click();
   await expect.poll(async () => Number(await hud.getAttribute('data-ledger-count'))).toBeGreaterThanOrEqual(1);
   await expect(hud).toHaveAttribute('data-selected-service', 'none');
+});
+
+test('alertas de combustível e reparo traçam a rota e ligam o piloto', async ({ page }) => {
+  await page.goto('./');
+  await page.getByTestId('guest-button').click();
+  const hud = page.locator('[data-game-ready="true"]');
+  await expect(hud).toBeVisible({ timeout: 25_000 });
+
+  await page.keyboard.press('Control+Shift+D');
+  await page.getByRole('button', { name: 'Combustível 0' }).click();
+  await page.keyboard.press('Control+Shift+D');
+  await page.getByTestId('fuel-route-alert').click();
+  await expect(hud).toHaveAttribute('data-autopilot-enabled', 'true');
+  await expect(hud).not.toHaveAttribute('data-selected-service', 'none');
+
+  await page.keyboard.press('Control+Shift+D');
+  await page.getByRole('button', { name: 'Tanque cheio' }).click();
+  await page.getByRole('button', { name: 'Dano +25' }).click();
+  await page.keyboard.press('Control+Shift+D');
+  await page.getByTestId('repair-route-alert').click();
+  await expect(hud).toHaveAttribute('data-autopilot-enabled', 'true');
+  await expect(hud).not.toHaveAttribute('data-selected-service', 'none');
+});
+
+test('táxi oficial, funcionário e segundo veículo sobrevivem ao recarregamento', async ({ page }) => {
+  test.setTimeout(70_000);
+  await page.goto('./');
+  await page.getByTestId('guest-button').click();
+  const hud = page.locator('[data-game-ready="true"]');
+  await expect(hud).toBeVisible({ timeout: 25_000 });
+
+  await page.keyboard.press('Control+Shift+D');
+  await page.getByRole('button', { name: 'Cumprir requisitos' }).click();
+  await page.getByRole('button', { name: 'Regularizar', exact: true }).click();
+  await page.getByRole('button', { name: 'Converter Hatch' }).click();
+  await expect(hud).toHaveAttribute('data-professional-status', 'licensed-taxi');
+  await expect(hud).toHaveAttribute('data-taxi-license', 'licensed');
+
+  await page.getByRole('button', { name: 'Gerar corrida de táxi' }).click();
+  await page.keyboard.press('Control+Shift+D');
+  await expect(page.getByTestId('ride-offer')).toContainText('TÁXI OFICIAL');
+  await page.getByRole('button', { name: 'Aceitar', exact: true }).click();
+  await expect(page.getByTestId('taxi-meter')).toBeVisible();
+  await page.keyboard.press('Control+Shift+D');
+  await page.getByRole('button', { name: 'Ir ao passageiro' }).click();
+  await page.keyboard.press('Control+Shift+D');
+  await expect(hud).toHaveAttribute('data-taxi-meter-state', /occupied|waiting/, { timeout: 5_000 });
+  await page.waitForTimeout(600);
+  await page.keyboard.press('Control+Shift+D');
+  await page.getByRole('button', { name: 'Ir ao destino' }).click();
+  await page.keyboard.press('Control+Shift+D');
+  await expect(page.getByTestId('receipt-card')).toContainText('CORRIDA OFICIAL CONCLUÍDA');
+  await expect(hud).toHaveAttribute('data-taxi-meter-state', 'finished');
+  await page.getByRole('button', { name: 'Próxima corrida' }).click();
+
+  await page.keyboard.press('Control+Shift+D');
+  await page.getByRole('button', { name: 'Contratar Bia' }).click();
+  await page.getByRole('button', { name: 'Comprar Sedan' }).click();
+  await page.getByRole('button', { name: 'Atribuir motorista' }).click();
+  await page.getByRole('button', { name: 'Iniciar turno' }).click();
+  await page.keyboard.press('Control+Shift+D');
+  await expect(hud).toHaveAttribute('data-fleet-employees', '1');
+  await expect(hud).toHaveAttribute('data-fleet-vehicles', '2');
+  await expect(hud).toHaveAttribute('data-fleet-shift', /starting-shift|seeking-trip|with-passenger/);
+  await page.getByTestId('fleet-button').click();
+  await page.getByRole('button', { name: 'Localizar veículo' }).click();
+  await expect(hud).toHaveAttribute('data-fleet-vehicle-visible', 'true');
+  await expect(hud).toHaveAttribute('data-traffic-reserved-slots', '1');
+
+  await expect(page.getByTestId('active-fleet-shift')).toBeVisible();
+  await page.getByRole('button', { name: 'Encerrar turno' }).click();
+  await expect(page.getByTestId('fleet-report')).toBeVisible();
+
+  await page.waitForTimeout(5_500);
+  await page.reload();
+  await page.getByRole('button', { name: 'Continuar' }).click();
+  const restored = page.locator('[data-game-ready="true"]');
+  await expect(restored).toBeVisible({ timeout: 25_000 });
+  await expect(restored).toHaveAttribute('data-fleet-employees', '1');
+  await expect(restored).toHaveAttribute('data-fleet-vehicles', '2');
+  await page.getByTestId('fleet-button').click();
+  await expect(page.getByTestId('fleet-report')).toBeVisible();
 });

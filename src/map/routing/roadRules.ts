@@ -10,6 +10,11 @@ export function visibleRoadWidth(road: Pick<RoadData, 'width'>) {
   return Math.max(4.5, Math.min(18, road.width));
 }
 
+export function directionalLaneCount(road: Pick<RoadData, 'lanes' | 'oneway'> | undefined) {
+  if (!road) return 1;
+  return road.oneway ? Math.max(1, road.lanes) : Math.max(1, Math.floor(road.lanes / 2));
+}
+
 /** Distance from the centerline to the right-hand traffic lane. */
 export function rightHandLaneOffset(road: Pick<RoadData, 'lanes' | 'oneway' | 'width'>, laneIndex = 0) {
   const width = visibleRoadWidth(road);

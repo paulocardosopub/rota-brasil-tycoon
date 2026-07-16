@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 
-export function createCarVisual(scene: Phaser.Scene, color: number, worn = false) {
+export function createCarVisual(scene: Phaser.Scene, color: number, worn = false, taxi = false) {
   const container = scene.add.container(0, 0);
   const shadow = scene.add.graphics();
   shadow.fillStyle(0x07111a, 0.28).fillEllipse(0.8, 1.1, 6.2, 3.2);
@@ -27,6 +27,13 @@ export function createCarVisual(scene: Phaser.Scene, color: number, worn = false
     car.lineStyle(0.12, 0xf3d19c, 0.65).lineBetween(-0.4, -1.48, 0.6, -1.48);
   }
   container.add([shadow, car]);
+  if (taxi) {
+    const taxiSign = scene.add.graphics();
+    taxiSign.fillStyle(0xf6d34a, 1).fillRoundedRect(-1.45, -2.25, 2.9, 0.8, 0.25);
+    taxiSign.lineStyle(0.16, 0x18232e, 0.9).strokeRoundedRect(-1.45, -2.25, 2.9, 0.8, 0.25);
+    taxiSign.fillStyle(0x39d6a6, 0.95).fillCircle(0, -2.55, 0.22);
+    container.add(taxiSign);
+  }
   container.setDepth(30);
   return container;
 }

@@ -1,5 +1,7 @@
 import { GAME_CONFIG } from '../../config/gameConfig';
-import type { CameraZoom, DriverGoals, LedgerTransaction, PlayerSave, PlayerSettings, Quality, TrafficDensity, UpgradeLevels } from '../../types/game';
+import type { CameraZoom, ClockGuard, DriverGoals, FleetVehicle, LedgerTransaction, PlayerFleet, PlayerSave, PlayerSettings, Quality, TaxiLicense, TrafficDensity, UpgradeLevels } from '../../types/game';
+import { createFleetVehicle } from '../../game/fleet/FleetService';
+import { createTaxiMeter } from '../../game/taxi/TaxiMeter';
 
 const DEFAULT_SETTINGS: PlayerSettings = {
   quality: 'automatic',
@@ -20,10 +22,23 @@ export const DEFAULT_GOALS: DriverGoals = {
 };
 
 export function createNewSave(position = { x: 0, y: 0 }): PlayerSave {
+  const now = new Date().toISOString();
+  const ownerId = 'local-owner';
+  const fleetId = 'fleet-local-owner';
+  const hatch = createFleetVehicle({
+    id: 'vehicle-hatch-1998', ownerId, fleetId, model: 'Hatch 1998',
+    fuel: GAME_CONFIG.initialPlayer.fuel, condition: GAME_CONFIG.initialPlayer.condition,
+    collisionDamage: 30, maintenanceWear: 0, totalKm: 0, upgrades: DEFAULT_UPGRADES,
+    position, rotation: 0, purchasePrice: 0
+  });
+  const taxiLicense: TaxiLicense = {
+    status: 'not-eligible', requestedAt: null, issuedAt: null, costPaid: 0, idempotencyKey: null,
+    gameplayDisclaimer: 'Processo simplificado para fins de gameplay.'
+  };
   return {
     saveVersion: GAME_CONFIG.saveVersion,
     revision: 1,
-    updatedAt: new Date().toISOString(),
+    updatedAt: now,
     ...GAME_CONFIG.initialPlayer,
     position,
     rotation: 0,
@@ -44,7 +59,18 @@ export function createNewSave(position = { x: 0, y: 0 }): PlayerSave {
     rideHistory: [],
     goals: { ...DEFAULT_GOALS },
     regularizationReady: false,
-    visitedServices: []
+    visitedServices: [],
+    ownerId,
+    professionalStatus: 'clandestine',
+    taxiLicense,
+    taxiMeter: createTaxiMeter(),
+    officialTaxiRides: 0,
+    activeVehicleId: hatch.id,
+    fleet: {
+      id: fleetId, ownerId, name: 'Minha Frota', garageServiceId: 'garage-shs-hatch',
+      capacity: GAME_CONFIG.fleet.capacity, vehicles: [hatch], employees: [], activeShift: null, lastReport: null
+    },
+    clockGuard: { lastSeenAt: now, lastTrustedAt: now, rollbackDetected: false, unvalidated: true }
   };
 }
 
@@ -55,7 +81,7 @@ export function migrateSave(input: unknown): PlayerSave {
   const legacyCondition = finite(raw.condition, fresh.condition);
   const upgrades = migrateUpgrades(raw.upgrades);
   const ledger = Array.isArray(raw.ledger) ? raw.ledger.filter(validTransaction).slice(0, GAME_CONFIG.storage.ledgerLimit) : [];
-  return {
+  const migrated = {
     ...fresh,
     ...raw,
     saveVersion: GAME_CONFIG.saveVersion,
@@ -81,8 +107,22 @@ export function migrateSave(input: unknown): PlayerSave {
     rideHistory: Array.isArray(raw.rideHistory) ? raw.rideHistory.slice(0, GAME_CONFIG.storage.rideHistoryLimit) : [],
     goals: { ...DEFAULT_GOALS, ...(raw.goals ?? {}) },
     regularizationReady: raw.regularizationReady === true,
-    visitedServices: Array.isArray(raw.visitedServices) ? [...new Set(raw.visitedServices.filter((id): id is string => typeof id === 'string'))] : []
+    visitedServices: Array.isArray(raw.visitedServices) ? [...new Set(raw.visitedServices.filter((id): id is string => typeof id === 'string'))] : [],
+    ownerId: typeof raw.ownerId === 'string' && raw.ownerId ? raw.ownerId : fresh.ownerId,
+    professionalStatus: raw.professionalStatus === 'licensed-taxi' ? 'licensed-taxi' as const : 'clandestine' as const,
+    taxiLicense: migrateTaxiLicense(raw.taxiLicense, fresh.taxiLicense, raw.professionalStatus === 'licensed-taxi'),
+    taxiMeter: { ...createTaxiMeter(), ...(raw.taxiMeter ?? {}) },
+    officialTaxiRides: Math.max(0, Math.floor(finite(raw.officialTaxiRides, 0))),
+    activeVehicleId: typeof raw.activeVehicleId === 'string' ? raw.activeVehicleId : fresh.activeVehicleId,
+    fleet: fresh.fleet,
+    clockGuard: migrateClockGuard(raw.clockGuard, fresh.clockGuard)
   };
+  migrated.fleet = migrateFleet(raw.fleet, migrated);
+  if (!migrated.fleet.vehicles.some((vehicle) => vehicle.id === migrated.activeVehicleId)) {
+    migrated.activeVehicleId = migrated.fleet.vehicles[0].id;
+  }
+  if (migrated.regularizationReady && migrated.taxiLicense.status === 'not-eligible') migrated.taxiLicense.status = 'eligible';
+  return migrated;
 }
 
 export function loadSave(): PlayerSave {
@@ -100,10 +140,12 @@ export function loadSave(): PlayerSave {
 }
 
 export function writeSave(save: PlayerSave) {
+  const now = new Date().toISOString();
+  save.clockGuard.lastSeenAt = now;
   const updated: PlayerSave = {
     ...save,
     revision: save.revision + 1,
-    updatedAt: new Date().toISOString()
+    updatedAt: now
   };
   const current = localStorage.getItem(GAME_CONFIG.storage.key);
   if (current) {
@@ -175,6 +217,64 @@ function validTransaction(value: unknown): value is LedgerTransaction {
   const entry = value as Partial<LedgerTransaction>;
   return typeof entry.id === 'string' && typeof entry.idempotencyKey === 'string'
     && Number.isFinite(entry.amount) && Number.isFinite(entry.balanceBefore) && Number.isFinite(entry.balanceAfter);
+}
+
+function migrateTaxiLicense(input: Partial<TaxiLicense> | undefined, fallback: TaxiLicense, licensed: boolean): TaxiLicense {
+  return {
+    ...fallback, ...(input ?? {}),
+    status: licensed || input?.status === 'licensed' ? 'licensed' : input?.status === 'eligible' ? 'eligible' : 'not-eligible',
+    costPaid: finiteMoney(input?.costPaid, 0),
+    gameplayDisclaimer: 'Processo simplificado para fins de gameplay.'
+  };
+}
+
+function migrateClockGuard(input: Partial<ClockGuard> | undefined, fallback: ClockGuard): ClockGuard {
+  return {
+    lastSeenAt: validDate(input?.lastSeenAt) ?? fallback.lastSeenAt,
+    lastTrustedAt: validDate(input?.lastTrustedAt) ?? fallback.lastTrustedAt,
+    rollbackDetected: input?.rollbackDetected === true,
+    unvalidated: input?.unvalidated !== false
+  };
+}
+
+function migrateFleet(input: Partial<PlayerFleet> | undefined, save: PlayerSave): PlayerFleet {
+  const fleetId = typeof input?.id === 'string' ? input.id : `fleet-${save.ownerId}`;
+  const legacyVehicle = createFleetVehicle({
+    id: 'vehicle-hatch-1998', ownerId: save.ownerId, fleetId, model: 'Hatch 1998',
+    fuel: save.fuel, condition: save.condition, collisionDamage: save.collisionDamage,
+    maintenanceWear: save.maintenanceWear, totalKm: save.totalKm, upgrades: save.upgrades,
+    position: save.position, rotation: save.rotation, purchasePrice: 0,
+    taxiLicensed: save.professionalStatus === 'licensed-taxi'
+  });
+  const vehicles = Array.isArray(input?.vehicles) && input.vehicles.length
+    ? input.vehicles.slice(0, GAME_CONFIG.fleet.capacity).map((vehicle) => migrateFleetVehicle(vehicle, save.ownerId, fleetId))
+    : [legacyVehicle];
+  return {
+    id: fleetId, ownerId: save.ownerId,
+    name: typeof input?.name === 'string' ? input.name : 'Minha Frota',
+    garageServiceId: 'garage-shs-hatch', capacity: GAME_CONFIG.fleet.capacity,
+    vehicles,
+    employees: Array.isArray(input?.employees) ? input.employees.slice(0, GAME_CONFIG.fleet.maximumEmployees) : [],
+    activeShift: input?.activeShift && typeof input.activeShift === 'object' ? input.activeShift : null,
+    lastReport: input?.lastReport && typeof input.lastReport === 'object' ? input.lastReport : null
+  };
+}
+
+function migrateFleetVehicle(input: FleetVehicle, ownerId: string, fleetId: string): FleetVehicle {
+  const base = createFleetVehicle({
+    id: typeof input.id === 'string' ? input.id : undefined,
+    ownerId, fleetId, model: input.model === 'Sedan 2012' ? 'Sedan 2012' : 'Hatch 1998',
+    fuel: finite(input.fuel, 1), condition: finite(input.condition, 70),
+    collisionDamage: finite(input.collisionDamage, 30), maintenanceWear: finite(input.maintenanceWear, 0),
+    totalKm: finite(input.totalKm, 0), upgrades: migrateUpgrades(input.upgrades),
+    position: input.position && Number.isFinite(input.position.x) && Number.isFinite(input.position.y) ? input.position : { x: 0, y: 0 },
+    rotation: finite(input.rotation, 0), purchasePrice: finiteMoney(input.purchasePrice, 0), taxiLicensed: input.taxiLicensed === true
+  });
+  return { ...base, ...input, ownerId, fleetId, upgrades: migrateUpgrades(input.upgrades) };
+}
+
+function validDate(value: unknown) {
+  return typeof value === 'string' && Number.isFinite(Date.parse(value)) ? value : undefined;
 }
 
 function finite(value: unknown, fallback: number) { return Number.isFinite(value) ? value as number : fallback; }

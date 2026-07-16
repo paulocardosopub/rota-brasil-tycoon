@@ -3,7 +3,7 @@ import { GAME_CONFIG } from '../../config/gameConfig';
 import { loadCityMap } from '../../map/loadCityMap';
 import { GraphRouter } from '../../map/routing/GraphRouter';
 import { visibleRoadWidth } from '../../map/routing/roadRules';
-import type { CollisionSeverity, CityMapData, HudSnapshot, MapServiceLocation, MapSignal, PlayerSave, Point } from '../../types/game';
+import type { CollisionSeverity, CityMapData, FleetReport, HudSnapshot, MapServiceLocation, MapSignal, PlayerSave, Point } from '../../types/game';
 import { gameEvents, type GameCommand } from '../events';
 import { createCarVisual, createPassengerVisual } from '../entities/VehicleVisual';
 import { MissionSystem } from '../missions/MissionSystem';
@@ -21,6 +21,16 @@ import { ServiceSystem } from '../services/ServiceSystem';
 import { AirTrafficSystem } from '../environment/AirTrafficSystem';
 import { refreshProgression } from '../progression/DriverProgression';
 import { simulateEconomy } from '../economy/EconomySimulator';
+import { TaxiPointSystem } from '../taxi/TaxiPointSystem';
+import { finishTaxiMeter, markTaxiBoarding, prepareTaxiMeter, resetTaxiMeter, startTaxiMeter, updateTaxiMeter } from '../taxi/TaxiMeter';
+import { convertActiveVehicleToTaxi, regularizeTaxi } from '../progression/RegularizationService';
+import {
+  acknowledgeFleetReport, advanceFleetShift, assignEmployee, dismissEmployee, endFleetShift,
+  hireEmployee, purchaseSecondVehicle, selectPlayerVehicle, simulateOfflineReturn,
+  startFleetShift, syncActiveVehicleFromLegacy, unassignEmployee
+} from '../fleet/FleetService';
+import { FleetVehicleSystem } from '../fleet/FleetVehicleSystem';
+import { roundMoney } from '../economy/TransactionLedger';
 
 type SignalVisual = { signal: MapSignal; graphics: Phaser.GameObjects.Graphics };
 
@@ -33,6 +43,9 @@ export class MainScene extends Phaser.Scene {
   private mission?: MissionSystem;
   private services?: ServiceSystem;
   private airTraffic?: AirTrafficSystem;
+  private taxiPoints?: TaxiPointSystem;
+  private fleetVehicles?: FleetVehicleSystem;
+  private roadSurface?: RoadSurfaceIndex;
   private serviceRoute: Point[] = [];
   private serviceArrived = false;
   private emergencyFuelGranted = false;
@@ -71,6 +84,9 @@ export class MainScene extends Phaser.Scene {
   private readonly audio = new GameAudio();
   private repositionProgress = 0;
   private repositionConsumed = false;
+  private followFleetVehicle = false;
+  private fleetReportNotifiedId: string | null = null;
+  private offlineReport?: FleetReport | null;
 
   constructor(initialSave: PlayerSave) {
     super('MainScene');
@@ -107,9 +123,11 @@ export class MainScene extends Phaser.Scene {
 
   private async initialize() {
     try {
+      this.offlineReport = simulateOfflineReturn(this.save);
       this.map = await loadCityMap();
       this.router = new GraphRouter(this.map.graph, this.map.roads);
       const surface = new RoadSurfaceIndex(this.map.roads);
+      this.roadSurface = surface;
       let spawn = this.router.nearest({ x: 0, y: 0 });
       if (surface.distanceFromRoad(this.save.position) > 3 || Math.hypot(this.save.position.x, this.save.position.y) > 1_600) {
         this.save.position = { x: spawn.x, y: spawn.y };
@@ -122,7 +140,7 @@ export class MainScene extends Phaser.Scene {
       this.vehicle.alignToRoad(true);
       this.save.position = { ...this.vehicle.position };
       this.save.rotation = this.vehicle.rotation;
-      this.vehicleVisual = createCarVisual(this, 0xc97732, true).setScale(0.74);
+      this.vehicleVisual = this.createPlayerVehicleVisual();
       this.updateVisualTransform(this.vehicleVisual, this.vehicle.position, this.vehicle.rotation);
       this.cameraRotation = -this.projectedAngle(this.vehicle.rotation) + Math.PI / 2;
       this.cameras.main.setRotation(this.cameraRotation);
@@ -133,17 +151,26 @@ export class MainScene extends Phaser.Scene {
       this.mission = new MissionSystem(this.router, this.vehicle.position, this.save.completedRides, this.save.activeMission, {
         condition: this.save.condition,
         comfortLevel: this.save.upgrades.comfort,
-        rating: this.save.rating
+        rating: this.save.rating,
+        taxiLicensed: this.activeFleetVehicle()?.taxiLicensed === true,
+        taxiPoints: this.map.taxiPoints
       });
       this.services = new ServiceSystem(this, this.map.services, this.project);
+      this.taxiPoints = new TaxiPointSystem(this, this.map.taxiPoints, this.project);
+      const garage = this.map.services.find((service) => service.id === this.save.fleet.garageServiceId)?.entrance ?? { x: -744.43, y: 55.13 };
+      this.fleetVehicles = new FleetVehicleSystem(this, this.router, surface, this.traffic, this.project, this.map.taxiPoints, garage);
       this.airTraffic = new AirTrafficSystem(this);
       this.routeGraphics = this.add.graphics().setDepth(18);
       this.passengerVisual = createPassengerVisual(this).setPosition(0, 0);
       this.destinationVisual = this.createDestinationMarker().setVisible(false);
+      this.restoreTaxiMeterState();
       this.syncMissionVisuals();
       this.time.addEvent({ delay: GAME_CONFIG.storage.autosaveMs, loop: true, callback: () => this.persist() });
       this.initialized = true;
-      this.emitToast('Direção manual livre. Ative o piloto automático acima do menu quando quiser.', 'info');
+      if (this.offlineReport) {
+        this.fleetReportNotifiedId = this.offlineReport.id;
+        this.emitToast(`Relatório da frota: ${this.offlineReport.rides} corridas, lucro ${this.formatMoney(this.offlineReport.netProfit)}.`, 'success');
+      } else this.emitToast('Direção manual livre. Ative o piloto automático acima do menu quando quiser.', 'info');
       this.emitHud();
     } catch (error) {
       console.error(error);
@@ -162,6 +189,7 @@ export class MainScene extends Phaser.Scene {
       simulationSteps += 1;
     }
     this.services?.update(this.simulationSeconds);
+    this.taxiPoints?.update(this.simulationSeconds);
     this.airTraffic?.update(Math.min(0.1, delta / 1000), this.simulationSeconds);
 
     if ((this.mission.mission.phase !== 'completed' || this.services?.selected) && time - this.lastRouteUpdate > 500) {
@@ -206,6 +234,12 @@ export class MainScene extends Phaser.Scene {
   private simulateStep(dt: number, time: number) {
     if (!this.vehicle || !this.mission || !this.traffic) return;
     this.simulationSeconds += dt;
+    const fleetResult = advanceFleetShift(this.save, dt);
+    if (fleetResult.report && fleetResult.report.id !== this.fleetReportNotifiedId) {
+      this.fleetReportNotifiedId = fleetResult.report.id;
+      this.emitToast(`Turno encerrado: ${fleetResult.report.rides} corridas, lucro ${this.formatMoney(fleetResult.report.netProfit)}.`, 'success');
+      this.persist();
+    }
     const input = this.readInput();
     this.audio.update(this.vehicle.speed, input.throttle, input.handbrake || input.throttle < 0, this.save.settings);
     const previousPosition = { ...this.vehicle.position };
@@ -219,6 +253,15 @@ export class MainScene extends Phaser.Scene {
     this.save.maintenanceWear = Math.min(100, this.save.maintenanceWear
       + travelled / 1000 * ECONOMY_CONFIG.wear.perKilometer * (aggressive ? ECONOMY_CONFIG.wear.aggressiveMultiplier : 1));
     this.save.condition = vehicleCondition(this.save.collisionDamage, this.save.maintenanceWear);
+    this.fleetVehicles?.update(this.save, this.vehicle.position, dt);
+    const fleetCollision = this.fleetVehicles?.handlePlayerCollision(this.vehicle.position, this.vehicle.speed);
+    if (fleetCollision?.impact) {
+      this.vehicle.speed *= 0.45;
+      this.save.collisionDamage = Math.min(100, this.save.collisionDamage + Math.min(1.4, fleetCollision.relativeSpeedKmh / 45));
+      this.save.condition = vehicleCondition(this.save.collisionDamage, this.save.maintenanceWear);
+      this.mission.recordCollision();
+      this.emitToast('Contato com o veículo da frota. Ambos reduziram para se separar.', 'warning');
+    }
     if (this.save.fuel <= 0.0001 && !this.emergencyFuelGranted) {
       new EconomyService(this.save).expense(
         GAME_CONFIG.services.emergencyFuelFee, 'emergency', 'Combustível de emergência',
@@ -282,6 +325,9 @@ export class MainScene extends Phaser.Scene {
     }
 
     const speedKmh = Math.abs(this.vehicle.speed) * 3.6;
+    if (this.mission.mission.rideMode === 'official-taxi' && this.mission.mission.phase === 'passenger-on-board') {
+      updateTaxiMeter(this.save.taxiMeter, travelled, dt, speedKmh);
+    }
     const missionEvent = this.mission.update(
       this.vehicle.position,
       speedKmh,
@@ -292,10 +338,25 @@ export class MainScene extends Phaser.Scene {
       this.autopilotEnabled ? GAME_CONFIG.mission.autopilotMaxInteractionSpeedKmh : GAME_CONFIG.mission.maxInteractionSpeedKmh
     );
     if (missionEvent === 'picked-up') {
+      if (this.mission.mission.rideMode === 'official-taxi') {
+        markTaxiBoarding(this.save.taxiMeter);
+        startTaxiMeter(this.save.taxiMeter);
+      }
       this.emitToast(`${this.mission.mission.passengerName}: ${this.pickLine(GAME_CONFIG.mission.pickupLines)}`, 'success');
       this.syncMissionVisuals();
     } else if (missionEvent === 'completed' && this.mission.receipt) {
       const receipt = this.mission.receipt;
+      if (this.mission.mission.rideMode === 'official-taxi') {
+        const meteredFare = finishTaxiMeter(this.save.taxiMeter);
+        const tip = receipt.tip ?? 0;
+        receipt.baseFare = GAME_CONFIG.taxi.meter.initialFare;
+        receipt.distanceFare = roundMoney(this.save.taxiMeter.distanceMeters / 1_000 * GAME_CONFIG.taxi.meter.perKilometer);
+        receipt.timeFare = roundMoney(this.save.taxiMeter.waitingSeconds / 60 * GAME_CONFIG.taxi.meter.waitingPerMinute);
+        receipt.guaranteedTotal = meteredFare;
+        receipt.qualityBonus = 0;
+        receipt.total = roundMoney(meteredFare + tip);
+        this.save.officialTaxiRides += 1;
+      }
       const tip = receipt.tip ?? 0;
       const economy = new EconomyService(this.save);
       economy.income(receipt.total - tip, 'ride', 'Pagamento de corrida', `ride-payment-${this.mission.mission.id}`, this.mission.mission.id, {
@@ -338,7 +399,7 @@ export class MainScene extends Phaser.Scene {
       && time >= this.autopilotNextMissionAt
     ) {
       this.mission.next(this.vehicle.position, this.save.completedRides);
-      this.mission.accept(this.vehicle.position);
+      if (this.mission.accept(this.vehicle.position)) this.prepareAcceptedTaxiRide();
       this.autopilotNextMissionAt = 0;
       this.syncMissionVisuals();
       this.emitToast('Nova corrida recomendada aceita. Indo buscar o cliente.', 'success');
@@ -420,7 +481,7 @@ export class MainScene extends Phaser.Scene {
 
     if (this.autopilotEnabled && this.vehicle && this.mission && this.traffic) {
       if (this.mission.mission.phase === 'offered' && !this.services?.selected) {
-        this.mission.accept(this.vehicle.position);
+        if (this.mission.accept(this.vehicle.position)) this.prepareAcceptedTaxiRide();
         this.syncMissionVisuals();
       }
       const activeRoute = this.activeRoute();
@@ -732,7 +793,7 @@ export class MainScene extends Phaser.Scene {
       this.autopilotStuckSeconds = 0;
       if (this.autopilotEnabled) {
         this.mobileInput = { throttle: 0, steering: 0, handbrake: false };
-        if (this.vehicle && this.mission?.mission.phase === 'offered' && !this.services?.selected) this.mission.accept(this.vehicle.position);
+        if (this.vehicle && this.mission?.mission.phase === 'offered' && !this.services?.selected && this.mission.accept(this.vehicle.position)) this.prepareAcceptedTaxiRide();
         const route = this.activeRoute();
         const guidance = this.vehicle && route.length >= 2
           ? guidanceForRoute(
@@ -805,17 +866,20 @@ export class MainScene extends Phaser.Scene {
       );
       this.emitToast(penalized ? 'Corrida cancelada: -R$ 3,00' : 'Corrida cancelada.', 'warning');
       this.mission.next(this.vehicle?.position ?? { x: 0, y: 0 }, this.save.completedRides + 1);
+      resetTaxiMeter(this.save.taxiMeter);
       this.syncMissionVisuals();
       return;
     }
     if (command.type === 'dismiss-receipt' && this.mission && this.vehicle) {
       this.mission.next(this.vehicle.position, this.save.completedRides);
+      resetTaxiMeter(this.save.taxiMeter);
       this.autopilotNextMissionAt = 0;
       this.syncMissionVisuals();
       return;
     }
     if (command.type === 'accept-ride' && this.mission && this.vehicle) {
       if (this.mission.accept(this.vehicle.position)) {
+        this.prepareAcceptedTaxiRide();
         this.emitToast('Corrida aceita. Siga até o embarque.', 'success');
         this.syncMissionVisuals();
       }
@@ -823,6 +887,7 @@ export class MainScene extends Phaser.Scene {
     }
     if (command.type === 'reject-ride' && this.mission && this.vehicle) {
       if (this.mission.reject(this.vehicle.position, this.save.completedRides)) {
+        resetTaxiMeter(this.save.taxiMeter);
         this.emitToast('Oferta recusada. Nova corrida recomendada.', 'info');
         this.syncMissionVisuals();
       }
@@ -830,6 +895,17 @@ export class MainScene extends Phaser.Scene {
     }
     if (command.type === 'navigate-service') {
       this.navigateToService(command.serviceId);
+      return;
+    }
+    if (command.type === 'navigate-nearest-service' && this.services && this.vehicle) {
+      const location = this.services.nearestAnywhere(this.vehicle.position, command.category);
+      if (!location) {
+        this.emitToast('Nenhum serviço desse tipo foi encontrado no mapa.', 'warning');
+        return;
+      }
+      this.navigateToService(location.id);
+      if (!this.autopilotEnabled) this.handleCommand({ type: 'autopilot' });
+      this.emitToast(`${command.category === 'fuel' ? 'Posto' : 'Oficina'} mais próximo selecionado. Piloto automático ligado.`, 'success');
       return;
     }
     if (command.type === 'clear-service-route') {
@@ -852,6 +928,76 @@ export class MainScene extends Phaser.Scene {
       const result = new EconomyService(this.save).settleDebt(command.value, command.requestId);
       this.emitToast(result.applied ? 'Dívida reduzida e registrada no caixa.' : 'Não foi possível pagar esse valor.', result.applied ? 'success' : 'warning');
       if (result.applied) this.persist();
+      return;
+    }
+    if (command.type === 'regularize-taxi') {
+      const result = regularizeTaxi(this.save, command.requestId);
+      this.emitToast(result.applied ? 'Regularização concluída. Corridas oficiais foram liberadas.' : result.reason === 'requirements' ? 'Ainda há requisitos de regularização pendentes.' : 'A regularização já foi concluída.', result.applied ? 'success' : 'warning');
+      if (result.applied) { this.updateMissionVehicleContext(); this.persist(); }
+      return;
+    }
+    if (command.type === 'convert-taxi') {
+      const result = convertActiveVehicleToTaxi(this.save, command.requestId);
+      const vehicle = 'vehicle' in result ? result.vehicle : undefined;
+      this.emitToast(result.applied && vehicle ? `${vehicle.model} convertido em Táxi Popular sem perder seu histórico.` : result.reason === 'not-licensed' ? 'Conclua a regularização primeiro.' : 'Esse veículo já está convertido.', result.applied ? 'success' : 'warning');
+      if (result.applied) { this.refreshPlayerVehicleVisual(); this.updateMissionVehicleContext(); this.persist(); }
+      return;
+    }
+    if (command.type === 'hire-employee') {
+      const result = hireEmployee(this.save, command.candidateId, command.requestId);
+      const employee = 'employee' in result ? result.employee : undefined;
+      this.emitToast(result.applied && employee ? `${employee.name} foi contratado para a sua frota.` : result.reason === 'not-licensed' ? 'Regularize-se antes de contratar.' : result.reason === 'capacity' ? 'A frota já atingiu o limite de motoristas.' : 'Não foi possível concluir a contratação.', result.applied ? 'success' : 'warning');
+      if (result.applied) this.persist();
+      return;
+    }
+    if (command.type === 'buy-fleet-vehicle') {
+      if (!this.activeNearbyService('garage')) return;
+      const result = purchaseSecondVehicle(this.save, command.requestId);
+      this.emitToast(result.applied ? 'Sedan 2012 adquirido, registrado e estacionado na garagem.' : result.reason === 'capacity' ? 'A garagem já está na capacidade máxima.' : result.reason === 'not-licensed' ? 'Regularize-se antes de adquirir o Sedan.' : 'Saldo insuficiente para a compra.', result.applied ? 'success' : 'warning');
+      if (result.applied) this.persist();
+      return;
+    }
+    if (command.type === 'assign-employee') {
+      const result = assignEmployee(this.save, command.employeeId, command.vehicleId);
+      this.emitToast(result.applied ? 'Motorista atribuído ao veículo.' : 'O veículo está em uso ou indisponível.', result.applied ? 'success' : 'warning');
+      if (result.applied) this.persist();
+      return;
+    }
+    if (command.type === 'unassign-employee') {
+      const result = unassignEmployee(this.save, command.employeeId);
+      this.emitToast(result.applied ? 'Motorista removido do veículo.' : 'Encerre o turno antes de remover a atribuição.', result.applied ? 'success' : 'warning');
+      if (result.applied) this.persist();
+      return;
+    }
+    if (command.type === 'start-fleet-shift') {
+      const result = startFleetShift(this.save, command.employeeId, command.requestId);
+      this.emitToast(result.applied ? 'Turno iniciado. O veículo do funcionário entrou na operação.' : result.reason === 'taxi-required' ? 'O funcionário precisa de um veículo convertido em táxi.' : result.reason === 'vehicle-unfit' ? 'Abasteça ou repare o veículo antes do turno.' : 'Atribua um veículo livre ao motorista.', result.applied ? 'success' : 'warning');
+      if (result.applied) this.persist();
+      return;
+    }
+    if (command.type === 'end-fleet-shift') {
+      const report = endFleetShift(this.save, ['Turno encerrado pelo proprietário.']);
+      this.followFleetVehicle = false;
+      this.fleetVehicles?.setFollowEnabled(false);
+      if (this.vehicleVisual) this.cameras.main.startFollow(this.vehicleVisual, true, GAME_CONFIG.camera.followLerp, GAME_CONFIG.camera.followLerp);
+      this.emitToast(report ? `Turno encerrado com lucro de ${this.formatMoney(report.netProfit)}.` : 'Não há turno ativo.', report ? 'success' : 'info');
+      if (report) { this.fleetReportNotifiedId = report.id; this.persist(); }
+      return;
+    }
+    if (command.type === 'select-vehicle') {
+      if (!this.activeNearbyService('garage')) return;
+      const result = selectPlayerVehicle(this.save, command.vehicleId);
+      this.emitToast(result.applied && result.vehicle ? `${result.vehicle.model} agora é o veículo do jogador.` : 'Esse veículo está atribuído ou em operação.', result.applied ? 'success' : 'warning');
+      if (result.applied) { this.rebuildPlayerVehicle(); this.persist(); }
+      return;
+    }
+    if (command.type === 'ack-fleet-report') {
+      acknowledgeFleetReport(this.save);
+      this.persist();
+      return;
+    }
+    if (command.type === 'follow-fleet-vehicle') {
+      this.toggleFleetFollow();
       return;
     }
     if (command.type === 'dev') this.handleDevAction(command.action);
@@ -946,6 +1092,91 @@ export class MainScene extends Phaser.Scene {
     this.syncMissionVisuals();
   }
 
+  private activeFleetVehicle() {
+    return this.save.fleet.vehicles.find((vehicle) => vehicle.id === this.save.activeVehicleId);
+  }
+
+  private createPlayerVehicleVisual() {
+    const vehicle = this.activeFleetVehicle();
+    const sedan = vehicle?.model === 'Sedan 2012';
+    return createCarVisual(this, sedan ? 0x4aa7a1 : 0xc97732, !sedan, vehicle?.taxiVisualEnabled === true).setScale(sedan ? 0.76 : 0.74);
+  }
+
+  private refreshPlayerVehicleVisual() {
+    if (!this.vehicle) return;
+    this.vehicleVisual?.destroy();
+    this.vehicleVisual = this.createPlayerVehicleVisual();
+    this.updateVisualTransform(this.vehicleVisual, this.vehicle.position, this.vehicle.rotation);
+    if (!this.followFleetVehicle) this.cameras.main.startFollow(this.vehicleVisual, true, GAME_CONFIG.camera.followLerp, GAME_CONFIG.camera.followLerp);
+  }
+
+  private rebuildPlayerVehicle() {
+    if (!this.roadSurface) return;
+    this.vehicle = new VehicleController(this.save.position, this.save.rotation, this.roadSurface);
+    this.vehicle.setModifiers(upgradeEffects(this.save.upgrades));
+    this.vehicle.alignToRoad(true, this.save.rotation);
+    this.refreshPlayerVehicleVisual();
+    this.updateMissionVehicleContext();
+    this.mission?.recalculate(this.vehicle.position);
+    this.syncMissionVisuals();
+  }
+
+  private updateMissionVehicleContext() {
+    this.mission?.updateVehicleContext({
+      condition: this.save.condition,
+      comfortLevel: this.save.upgrades.comfort,
+      rating: this.save.rating,
+      taxiLicensed: this.activeFleetVehicle()?.taxiLicensed === true,
+      taxiPoints: this.map?.taxiPoints ?? []
+    });
+  }
+
+  private prepareAcceptedTaxiRide() {
+    if (!this.mission || this.mission.mission.rideMode !== 'official-taxi') return;
+    const demand = this.mission.mission.quote?.demandMultiplier ?? 1;
+    prepareTaxiMeter(
+      this.save.taxiMeter,
+      this.mission.mission.id,
+      this.mission.mission.destinationLabel,
+      this.mission.mission.category ?? 'popular',
+      demand
+    );
+  }
+
+  private restoreTaxiMeterState() {
+    if (!this.mission || this.mission.mission.rideMode !== 'official-taxi') {
+      if (this.save.taxiMeter.state !== 'finished') resetTaxiMeter(this.save.taxiMeter);
+      return;
+    }
+    if (this.save.taxiMeter.tripId !== this.mission.mission.id) this.prepareAcceptedTaxiRide();
+    if (this.mission.mission.phase === 'passenger-on-board' && ['en-route', 'boarding'].includes(this.save.taxiMeter.state)) {
+      markTaxiBoarding(this.save.taxiMeter);
+      startTaxiMeter(this.save.taxiMeter, this.save.taxiMeter.startedAt ?? undefined);
+    }
+  }
+
+  private toggleFleetFollow() {
+    if (!this.vehicle || !this.fleetVehicles || !this.save.fleet.activeShift) {
+      this.emitToast('Inicie um turno para acompanhar o veículo do funcionário.', 'warning');
+      return;
+    }
+    this.followFleetVehicle = !this.followFleetVehicle;
+    this.fleetVehicles.setFollowEnabled(this.followFleetVehicle);
+    if (this.followFleetVehicle) {
+      this.fleetVehicles.update(this.save, this.vehicle.position, 0.01);
+      const target = this.fleetVehicles.followedObject();
+      if (target) this.cameras.main.startFollow(target, true, GAME_CONFIG.camera.followLerp, GAME_CONFIG.camera.followLerp);
+      this.emitToast('Câmera acompanhando o veículo da frota. O controle continua sendo do funcionário.', 'info');
+    } else if (this.vehicleVisual) {
+      this.cameras.main.startFollow(this.vehicleVisual, true, GAME_CONFIG.camera.followLerp, GAME_CONFIG.camera.followLerp);
+      this.emitToast('Câmera voltou ao veículo do jogador.', 'info');
+    }
+  }
+
+  private formatMoney(value: number) {
+    return value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+  }
+
   private handleDevAction(action: string) {
     if (!import.meta.env.DEV || !this.vehicle || !this.mission || !this.traffic) return;
     if (action === 'money-add') new EconomyService(this.save).income(1_000, 'dev', 'Painel dev', `dev-money-add-${Date.now()}`);
@@ -989,6 +1220,58 @@ export class MainScene extends Phaser.Scene {
       refreshProgression(this.save);
     }
     if (action === 'debt') new EconomyService(this.save).expense(250, 'emergency', 'Dívida dev', `dev-debt-${Date.now()}`, true);
+    if (action === 'regularize-now') regularizeTaxi(this.save, `dev-regularize-${Date.now()}`);
+    if (action === 'remove-regularization') {
+      this.save.professionalStatus = 'clandestine';
+      this.save.taxiLicense = { ...this.save.taxiLicense, status: 'eligible', requestedAt: null, issuedAt: null };
+      const active = this.activeFleetVehicle();
+      if (active) { active.taxiLicensed = false; active.taxiVisualEnabled = false; active.taxiRegistrationId = null; }
+      resetTaxiMeter(this.save.taxiMeter);
+      this.refreshPlayerVehicleVisual();
+    }
+    if (action === 'convert-taxi') {
+      convertActiveVehicleToTaxi(this.save, `dev-convert-${Date.now()}`);
+      this.refreshPlayerVehicleVisual();
+    }
+    if (action === 'taxi-offer') {
+      this.updateMissionVehicleContext();
+      this.mission.nextOfficial(this.vehicle.position, this.save.completedRides + 1);
+      this.syncMissionVisuals();
+    }
+    if (action === 'meter-start') {
+      if (this.mission.mission.phase === 'offered') this.mission.accept(this.vehicle.position);
+      this.prepareAcceptedTaxiRide(); markTaxiBoarding(this.save.taxiMeter); startTaxiMeter(this.save.taxiMeter);
+    }
+    if (action === 'meter-finish') finishTaxiMeter(this.save.taxiMeter);
+    if (action === 'hire-bia') hireEmployee(this.save, 'bia-rocha', `dev-hire-bia-${Date.now()}`);
+    if (action === 'hire-leo') hireEmployee(this.save, 'leo-martins', `dev-hire-leo-${Date.now()}`);
+    if (action === 'hire-nara') hireEmployee(this.save, 'nara-souza', `dev-hire-nara-${Date.now()}`);
+    if (action === 'dismiss-employee' && this.save.fleet.employees[0]) dismissEmployee(this.save, this.save.fleet.employees[0].id);
+    if (action === 'buy-sedan') {
+      if (this.save.money < GAME_CONFIG.fleet.secondVehiclePrice) new EconomyService(this.save).income(GAME_CONFIG.fleet.secondVehiclePrice, 'dev', 'Compra de teste', `dev-sedan-money-${Date.now()}`);
+      purchaseSecondVehicle(this.save, `dev-sedan-${Date.now()}`);
+    }
+    if (action === 'assign-first') {
+      const employee = this.save.fleet.employees[0];
+      const fleetVehicle = this.save.fleet.vehicles.find((candidate) => candidate.id !== this.save.activeVehicleId);
+      if (employee && fleetVehicle) assignEmployee(this.save, employee.id, fleetVehicle.id);
+    }
+    if (action === 'start-shift' && this.save.fleet.employees[0]) startFleetShift(this.save, this.save.fleet.employees[0].id, `dev-shift-${Date.now()}`);
+    if (action === 'end-shift') endFleetShift(this.save, ['Turno encerrado pelo painel de desenvolvimento.']);
+    if (action === 'fleet-hour') advanceFleetShift(this.save, 3_600, true);
+    if (action === 'fleet-eight-hours') {
+      if (this.save.fleet.activeShift) this.save.fleet.activeShift.scheduledEndAt = new Date(Date.parse(this.save.fleet.activeShift.lastSimulatedAt) + 8 * 3_600_000).toISOString();
+      advanceFleetShift(this.save, 8 * 3_600, true);
+    }
+    if (action === 'follow-fleet') this.toggleFleetFollow();
+    if (action === 'force-fuel') {
+      const assigned = this.save.fleet.vehicles.find((candidate) => candidate.id === this.save.fleet.activeShift?.vehicleId || candidate.controllerType === 'EMPLOYEE');
+      if (assigned) { assigned.fuel = 0.1; assigned.state = 'out-of-fuel'; }
+    }
+    if (action === 'force-maintenance') {
+      const assigned = this.save.fleet.vehicles.find((candidate) => candidate.id === this.save.fleet.activeShift?.vehicleId || candidate.controllerType === 'EMPLOYEE');
+      if (assigned) { assigned.condition = 30; assigned.maintenanceWear = 100; assigned.state = 'maintenance'; }
+    }
     if (action === 'upgrade-all') {
       Object.keys(this.save.upgrades).forEach((id) => { this.save.upgrades[id as keyof typeof this.save.upgrades] = 3; });
       this.vehicle.setModifiers(upgradeEffects(this.save.upgrades));
@@ -1025,6 +1308,8 @@ export class MainScene extends Phaser.Scene {
     if (action === 'colliders') this.emitToast('Colisores de pista: limite claro das vias.', 'info');
     if (action === 'reset') localStorage.clear();
     refreshProgression(this.save);
+    this.updateMissionVehicleContext();
+    if (action !== 'reset') this.persist();
     this.emitHud();
   }
 
@@ -1054,7 +1339,8 @@ export class MainScene extends Phaser.Scene {
       ? routeDistanceFrom(this.serviceRoute, this.vehicle.position, target)
       : this.mission.remainingDistance(this.vehicle.position);
     const trafficStats = this.traffic?.stats() ?? {
-      total: 0, capacity: 0, buses: 0, utility: 0, stunned: 0, ghosted: 0, deadlockRecoveries: 0, brakeReason: 'clear' as const, stopReason: 'Livre'
+      total: 0, capacity: 0, hardCeiling: GAME_CONFIG.traffic.maximumTerrestrialEntities, reservedSlots: 0,
+      buses: 0, utility: 0, stunned: 0, ghosted: 0, deadlockRecoveries: 0, brakeReason: 'clear' as const, stopReason: 'Livre'
     };
     const nearbyService = this.services?.nearest(this.vehicle.position) ?? null;
     if (this.simulationSeconds >= this.collisionFeedbackUntil) {
@@ -1120,13 +1406,26 @@ export class MainScene extends Phaser.Scene {
       totalSpent: this.save.totalSpent,
       tipsEarned: this.save.tipsEarned,
       driverLevel: this.save.driverLevel,
+      rating: this.save.rating,
+      completedRides: this.save.completedRides,
       goals: { ...this.save.goals },
       regularizationReady: this.save.regularizationReady,
       nearbyService,
       selectedService: this.services?.selected ?? null,
       airTraffic: this.airTraffic?.count() ?? 0,
       trafficCapacity: trafficStats.capacity,
-      serviceLocations: this.services?.locations ?? []
+      trafficHardCeiling: trafficStats.hardCeiling,
+      trafficReservedSlots: trafficStats.reservedSlots,
+      serviceLocations: this.services?.locations ?? [],
+      taxiPoints: this.map?.taxiPoints ?? [],
+      professionalStatus: this.save.professionalStatus,
+      taxiLicense: { ...this.save.taxiLicense },
+      taxiMeter: { ...this.save.taxiMeter },
+      officialTaxiRides: this.save.officialTaxiRides,
+      activeVehicleId: this.save.activeVehicleId,
+      fleet: structuredClone(this.save.fleet),
+      fleetVehicleVisible: this.fleetVehicles?.isVisible() ?? false,
+      totalTerrestrialEntities: Math.min(trafficStats.hardCeiling, trafficStats.total + 1 + (this.fleetVehicles?.isVisible() ? 1 : 0))
     };
     gameEvents.emit('hud', snapshot);
   }
@@ -1160,13 +1459,12 @@ export class MainScene extends Phaser.Scene {
 
   private persist() {
     if (!this.vehicle) return;
-    this.save = writeSave({
-      ...this.save,
-      position: { ...this.vehicle.position },
-      rotation: this.vehicle.rotation,
-      activeMission: this.mission?.snapshot() ?? null,
-      autopilotEnabled: this.autopilotEnabled
-    });
+    this.save.position = { ...this.vehicle.position };
+    this.save.rotation = this.vehicle.rotation;
+    this.save.activeMission = this.mission?.snapshot() ?? null;
+    this.save.autopilotEnabled = this.autopilotEnabled;
+    syncActiveVehicleFromLegacy(this.save);
+    this.save = writeSave(this.save);
     gameEvents.emit('save', this.save);
   }
 
