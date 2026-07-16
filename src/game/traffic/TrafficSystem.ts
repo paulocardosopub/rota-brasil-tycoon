@@ -42,7 +42,7 @@ export class TrafficSystem {
       const edge = current.edges[index % current.edges.length];
       const target = this.nodes.get(edge.to) ?? current;
       const visual = createCarVisual(scene, colors[index % colors.length]);
-      visual.setScale(0.86).setDepth(24);
+      visual.setScale(0.68).setDepth(24);
       this.vehicles.push({ visual, position: { x: current.x, y: current.y }, current, target, previousId: current.id, speed: 0, index });
     }
   }

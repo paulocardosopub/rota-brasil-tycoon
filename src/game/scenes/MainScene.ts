@@ -77,8 +77,13 @@ export class MainScene extends Phaser.Scene {
       }
       this.renderMap(this.map);
       this.vehicle = new VehicleController(this.save.position, this.save.rotation, surface);
-      this.vehicleVisual = createCarVisual(this, 0xc97732, true).setScale(1.12);
+      this.vehicle.alignToRoad(true);
+      this.save.position = { ...this.vehicle.position };
+      this.save.rotation = this.vehicle.rotation;
+      this.vehicleVisual = createCarVisual(this, 0xc97732, true).setScale(0.74);
       this.updateVisualTransform(this.vehicleVisual, this.vehicle.position, this.vehicle.rotation);
+      this.cameraRotation = -this.projectedAngle(this.vehicle.rotation) + Math.PI / 2;
+      this.cameras.main.setRotation(this.cameraRotation);
       this.cameras.main.startFollow(this.vehicleVisual, true, GAME_CONFIG.camera.followLerp, GAME_CONFIG.camera.followLerp);
       this.cameras.main.setZoom(GAME_CONFIG.camera.defaultZoom);
       this.traffic = new TrafficSystem(this, this.map.graph, this.map.signals, this.project, spawn);
@@ -110,7 +115,7 @@ export class MainScene extends Phaser.Scene {
 
     this.traffic.update(dt, this.vehicle.position);
     if (this.traffic.collisionWithPlayer(this.vehicle.position) && time - this.lastCollisionAt > 900) {
-      this.vehicle.speed *= -0.18;
+      this.vehicle.speed *= 0.15;
       this.save.condition = Math.max(0, this.save.condition - 0.35);
       this.lastCollisionAt = time;
       this.emitToast('Batida leve: a condição do Hatch caiu.', 'warning');
@@ -148,7 +153,7 @@ export class MainScene extends Phaser.Scene {
     this.updateVisualTransform(this.vehicleVisual, this.vehicle.position, this.vehicle.rotation);
     if (this.cameraMode === 'follow') {
       const targetRotation = -this.projectedAngle(this.vehicle.rotation) + Math.PI / 2;
-      this.cameraRotation = Phaser.Math.Angle.RotateTo(this.cameraRotation, targetRotation, 0.012);
+      this.cameraRotation = Phaser.Math.Angle.RotateTo(this.cameraRotation, targetRotation, 0.035);
     } else {
       this.cameraRotation = Phaser.Math.Angle.RotateTo(this.cameraRotation, 0, 0.02);
     }
@@ -430,6 +435,7 @@ export class MainScene extends Phaser.Scene {
       distanceRemaining,
       etaSeconds: distanceRemaining / 9,
       headingDelta: Phaser.Math.Angle.Wrap(desiredAngle - this.vehicle.rotation),
+      vehicleHeading: this.vehicle.rotation,
       fps: Math.round(this.game.loop.actualFps),
       redLightWarning: time < this.redLightWarningUntil,
       mission: this.mission.mission,

@@ -16,6 +16,7 @@ const initialHud: HudSnapshot = {
   distanceRemaining: 0,
   etaSeconds: 0,
   headingDelta: 0,
+  vehicleHeading: 0,
   fps: 0,
   redLightWarning: false,
   mission: null,
@@ -56,7 +57,13 @@ export function Hud() {
   const eta = hud.etaSeconds < 60 ? `${Math.max(1, Math.round(hud.etaSeconds))} s` : `${Math.round(hud.etaSeconds / 60)} min`;
 
   return (
-    <div className="hud" data-game-ready={hud.ready ? 'true' : 'false'} data-vehicle-name={hud.ready ? 'Hatch 1998' : ''}>
+    <div
+      className="hud"
+      data-game-ready={hud.ready ? 'true' : 'false'}
+      data-vehicle-name={hud.ready ? 'Hatch 1998' : ''}
+      data-speed-kmh={hud.speedKmh.toFixed(2)}
+      data-vehicle-heading={hud.vehicleHeading.toFixed(4)}
+    >
       <header className="top-hud">
         <div className="brand-chip"><span>RB</span><div><b>Brasília</b><small>Centro • Dia</small></div></div>
         <div className="status-cluster">

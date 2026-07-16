@@ -1,4 +1,4 @@
-# Rota Brasil Tycoon — Playable 0.1.0
+# Rota Brasil Tycoon — Playable 0.1.1
 
 Protótipo realmente jogável no navegador de um tycoon de transporte brasileiro. Você começa com o **Hatch 1998**, busca um passageiro no centro de Brasília, segue uma rota calculada sobre vias reais e recebe pela corrida.
 
@@ -80,7 +80,7 @@ Se ainda não houver remote:
 ```bash
 git init
 git add .
-git commit -m "feat: create playable 0.1.0"
+git commit -m "feat: create playable 0.1.1"
 git branch -M main
 git remote add origin https://github.com/SEU_USUARIO/rota-brasil-tycoon.git
 git push -u origin main

@@ -133,6 +133,7 @@ export interface HudSnapshot {
   distanceRemaining: number;
   etaSeconds: number;
   headingDelta: number;
+  vehicleHeading: number;
   fps: number;
   redLightWarning: boolean;
   mission: MissionSnapshot | null;
