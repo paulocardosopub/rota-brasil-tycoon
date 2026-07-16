@@ -29,8 +29,8 @@ export class GraphRouter {
     return nodes?.map(({ x, y }) => ({ x, y })) ?? [];
   }
 
-  drivingRoute(from: Point, to: Point): Point[] {
-    const nodes = this.findRoute(from, to);
+  drivingRoute(from: Point, to: Point, preferredStartHeading?: number): Point[] {
+    const nodes = this.findRoute(from, to, preferredStartHeading);
     if (!nodes || nodes.length < 2 || !this.roads.size) return nodes?.map(({ x, y }) => ({ x, y })) ?? [];
 
     const segments = nodes.slice(1).map((node, index) => {
@@ -56,9 +56,23 @@ export class GraphRouter {
     return lanePoints;
   }
 
-  private findRoute(from: Point, to: Point): GraphNode[] | null {
-    const start = this.nearest(from);
+  private findRoute(from: Point, to: Point, preferredStartHeading?: number): GraphNode[] | null {
     const goal = this.nearest(to);
+    const starts = Number.isFinite(preferredStartHeading)
+      ? this.directionalStartCandidates(from, preferredStartHeading!)
+      : [this.nearest(from)];
+    for (const start of starts) {
+      const route = this.findRouteBetween(start, goal);
+      if (route) return route;
+    }
+    if (Number.isFinite(preferredStartHeading)) {
+      const nearest = this.nearest(from);
+      if (!starts.some((start) => start.id === nearest.id)) return this.findRouteBetween(nearest, goal);
+    }
+    return null;
+  }
+
+  private findRouteBetween(start: GraphNode, goal: GraphNode): GraphNode[] | null {
     const distances = new Map<string, number>([[start.id, 0]]);
     const previous = new Map<string, string>();
     const visited = new Set<string>();
@@ -93,6 +107,38 @@ export class GraphRouter {
     return ids.reverse().map((id) => this.nodes.get(id)!);
   }
 
+  /**
+   * A position between graph nodes must join the route in the direction the
+   * vehicle is already travelling. Picking the closest node alone can select
+   * the node behind a car on a one-way road and request an illegal U-turn.
+   */
+  private directionalStartCandidates(point: Point, heading: number) {
+    const nearby = [...this.nodes.values()]
+      .map((node) => ({ node, distance: Math.hypot(node.x - point.x, node.y - point.y) }))
+      .sort((a, b) => a.distance - b.distance)
+      .slice(0, 8);
+    const nearestDistance = nearby[0]?.distance ?? 0;
+    return nearby
+      .filter(({ distance }) => distance <= nearestDistance + 45)
+      .map(({ node, distance }) => {
+        const approach = distance > 0.5 ? Math.atan2(node.y - point.y, node.x - point.x) : heading;
+        const approachError = Math.abs(angleDelta(heading, approach));
+        const behindPenalty = Math.cos(approach - heading) < -0.1 ? 90 : 0;
+        const departureError = node.edges.reduce((best, edge) => {
+          const next = this.nodes.get(edge.to);
+          if (!next) return best;
+          const departure = Math.atan2(next.y - node.y, next.x - node.x);
+          return Math.min(best, Math.abs(angleDelta(heading, departure)));
+        }, Math.PI);
+        return {
+          node,
+          score: distance + behindPenalty + approachError * 12 + departureError * 8
+        };
+      })
+      .sort((a, b) => a.score - b.score)
+      .map(({ node }) => node);
+  }
+
   distance(route: Point[]) {
     let total = 0;
     for (let index = 1; index < route.length; index += 1) {
@@ -106,6 +152,10 @@ export class GraphRouter {
       .filter((node) => node.edges.length >= 2 && Math.hypot(node.x, node.y) > minDistanceFromCenter)
       .sort((a, b) => Math.atan2(a.y, a.x) - Math.atan2(b.y, b.x));
   }
+}
+
+function angleDelta(from: number, to: number) {
+  return Math.atan2(Math.sin(to - from), Math.cos(to - from));
 }
 
 type HeapEntry = { id: string; distance: number };

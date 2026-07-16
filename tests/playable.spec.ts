@@ -363,11 +363,20 @@ test('táxi oficial, funcionário e segundo veículo sobrevivem ao recarregament
   await expect.poll(async () => Number(await hud.getAttribute('data-fleet-route-remaining')), { timeout: 10_000 }).toBeGreaterThan(120);
   const targetBefore = await hud.getAttribute('data-fleet-route-target');
   const stopsBefore = await hud.getAttribute('data-fleet-completed-stops');
-  const remainingBefore = Number(await hud.getAttribute('data-fleet-route-remaining'));
-  await expect.poll(async () => Math.abs(Number(await hud.getAttribute('data-fleet-route-remaining')) - remainingBefore), { timeout: 10_000 })
-    .toBeGreaterThan(2);
+  const routeRemainingBefore = Number(await hud.getAttribute('data-fleet-route-path-remaining'));
+  await expect.poll(async () => Number(await hud.getAttribute('data-fleet-route-path-remaining')), { timeout: 10_000 })
+    .toBeLessThan(routeRemainingBefore - 2);
   await expect(hud).toHaveAttribute('data-fleet-route-target', targetBefore!);
   await expect(hud).toHaveAttribute('data-fleet-completed-stops', stopsBefore!);
+
+  await page.getByRole('button', { name: 'Acompanhar veículo' }).click();
+  await expect(hud).toHaveAttribute('data-fleet-vehicle-visible', 'false');
+  await page.getByRole('button', { name: 'Localizar veículo' }).click();
+  await expect(hud).toHaveAttribute('data-fleet-vehicle-visible', 'true');
+  const recreatedRemaining = Number(await hud.getAttribute('data-fleet-route-path-remaining'));
+  await expect.poll(async () => Number(await hud.getAttribute('data-fleet-route-path-remaining')), { timeout: 10_000 })
+    .toBeLessThan(recreatedRemaining - 2);
+  await expect(hud).toHaveAttribute('data-fleet-route-target', targetBefore!);
 
   await expect(page.getByTestId('active-fleet-shift')).toBeVisible();
   await page.getByRole('button', { name: 'Encerrar turno' }).click();

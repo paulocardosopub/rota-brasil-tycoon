@@ -15,4 +15,9 @@ describe('GraphRouter', () => {
   it('não inventa caminho contra mão única', () => {
     expect(router.route({ x: 20, y: 0 }, { x: 0, y: 0 })).toEqual([]);
   });
+
+  it('inicia adiante do veículo em vez de mandar voltar ao nó mais próximo', () => {
+    const route = router.drivingRoute({ x: 4, y: 0 }, { x: 20, y: 0 }, 0);
+    expect(route).toEqual([{ x: 10, y: 0 }, { x: 20, y: 0 }]);
+  });
 });

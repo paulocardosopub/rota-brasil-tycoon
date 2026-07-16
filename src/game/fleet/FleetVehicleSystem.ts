@@ -5,10 +5,12 @@ import type { FleetEmployee, FleetVehicle, PlayerSave, Point, TaxiPoint } from '
 import { createCarVisual } from '../entities/VehicleVisual';
 import { automaticThrottle, missionApproachTargetSpeed } from '../systems/Autopilot';
 import { RoadSurfaceIndex } from '../systems/RoadSurfaceIndex';
+import { advanceActiveRoute, pointAlongRoute, routeRemainingDistance } from '../systems/RouteProgress';
 import { guidanceForRoute } from '../systems/RouteSteeringAssist';
 import { VehicleController } from '../systems/VehicleController';
 import { TrafficSystem } from '../traffic/TrafficSystem';
 import { fleetSimulationLevel } from './FleetService';
+import { FleetRouteHealth, type FleetRecoveryRequest } from './FleetRouteHealth';
 import { buildFleetWaypoints, employeeIdentification, FleetRoutePlan } from './FleetRoutePlan';
 
 type Project = (point: Point) => Point;
@@ -26,8 +28,12 @@ export class FleetVehicleSystem {
   private activeShiftId: string | null = null;
   private route: Point[] = [];
   private readonly routePlan = new FleetRoutePlan();
+  private readonly routeHealth = new FleetRouteHealth();
   private destinationRemaining = 0;
+  private routeRemaining = 0;
   private completedStops = 0;
+  private routeRecoveries = 0;
+  private lastRecoveryReason: string | null = null;
   private identification: string | null = null;
   private stuckSeconds = 0;
   private followEnabled = false;
@@ -62,6 +68,8 @@ export class FleetVehicleSystem {
       this.activeShiftId = null;
       this.identification = null;
       this.destinationRemaining = 0;
+      this.routeRemaining = 0;
+      this.routeHealth.reset();
       this.releaseActiveVehicle();
       return;
     }
@@ -71,6 +79,9 @@ export class FleetVehicleSystem {
       this.routePlan.reset();
       this.route = [];
       this.completedStops = 0;
+      this.routeRecoveries = 0;
+      this.lastRecoveryReason = null;
+      this.routeHealth.reset();
     }
     this.identification = employeeIdentification(employee.name);
 
@@ -108,7 +119,10 @@ export class FleetVehicleSystem {
     return {
       target: target ? { ...target } : null,
       remaining: this.destinationRemaining,
+      routeRemaining: this.routeRemaining,
       completedStops: this.completedStops,
+      recoveries: this.routeRecoveries,
+      lastRecoveryReason: this.lastRecoveryReason,
       identification: this.identification
     };
   }
@@ -138,7 +152,7 @@ export class FleetVehicleSystem {
     if (!this.controller || !this.visual) return;
     this.visual.setVisible(true);
     this.traffic.setReservedSlots(1);
-    this.ensureRoute(vehicle.position);
+    this.ensureRoute(vehicle.position, this.controller.rotation);
     const route = this.route;
     if (route.length < 2) return;
 
@@ -175,14 +189,25 @@ export class FleetVehicleSystem {
       assistanceHeading: guidance.preferredRoadHeading
     }, Math.min(0.05, deltaSeconds), Math.max(0.1, vehicle.fuel));
     this.controller.fuelUsed = 0;
-    this.route = advanceRoute(this.route, this.controller.position);
+    const progress = advanceActiveRoute(this.route, this.controller.position);
+    this.route = progress.route;
+    this.routeRemaining = progress.remainingMeters;
     this.stuckSeconds = targetSpeed > 1.5 && travelled < 0.01 && Math.abs(this.controller.speed) < 0.8
       ? this.stuckSeconds + deltaSeconds
       : 0;
     if (this.stuckSeconds > 2.5) {
-      this.controller.recoverAutopilotToLane(guidance.preferredRoadHeading);
+      this.recoverRoute(target, { reason: 'no-progress', repositionAhead: false });
       this.stuckSeconds = 0;
     }
+    const recovery = this.routeHealth.update({
+      deltaSeconds,
+      deviationMeters: progress.deviationMeters,
+      remainingMeters: progress.remainingMeters,
+      rotation: this.controller.rotation,
+      speedMps: this.controller.speed,
+      shouldBeMoving: targetSpeed > 1.5
+    });
+    if (recovery) this.recoverRoute(target, recovery);
     if (distance <= 9 && Math.abs(this.controller.speed) < 1.2) this.advanceWaypoint(employee, vehicle);
 
     vehicle.position = { ...this.controller.position };
@@ -201,7 +226,7 @@ export class FleetVehicleSystem {
   }
 
   private updateSimplified(vehicle: FleetVehicle, employee: FleetEmployee, deltaSeconds: number) {
-    this.ensureRoute(vehicle.position);
+    this.ensureRoute(vehicle.position, vehicle.rotation);
     let budget = Math.min(2, Math.max(0, deltaSeconds)) * 7.2;
     while (budget > 0 && this.route.length >= 2) {
       const target = this.route[1];
@@ -218,6 +243,7 @@ export class FleetVehicleSystem {
       }
     }
     if (this.route.length < 2) this.advanceWaypoint(employee, vehicle);
+    this.routeRemaining = routeRemainingDistance(this.route, vehicle.position);
     const activeTarget = this.routePlan.current(this.waypoints);
     this.destinationRemaining = activeTarget ? Math.hypot(vehicle.position.x - activeTarget.x, vehicle.position.y - activeTarget.y) : 0;
     vehicle.updatedAt = new Date().toISOString();
@@ -240,24 +266,61 @@ export class FleetVehicleSystem {
     this.route = [];
   }
 
-  private ensureRoute(position: Point) {
+  private ensureRoute(position: Point, preferredHeading: number) {
     if (this.route.length >= 2 || !this.waypoints.length) return;
     for (let attempt = 0; attempt < this.waypoints.length; attempt += 1) {
       const target = this.routePlan.current(this.waypoints)!;
-      this.route = this.router.drivingRoute(position, target);
+      this.route = this.router.drivingRoute(position, target, preferredHeading);
       if (this.route.length >= 2) break;
       if (Math.hypot(position.x - target.x, position.y - target.y) <= 15) {
         this.route = [{ ...position }, { ...target }];
         break;
       }
       this.routePlan.skipUnreachable(this.waypoints.length);
+      this.routeHealth.reset();
     }
+    this.routeRemaining = routeRemainingDistance(this.route, position);
+    this.routeHealth.routeReplanned(this.routeRemaining, preferredHeading);
+  }
+
+  private recoverRoute(target: Point, request: FleetRecoveryRequest) {
+    if (!this.controller) return;
+    this.route = this.router.drivingRoute(this.controller.position, target, this.controller.rotation);
+    if (this.route.length < 2) return;
+
+    const guidance = guidanceForRoute(
+      this.controller.position,
+      this.controller.rotation,
+      this.controller.speed,
+      this.route,
+      GAME_CONFIG.vehicle.autopilotCruiseSpeedMps * 0.88,
+      GAME_CONFIG.vehicle.brakeMps2
+    );
+    if (request.repositionAhead) {
+      const ahead = Math.min(10, Math.max(4, routeRemainingDistance(this.route, this.controller.position) * 0.08));
+      const anchor = pointAlongRoute(this.route, ahead);
+      const headingPoint = pointAlongRoute(this.route, ahead + 5);
+      const heading = Math.atan2(headingPoint.y - anchor.y, headingPoint.x - anchor.x);
+      this.controller.teleport(anchor);
+      this.controller.recoverAutopilotToLane(heading);
+      this.route = this.router.drivingRoute(this.controller.position, target, heading);
+    } else {
+      this.controller.recoverAutopilotToLane(guidance.preferredRoadHeading);
+}
+    const progress = advanceActiveRoute(this.route, this.controller.position);
+    this.route = progress.route;
+    this.routeRemaining = progress.remainingMeters;
+    this.routeHealth.recoveryApplied(progress.remainingMeters, this.controller.rotation);
+    this.routeRecoveries += 1;
+    this.lastRecoveryReason = request.reason;
   }
 
   private advanceWaypoint(employee: FleetEmployee, vehicle: FleetVehicle) {
     this.route = [];
     const nextStage = this.routePlan.arrive(this.waypoints.length);
     this.completedStops += 1;
+    this.routeRemaining = 0;
+    this.routeHealth.reset();
     employee.state = nextStage === 'to-destination' ? 'with-passenger' : 'seeking-trip';
     vehicle.state = nextStage === 'to-destination' ? 'on-trip' : 'employee-driving';
   }
@@ -332,17 +395,4 @@ export class FleetVehicleSystem {
     this.activeVehicleId = null;
     this.route = [];
   }
-}
-
-function advanceRoute(route: Point[], position: Point) {
-  if (route.length < 2) return route;
-  let closest = 0;
-  let closestDistance = Number.POSITIVE_INFINITY;
-  for (let index = 0; index < Math.min(route.length, 16); index += 1) {
-    const distance = Math.hypot(position.x - route[index].x, position.y - route[index].y);
-    if (distance < closestDistance) { closest = index; closestDistance = distance; }
-  }
-  if (closestDistance >= 20) return route;
-  const remaining = route.slice(closest + 1);
-  return [{ ...position }, ...(remaining.length ? remaining : [{ ...route[route.length - 1] }])];
 }
