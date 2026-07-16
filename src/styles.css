@@ -98,6 +98,25 @@ button { color: inherit; }
 .receipt-card { position: absolute; right: 18px; top: 177px; width: 300px; border-radius: 20px; padding: 17px; display: grid; grid-template-columns: auto 1fr; gap: 12px; animation: panel-in .25s ease-out; }.receipt-success { width: 45px; height: 45px; border-radius: 50%; display: grid; place-items: center; background: #28cc9e; color: #073629; font-size: 22px; font-weight: 900; }.receipt-card small { color: #65d8ba; font-size: 8px; font-weight: 800; letter-spacing: .12em; }.receipt-card h2 { margin: 1px 0; font-size: 25px; }.receipt-card p { margin: 0; font-size: 9px; color: #91a8b7; }.receipt-card .autopilot-wait { grid-column: 1/-1; color: #5addb8; font-size: 10px; font-weight: 800; text-align: center; }.receipt-card dl { grid-column: 1/-1; margin: 2px 0; }.receipt-card dl div { display: flex; justify-content: space-between; font-size: 9px; padding: 4px 0; border-bottom: 1px solid #ffffff0b; }.receipt-card dt { color: #839bab; }.receipt-card dd { margin: 0; font-weight: 700; }.receipt-card .primary-button { grid-column: 1/-1; padding: 11px; font-size: 10px; }
 .dev-panel { position: absolute; right: 18px; bottom: 90px; width: 330px; padding: 16px; border-radius: 16px; z-index: 70; }.dev-panel > button { position: absolute; right: 9px; top: 8px; border: 0; background: transparent; cursor: pointer; }.dev-panel h3 { margin: 0 0 10px; font-size: 12px; }.dev-panel > div { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; }.dev-panel > div button { border: 1px solid #ffffff13; background: #ffffff08; border-radius: 7px; padding: 7px; font-size: 8px; cursor: pointer; }
 .dev-metrics { color: #8fd3e8; font-size: 8px; line-height: 1.6; }
+.money { border: 0; background: transparent; color: inherit; text-align: left; cursor: pointer; position: relative; }
+.money em { color: #ff9a86; font-size: 7px; font-style: normal; }
+.vehicle-vitals em.critical { background: #ff5f68; animation: pulse .65s infinite alternate; }
+.ride-offer { pointer-events: auto; position: absolute; left: 18px; top: 158px; width: min(390px, calc(100vw - 36px)); padding: 12px; display: grid; grid-template-columns: 1fr auto auto; gap: 8px; align-items: center; border-radius: 14px; background: linear-gradient(145deg, #0b2234f2, #071722f0); border: 1px solid #55d7b755; box-shadow: 0 10px 35px #06121c66; }
+.ride-offer div { display: grid; min-width: 0; }.ride-offer small { color: #55d7b7; font-size: 8px; font-weight: 900; text-transform: uppercase; }.ride-offer b { font-size: 14px; }.ride-offer span, .ride-offer em { color: #9bb0bc; font-size: 8px; font-style: normal; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }.ride-offer em { color: #f2c14e; font-weight: 800; }
+.ghost-button { border: 1px solid #ffffff22; background: #ffffff08; color: #b9c8d1; border-radius: 10px; padding: 10px 12px; font-size: 9px; font-weight: 800; cursor: pointer; }
+.fuel-warning { position: absolute; top: 170px; right: 122px; padding: 6px 9px; background: #b26c1dea; border-radius: 8px; font-size: 8px; font-weight: 900; }.fuel-warning.critical { background: #bc3344ed; animation: pulse .7s infinite alternate; }
+.service-nearby { pointer-events: auto; position: absolute; top: 202px; right: 18px; border: 1px solid #f2c14e66; background: #172837ed; color: #f2c14e; border-radius: 10px; padding: 8px 11px; font-size: 8px; font-weight: 900; cursor: pointer; }
+.game-panel { max-height: min(70vh, 620px); overflow: auto; scrollbar-width: thin; }
+.offer-details, .cash-summary { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; margin-bottom: 12px; }.offer-details span, .cash-summary span { display: grid; background: #ffffff08; border-radius: 8px; padding: 8px; font-size: 9px; }.offer-details small { color: #7e98a8; font-size: 7px; }
+.panel-actions { display: flex; gap: 7px; margin-top: 12px; }
+.upgrade-list, .service-list, .service-actions, .goal-list, .ledger-list { display: grid; gap: 6px; margin-top: 11px; }
+.upgrade-list > div { display: flex; justify-content: space-between; align-items: center; padding: 8px; background: #ffffff08; border-radius: 9px; }.upgrade-list span { display: grid; }.upgrade-list small { color: #7f98a8; font-size: 8px; }.upgrade-list button, .service-actions button { border: 1px solid #55d7b733; background: #55d7b711; color: #76e2c2; padding: 7px 9px; border-radius: 8px; font-size: 8px; font-weight: 800; cursor: pointer; }.upgrade-list button:disabled { opacity: .38; cursor: default; }
+.goal-list { grid-template-columns: 1fr 1fr; }.goal-list span { padding: 7px; border-radius: 8px; background: #ffffff07; color: #839aa8; font-size: 8px; }.goal-list span.done { color: #65ddb9; background: #2bd1a311; }
+.regularization { margin-top: 12px; padding: 11px; border: 1px dashed #ffffff20; border-radius: 10px; display: grid; }.regularization b { font-size: 9px; }.regularization small { color: #829aa9; font-size: 8px; margin-top: 3px; }.regularization.ready { border-color: #55d7b788; background: #34d3a415; color: #73e8c5; }
+.service-list button { display: grid; text-align: left; border: 1px solid #ffffff12; background: #ffffff07; border-radius: 9px; padding: 9px; cursor: pointer; }.service-list button.active { border-color: #f2c14e77; background: #f2c14e12; }.service-list small { color: #7f98a8; font-size: 7px; margin-top: 2px; }.service-actions { grid-template-columns: 1fr 1fr; }.service-actions h3 { grid-column: 1/-1; font-size: 10px; margin: 5px 0; }
+.confirm-strip { position: sticky; bottom: -1px; margin: 14px -12px -12px; padding: 11px; border-radius: 12px; background: #112c3bf7; border: 1px solid #f2c14e55; display: grid; grid-template-columns: 1fr auto auto; align-items: center; gap: 7px; z-index: 5; }.confirm-strip b { font-size: 9px; }
+.cash-summary b { color: #72e2b7; }.ledger-list span { display: grid; grid-template-columns: 36px 1fr auto; align-items: center; border-bottom: 1px solid #ffffff0d; padding: 6px 2px; font-size: 8px; }.ledger-list i { color: #718a99; font-style: normal; }.ledger-list em { color: #ff9f87; font-style: normal; font-weight: 800; }.ledger-list em.income { color: #6be1b9; }
+.receipt-positive { color: #65ddb9 !important; }.receipt-penalty { color: #ffab91 !important; }
 .mobile-controls { display: none; }
 
 @keyframes spin { to { transform: rotate(360deg); } }
@@ -118,6 +137,12 @@ button { color: inherit; }
 @media (max-width: 560px) and (orientation: portrait) {
   .start-card h1 { font-size: 48px; }.button-row { grid-template-columns: 1fr 1fr; }.button-row button:last-child { grid-column: 1/-1; }
   .vehicle-vitals > div:nth-child(2) { display: none; }.top-hud .icon-button:nth-last-child(2) { display: none; }.objective-card { top: 61px; padding: 8px; }.objective-icon { flex-basis: 35px; height: 35px; }.objective-card strong { font-size: 10px; }.speedometer { top: 61px; height: 64px; }.speedometer strong { font-size: 25px; }.money small { display: none; }.bottom-nav { width: calc(100vw - 10px); }.bottom-nav button { min-width: 0; }.mobile-controls { bottom: 65px; }.game-panel { bottom: 64px; }.red-warning { top: 137px; font-size: 8px; }
+}
+@media (max-width: 560px) {
+  .ride-offer { top: 151px; left: 8px; width: calc(100vw - 16px); grid-template-columns: 1fr auto; }.ride-offer .ghost-button { grid-column: 2; }.ride-offer .primary-button { grid-row: 1; grid-column: 2; }
+  .fuel-warning { top: 132px; right: 8px; }.service-nearby { top: 165px; right: 8px; }
+  .game-panel { bottom: 82px; max-height: 66vh; padding: 18px; }.goal-list { grid-template-columns: 1fr 1fr; }
+  .confirm-strip { grid-template-columns: 1fr 1fr; }.confirm-strip b { grid-column: 1/-1; }
 }
 
 @media (pointer: fine) and (min-width: 901px) { .mobile-controls { display: none; } }

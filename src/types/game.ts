@@ -1,4 +1,10 @@
-export type MissionPhase = 'pickup' | 'passenger-on-board' | 'completed' | 'cancelled';
+export type MissionPhase = 'offered' | 'pickup' | 'passenger-on-board' | 'completed' | 'cancelled';
+export type RideCategory = 'popular' | 'urgent' | 'comfort';
+export type TransactionKind = 'income' | 'expense' | 'debt' | 'adjustment';
+export type TransactionCategory =
+  | 'ride' | 'tip' | 'fuel' | 'repair' | 'upgrade' | 'fine' | 'reposition' | 'emergency' | 'dev';
+export type VehicleUpgradeId = 'engine' | 'brakes' | 'tires' | 'suspension' | 'economy' | 'comfort';
+export type ServiceCategory = 'fuel' | 'workshop' | 'garage';
 
 export interface Point {
   x: number;
@@ -73,6 +79,50 @@ export interface CityMapData {
   signals: MapSignal[];
   busStops: BusStop[];
   buildings: MapBuilding[];
+  services: MapServiceLocation[];
+}
+
+export interface MapServiceLocation {
+  id: string;
+  category: ServiceCategory;
+  realName: string;
+  gameName: string;
+  lat: number;
+  lon: number;
+  sourceType: 'node' | 'way' | 'adapted-building';
+  sourceId: string;
+  buildingId: string;
+  address: string;
+  entrance: Point & { lat: number; lon: number; graphNodeId: string };
+  stopPoint: Point & { lat: number; lon: number };
+  accessRoad: string;
+  sideOfRoad: string;
+  confidence: 'high' | 'medium';
+  functionFictional: boolean;
+}
+
+export interface FareQuote {
+  baseFare: number;
+  distanceFare: number;
+  timeFare: number;
+  demandMultiplier: number;
+  categoryMultiplier: number;
+  difficultyMultiplier: number;
+  conditionMultiplier: number;
+  comfortBonus: number;
+  ratingBonus: number;
+  urgencyBonus: number;
+  guaranteedTotal: number;
+  estimatedDistanceKm: number;
+  estimatedMinutes: number;
+}
+
+export interface RideQuality {
+  collisions: number;
+  redLights: number;
+  deviationSeconds: number;
+  aggressiveSeconds: number;
+  startedAt: string;
 }
 
 export interface MissionSnapshot {
@@ -85,6 +135,14 @@ export interface MissionSnapshot {
   destinationLabel: string;
   distanceTravelled: number;
   elapsedSeconds: number;
+  category?: RideCategory;
+  region?: string;
+  deadlineSeconds?: number;
+  offerExpiresAt?: string;
+  pickupDistanceKm?: number;
+  requirements?: string[];
+  quote?: FareQuote;
+  quality?: RideQuality;
 }
 
 export interface Receipt {
@@ -97,7 +155,53 @@ export interface Receipt {
   total: number;
   xp: number;
   rating: number;
+  guaranteedTotal?: number;
+  qualityBonus?: number;
+  penalties?: number;
+  tip?: number;
+  positives?: string[];
+  penaltyReasons?: string[];
 }
+
+export interface LedgerTransaction {
+  id: string;
+  kind: TransactionKind;
+  category: TransactionCategory;
+  amount: number;
+  balanceBefore: number;
+  balanceAfter: number;
+  createdAt: string;
+  rideId?: string;
+  origin: string;
+  metadata: Record<string, string | number | boolean>;
+  idempotencyKey: string;
+}
+
+export interface RideHistoryEntry {
+  id: string;
+  passengerName: string;
+  category: RideCategory;
+  total: number;
+  tip: number;
+  rating: number;
+  distanceKm: number;
+  completedAt: string;
+}
+
+export interface DriverGoals {
+  firstRide: boolean;
+  fiveRides: boolean;
+  collisionFreeRide: boolean;
+  firstTip: boolean;
+  firstRefuel: boolean;
+  firstWorkshop: boolean;
+  firstUpgrade: boolean;
+  rating45: boolean;
+  tenKm: boolean;
+  thousandReais: boolean;
+}
+
+export type UpgradeLevels = Record<VehicleUpgradeId, number>;
 
 export interface PlayerSave {
   saveVersion: number;
@@ -114,6 +218,21 @@ export interface PlayerSave {
   settings: PlayerSettings;
   activeMission: MissionSnapshot | null;
   autopilotEnabled: boolean;
+  ledger: LedgerTransaction[];
+  debts: number;
+  upgrades: UpgradeLevels;
+  collisionDamage: number;
+  maintenanceWear: number;
+  totalKm: number;
+  totalEarned: number;
+  totalSpent: number;
+  tipsEarned: number;
+  driverLevel: number;
+  ratingHistory: number[];
+  rideHistory: RideHistoryEntry[];
+  goals: DriverGoals;
+  regularizationReady: boolean;
+  visitedServices: string[];
 }
 
 export type Quality = 'automatic' | 'low' | 'medium' | 'high';
@@ -172,4 +291,21 @@ export interface HudSnapshot {
   routeRecalculations: number;
   mission: MissionSnapshot | null;
   receipt: Receipt | null;
+  ledger: LedgerTransaction[];
+  debts: number;
+  upgrades: UpgradeLevels;
+  maintenanceWear: number;
+  collisionDamage: number;
+  totalKm: number;
+  totalEarned: number;
+  totalSpent: number;
+  tipsEarned: number;
+  driverLevel: number;
+  goals: DriverGoals;
+  regularizationReady: boolean;
+  nearbyService: MapServiceLocation | null;
+  selectedService: MapServiceLocation | null;
+  airTraffic: number;
+  trafficCapacity: number;
+  serviceLocations: MapServiceLocation[];
 }

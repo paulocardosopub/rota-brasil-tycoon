@@ -1,4 +1,5 @@
-import type { CameraZoom, HudSnapshot, PlayerSave, Quality, TrafficDensity } from '../types/game';
+import type { CameraZoom, HudSnapshot, PlayerSave, Quality, TrafficDensity, VehicleUpgradeId } from '../types/game';
+import type { WorkshopServiceId } from './economy/ExpenseCalculator';
 
 export type GameCommand =
   | { type: 'mobile-input'; throttle: number; steering: number; handbrake: boolean }
@@ -12,6 +13,14 @@ export type GameCommand =
   | { type: 'set-audio'; enabled: boolean; masterVolume?: number; engineVolume?: number; effectsVolume?: number }
   | { type: 'cancel-ride' }
   | { type: 'dismiss-receipt' }
+  | { type: 'accept-ride' }
+  | { type: 'reject-ride' }
+  | { type: 'navigate-service'; serviceId: string }
+  | { type: 'clear-service-route' }
+  | { type: 'buy-fuel'; liters: number | 'full'; requestId: string }
+  | { type: 'workshop-service'; service: WorkshopServiceId; requestId: string }
+  | { type: 'buy-upgrade'; upgrade: VehicleUpgradeId; requestId: string }
+  | { type: 'pay-debt'; value: number; requestId: string }
   | { type: 'dev'; action: string };
 
 type GameEvents = {

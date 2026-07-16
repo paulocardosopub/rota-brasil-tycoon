@@ -1,8 +1,8 @@
 import { COLLISION_PHYSICS, VEHICLE_PHYSICS } from './vehiclePhysics';
 
 export const GAME_CONFIG = {
-  version: '0.4.0',
-  saveVersion: 2,
+  version: '0.5.0',
+  saveVersion: 3,
   map: {
     city: 'Brasília',
     district: 'Rodoviária do Plano Piloto e Eixo Monumental',
@@ -17,7 +17,7 @@ export const GAME_CONFIG = {
   },
   initialPlayer: {
     money: 100,
-    fuel: 18,
+    fuel: 1,
     condition: 70,
     xp: 0,
     rating: 5,
@@ -60,9 +60,9 @@ export const GAME_CONFIG = {
     ]
   },
   traffic: {
-    npcVehicleCount: 26,
-    npcBusCount: 4,
-    npcUtilityCount: 5,
+    npcVehicleCount: 260,
+    npcBusCount: 40,
+    npcUtilityCount: 50,
     npcSpeedMps: 8.5,
     safetyDistanceMeters: 9,
     collisionStunSeconds: COLLISION_PHYSICS.npcStunSeconds,
@@ -70,7 +70,7 @@ export const GAME_CONFIG = {
     autopilotHeadOnDeadlockSeconds: 0.45,
     collisionCooldownSeconds: COLLISION_PHYSICS.cooldownSeconds,
     collision: COLLISION_PHYSICS,
-    densityMultipliers: { low: 0.45, medium: 0.72, high: 1, automatic: 1 },
+    densityMultipliers: { low: 0.18, medium: 0.48, high: 1, automatic: 1 },
     signal: { greenSeconds: 12, yellowSeconds: 3, allRedSeconds: 1 },
     redLightPenalty: 2
   },
@@ -85,6 +85,29 @@ export const GAME_CONFIG = {
     key: 'rota-brasil-tycoon-save',
     backupKey: 'rota-brasil-tycoon-save-backup',
     corruptKey: 'rota-brasil-tycoon-save-corrupt',
-    autosaveMs: 5_000
+    autosaveMs: 5_000,
+    ledgerLimit: 240,
+    rideHistoryLimit: 50
+  },
+  services: {
+    interactionRadiusMeters: 15,
+    maximumInteractionSpeedKmh: 4,
+    fuelPricePerLiter: 5.79,
+    emergencyFuelLiters: 3,
+    emergencyFuelFee: 28
+  },
+  progression: {
+    xpPerLevel: 180,
+    regularization: {
+      completedRides: 15,
+      driverLevel: 4,
+      rating: 4.25,
+      totalKm: 18,
+      money: 250
+    }
+  },
+  environment: {
+    aircraftCount: 7,
+    helicopterCount: 3
   }
 } as const;

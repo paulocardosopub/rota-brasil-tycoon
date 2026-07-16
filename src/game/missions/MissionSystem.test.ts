@@ -57,4 +57,16 @@ describe('progresso da rota', () => {
     expect(mission.update({ x: 0, y: 0 }, 6, 0.1, 0, 5)).toBeNull();
     expect(mission.update({ x: 0, y: 0 }, 6, 0.1, 0, 5, 12, 8)).toBe('completed');
   });
+
+  it('mostra a distância roteada até a busca enquanto a corrida ainda é uma oferta', () => {
+    const mission = missionWithRoute([]);
+    mission.mission = {
+      id: 'offer-distance', passengerName: 'Teste', phase: 'offered',
+      pickup: { x: 10, y: 0 }, destination: { x: 20, y: 0 },
+      pickupLabel: 'Origem', destinationLabel: 'Destino',
+      distanceTravelled: 0, elapsedSeconds: 0, pickupDistanceKm: 0.42
+    };
+
+    expect(mission.remainingDistance({ x: 0, y: 0 })).toBe(420);
+  });
 });

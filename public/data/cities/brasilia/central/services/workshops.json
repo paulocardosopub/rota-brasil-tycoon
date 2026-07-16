@@ -1,0 +1,20 @@
+[
+  {
+    "id": "workshop-shn-central",
+    "category": "workshop",
+    "realName": "Edificação comercial GDF 0120IV5D0031",
+    "gameName": "Oficina Central do Eixo",
+    "lat": -15.78971,
+    "lon": -47.8862,
+    "sourceType": "adapted-building",
+    "sourceId": "1528290104",
+    "buildingId": "1528290104",
+    "address": "Setor Hoteleiro Norte, Quadra 2, Brasília, DF",
+    "entrance": { "lat": -15.7896545, "lon": -47.886075, "x": -414.613, "y": -505.437, "graphNodeId": "1531823830" },
+    "stopPoint": { "lat": -15.789625, "lon": -47.88618, "x": -425.847, "y": -508.717 },
+    "accessRoad": "OSM way 658928044 e acesso pedonal 139784386",
+    "sideOfRoad": "lado oeste do acesso interno do SHN",
+    "confidence": "medium",
+    "functionFictional": true
+  }
+]

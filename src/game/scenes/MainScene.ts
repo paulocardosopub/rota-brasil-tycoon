@@ -3,7 +3,7 @@ import { GAME_CONFIG } from '../../config/gameConfig';
 import { loadCityMap } from '../../map/loadCityMap';
 import { GraphRouter } from '../../map/routing/GraphRouter';
 import { visibleRoadWidth } from '../../map/routing/roadRules';
-import type { CollisionSeverity, CityMapData, HudSnapshot, MapSignal, PlayerSave, Point } from '../../types/game';
+import type { CollisionSeverity, CityMapData, HudSnapshot, MapServiceLocation, MapSignal, PlayerSave, Point } from '../../types/game';
 import { gameEvents, type GameCommand } from '../events';
 import { createCarVisual, createPassengerVisual } from '../entities/VehicleVisual';
 import { MissionSystem } from '../missions/MissionSystem';
@@ -14,6 +14,13 @@ import { VehicleController, type VehicleInput } from '../systems/VehicleControll
 import { TrafficSystem } from '../traffic/TrafficSystem';
 import { writeSave } from '../../services/storage/saveService';
 import { GameAudio } from '../audio/GameAudio';
+import { EconomyService } from '../economy/EconomyService';
+import { fuelPurchaseCost, upgradeEffects, upgradePrice, workshopPrice, type WorkshopServiceId } from '../economy/ExpenseCalculator';
+import { ECONOMY_CONFIG } from '../economy/EconomyConfig';
+import { ServiceSystem } from '../services/ServiceSystem';
+import { AirTrafficSystem } from '../environment/AirTrafficSystem';
+import { refreshProgression } from '../progression/DriverProgression';
+import { simulateEconomy } from '../economy/EconomySimulator';
 
 type SignalVisual = { signal: MapSignal; graphics: Phaser.GameObjects.Graphics };
 
@@ -24,6 +31,11 @@ export class MainScene extends Phaser.Scene {
   private vehicleVisual?: Phaser.GameObjects.Container;
   private traffic?: TrafficSystem;
   private mission?: MissionSystem;
+  private services?: ServiceSystem;
+  private airTraffic?: AirTrafficSystem;
+  private serviceRoute: Point[] = [];
+  private serviceArrived = false;
+  private emergencyFuelGranted = false;
   private routeGraphics?: Phaser.GameObjects.Graphics;
   private passengerVisual?: Phaser.GameObjects.Container;
   private destinationVisual?: Phaser.GameObjects.Container;
@@ -106,6 +118,7 @@ export class MainScene extends Phaser.Scene {
       }
       this.renderMap(this.map);
       this.vehicle = new VehicleController(this.save.position, this.save.rotation, surface);
+      this.vehicle.setModifiers(upgradeEffects(this.save.upgrades));
       this.vehicle.alignToRoad(true);
       this.save.position = { ...this.vehicle.position };
       this.save.rotation = this.vehicle.rotation;
@@ -117,7 +130,13 @@ export class MainScene extends Phaser.Scene {
       this.cameras.main.setZoom(GAME_CONFIG.camera.zoomPresets[this.save.settings.cameraZoom]);
       this.traffic = new TrafficSystem(this, this.map.graph, this.map.roads, this.map.signals, this.project, spawn);
       this.traffic.setDensity(this.save.settings.trafficDensity);
-      this.mission = new MissionSystem(this.router, this.vehicle.position, this.save.completedRides, this.save.activeMission);
+      this.mission = new MissionSystem(this.router, this.vehicle.position, this.save.completedRides, this.save.activeMission, {
+        condition: this.save.condition,
+        comfortLevel: this.save.upgrades.comfort,
+        rating: this.save.rating
+      });
+      this.services = new ServiceSystem(this, this.map.services, this.project);
+      this.airTraffic = new AirTrafficSystem(this);
       this.routeGraphics = this.add.graphics().setDepth(18);
       this.passengerVisual = createPassengerVisual(this).setPosition(0, 0);
       this.destinationVisual = this.createDestinationMarker().setVisible(false);
@@ -142,8 +161,10 @@ export class MainScene extends Phaser.Scene {
       this.pendingSimulationSeconds -= dt;
       simulationSteps += 1;
     }
+    this.services?.update(this.simulationSeconds);
+    this.airTraffic?.update(Math.min(0.1, delta / 1000), this.simulationSeconds);
 
-    if (this.mission.mission.phase !== 'completed' && time - this.lastRouteUpdate > 500) {
+    if ((this.mission.mission.phase !== 'completed' || this.services?.selected) && time - this.lastRouteUpdate > 500) {
       this.drawRoute();
       this.lastRouteUpdate = time;
     }
@@ -167,7 +188,10 @@ export class MainScene extends Phaser.Scene {
       this.repositionProgress = Math.min(1, this.repositionProgress + delta / 1000 / GAME_CONFIG.vehicle.repositionHoldSeconds);
       if (this.repositionProgress >= 1) {
         this.vehicle.reposition();
-        this.save.money = Math.max(0, this.save.money - GAME_CONFIG.vehicle.repositionFee);
+        new EconomyService(this.save).expense(
+          GAME_CONFIG.vehicle.repositionFee, 'reposition', 'Reposicionamento seguro',
+          `reposition-${Math.floor(this.simulationSeconds)}`, true
+        );
         this.repositionConsumed = true;
         this.emitToast('Hatch reposicionado em segurança • taxa R$ 1,00.', 'info');
         this.persist();
@@ -185,12 +209,26 @@ export class MainScene extends Phaser.Scene {
     const input = this.readInput();
     this.audio.update(this.vehicle.speed, input.throttle, input.handbrake || input.throttle < 0, this.save.settings);
     const previousPosition = { ...this.vehicle.position };
-    const previousConditionDamage = this.vehicle.conditionDamage;
     const travelled = this.vehicle.update(input, dt, this.save.fuel);
     const fuelDelta = this.vehicle.fuelUsed;
     this.vehicle.fuelUsed = 0;
     this.save.fuel = Math.max(0, this.save.fuel - fuelDelta);
-    this.save.condition = Math.max(0, this.save.condition - (this.vehicle.conditionDamage - previousConditionDamage));
+    this.save.totalKm += travelled / 1000;
+    const aggressive = Math.abs(input.steering) > 0.72 && Math.abs(this.vehicle.speed) > 12
+      || Math.abs(input.throttle) > 0.9 && Math.abs(this.vehicle.speed) > 18;
+    this.save.maintenanceWear = Math.min(100, this.save.maintenanceWear
+      + travelled / 1000 * ECONOMY_CONFIG.wear.perKilometer * (aggressive ? ECONOMY_CONFIG.wear.aggressiveMultiplier : 1));
+    this.save.condition = vehicleCondition(this.save.collisionDamage, this.save.maintenanceWear);
+    if (this.save.fuel <= 0.0001 && !this.emergencyFuelGranted) {
+      new EconomyService(this.save).expense(
+        GAME_CONFIG.services.emergencyFuelFee, 'emergency', 'Combustível de emergência',
+        `emergency-fuel-${Math.floor(this.simulationSeconds)}`, true,
+        { liters: GAME_CONFIG.services.emergencyFuelLiters }
+      );
+      this.save.fuel = GAME_CONFIG.services.emergencyFuelLiters;
+      this.emergencyFuelGranted = true;
+      this.emitToast('Socorro abasteceu 3 L. A taxa entrou no caixa ou na dívida.', 'warning');
+    } else if (this.save.fuel > 5) this.emergencyFuelGranted = false;
 
     const trafficUpdate = this.traffic.update(
       dt,
@@ -221,7 +259,9 @@ export class MainScene extends Phaser.Scene {
     if (collision.impact) {
       if (collision.resolvedPosition) this.vehicle.resolveCollision(collision.resolvedPosition);
       this.vehicle.speed *= collision.retainedSpeed;
-      this.save.condition = Math.max(0, this.save.condition - collision.conditionDamage);
+      this.save.collisionDamage = Math.min(100, this.save.collisionDamage + collision.conditionDamage);
+      this.save.condition = vehicleCondition(this.save.collisionDamage, this.save.maintenanceWear);
+      this.mission.recordCollision();
       this.collisionEvents += 1;
       this.collisionSeverity = collision.severity;
       this.collisionRelativeSpeedKmh = collision.relativeSpeedKmh;
@@ -231,7 +271,11 @@ export class MainScene extends Phaser.Scene {
       this.emitToast(collisionMessage(collision.severity, collision.relativeSpeedKmh), collision.severity === 'contact' ? 'info' : 'warning');
     }
     if (!collision.impact && this.traffic.checkPlayerRedLight(previousPosition, this.vehicle.position, Math.abs(this.vehicle.speed))) {
-      this.save.money = Math.max(0, this.save.money - GAME_CONFIG.traffic.redLightPenalty);
+      new EconomyService(this.save).expense(
+        GAME_CONFIG.traffic.redLightPenalty, 'fine', 'Infração de sinal vermelho',
+        `red-light-${Math.floor(this.simulationSeconds / 3)}`
+      );
+      this.mission.recordRedLight();
       this.redLightWarningUntil = time + 3_500;
       this.audio.signal();
       this.emitToast('Sinal vermelho avançado: -R$ 2,00', 'warning');
@@ -251,10 +295,30 @@ export class MainScene extends Phaser.Scene {
       this.emitToast(`${this.mission.mission.passengerName}: ${this.pickLine(GAME_CONFIG.mission.pickupLines)}`, 'success');
       this.syncMissionVisuals();
     } else if (missionEvent === 'completed' && this.mission.receipt) {
-      this.save.money += this.mission.receipt.total;
+      const receipt = this.mission.receipt;
+      const tip = receipt.tip ?? 0;
+      const economy = new EconomyService(this.save);
+      economy.income(receipt.total - tip, 'ride', 'Pagamento de corrida', `ride-payment-${this.mission.mission.id}`, this.mission.mission.id, {
+        category: this.mission.mission.category ?? 'popular', rating: receipt.rating
+      });
+      if (tip > 0) economy.income(tip, 'tip', 'Gorjeta do passageiro', `ride-tip-${this.mission.mission.id}`, this.mission.mission.id);
       this.save.xp += this.mission.receipt.xp;
-      this.save.rating = this.mission.receipt.rating;
+      this.save.rating = Math.round((this.save.rating * 0.82 + receipt.rating * 0.18) * 100) / 100;
       this.save.completedRides += 1;
+      this.save.tipsEarned += tip;
+      this.save.ratingHistory = [...this.save.ratingHistory, receipt.rating].slice(-30);
+      this.save.rideHistory = [{
+        id: this.mission.mission.id,
+        passengerName: this.mission.mission.passengerName,
+        category: this.mission.mission.category ?? 'popular',
+        total: receipt.total,
+        tip,
+        rating: receipt.rating,
+        distanceKm: receipt.distanceKm,
+        completedAt: new Date().toISOString()
+      }, ...this.save.rideHistory].slice(0, GAME_CONFIG.storage.rideHistoryLimit);
+      if ((this.mission.mission.quality?.collisions ?? 0) === 0) this.save.goals.collisionFreeRide = true;
+      refreshProgression(this.save);
       this.traffic.clearPlayerDrivingAdvice();
       if (this.autopilotEnabled) this.autopilotNextMissionAt = time + GAME_CONFIG.mission.newRideDelayMs;
       this.emitToast(
@@ -274,12 +338,13 @@ export class MainScene extends Phaser.Scene {
       && time >= this.autopilotNextMissionAt
     ) {
       this.mission.next(this.vehicle.position, this.save.completedRides);
+      this.mission.accept(this.vehicle.position);
       this.autopilotNextMissionAt = 0;
       this.syncMissionVisuals();
       this.emitToast('Nova corrida recomendada aceita. Indo buscar o cliente.', 'success');
     }
 
-    if (this.mission.mission.phase !== 'completed') {
+    if (!this.services?.selected && (this.mission.mission.phase === 'pickup' || this.mission.mission.phase === 'passenger-on-board')) {
       const routeDeviation = this.mission.advanceRoute(this.vehicle.position);
       this.offRouteSeconds = routeDeviation > 28 ? this.offRouteSeconds + dt : 0;
       if (this.offRouteSeconds > 2.5) {
@@ -289,9 +354,25 @@ export class MainScene extends Phaser.Scene {
         this.emitToast('Rota recalculada: retomando o caminho principal.', 'info');
       }
     }
+    this.mission.recordDrivingQuality(dt, this.offRouteSeconds > 0, aggressive);
+
+    if (this.services?.selected && this.serviceRoute.length) {
+      const serviceDistance = Math.hypot(
+        this.vehicle.position.x - this.services.selected.stopPoint.x,
+        this.vehicle.position.y - this.services.selected.stopPoint.y
+      );
+      this.serviceRoute = advanceRoutePoints(this.serviceRoute, this.vehicle.position);
+      if (serviceDistance <= GAME_CONFIG.services.interactionRadiusMeters && Math.abs(this.vehicle.speed) * 3.6 <= GAME_CONFIG.services.maximumInteractionSpeedKmh) {
+        this.serviceRoute = [];
+        if (!this.serviceArrived) {
+          this.serviceArrived = true;
+          this.emitToast(`Chegou a ${this.services.selected.gameName}. Escolha e confirme o serviço.`, 'success');
+        }
+      }
+    }
 
     const shouldRecoverStuckAutopilot = this.autopilotEnabled
-      && this.mission.mission.phase !== 'completed'
+      && this.activeRoute().length >= 2
       && input.throttle > 0.15
       && this.save.fuel > 0
       && Math.abs(this.vehicle.speed) < 1.2
@@ -303,7 +384,7 @@ export class MainScene extends Phaser.Scene {
         this.vehicle.position,
         this.vehicle.rotation,
         this.vehicle.speed,
-        this.mission.route,
+        this.activeRoute(),
         GAME_CONFIG.vehicle.autopilotCruiseSpeedMps,
         GAME_CONFIG.vehicle.brakeMps2
       );
@@ -338,23 +419,30 @@ export class MainScene extends Phaser.Scene {
     }
 
     if (this.autopilotEnabled && this.vehicle && this.mission && this.traffic) {
-      const routeAvailable = this.mission.route.length >= 2;
+      if (this.mission.mission.phase === 'offered' && !this.services?.selected) {
+        this.mission.accept(this.vehicle.position);
+        this.syncMissionVisuals();
+      }
+      const activeRoute = this.activeRoute();
+      const routeAvailable = activeRoute.length >= 2;
       const advice = this.traffic.playerDrivingAdvice(
         this.vehicle.position,
         this.vehicle.rotation,
         Math.abs(this.vehicle.speed),
-        this.mission.route
+        activeRoute
       );
       const phase = this.mission.mission.phase;
-      const missionDistance = this.mission.targetDistance(this.vehicle.position);
-      const insideArrivalArea = missionDistance <= GAME_CONFIG.mission.autopilotInteractionRadiusMeters;
-      const missionTargetSpeed = phase === 'completed'
+      const navigationDistance = this.navigationDistance();
+      const arrivalRadius = this.services?.selected ? GAME_CONFIG.services.interactionRadiusMeters : GAME_CONFIG.mission.autopilotInteractionRadiusMeters;
+      const insideArrivalArea = navigationDistance <= arrivalRadius;
+      const navigationCompleted = phase === 'completed' && !this.services?.selected;
+      const missionTargetSpeed = navigationCompleted
         ? 0
         : insideArrivalArea
           ? 0
         : missionApproachTargetSpeed(
-          missionDistance,
-          GAME_CONFIG.mission.autopilotInteractionRadiusMeters,
+          navigationDistance,
+          arrivalRadius,
           GAME_CONFIG.vehicle.brakeMps2,
           GAME_CONFIG.vehicle.autopilotCruiseSpeedMps
         );
@@ -363,7 +451,7 @@ export class MainScene extends Phaser.Scene {
           this.vehicle.position,
           this.vehicle.rotation,
           this.vehicle.speed,
-          this.mission.route,
+          activeRoute,
           GAME_CONFIG.vehicle.autopilotCruiseSpeedMps,
           GAME_CONFIG.vehicle.brakeMps2
         )
@@ -372,7 +460,7 @@ export class MainScene extends Phaser.Scene {
         ? Math.min(advice.targetSpeed, missionTargetSpeed, guidance.targetSpeedMps)
         : 0;
       this.autopilotTargetSpeedKmh = Math.max(0, targetSpeed) * 3.6;
-      this.autopilotState = phase === 'completed'
+      this.autopilotState = navigationCompleted
         ? 'waiting'
         : this.simulationSeconds < this.autopilotCollisionRecoveryUntil
           ? 'recovering'
@@ -399,6 +487,24 @@ export class MainScene extends Phaser.Scene {
       handbrake,
       assistanceEnabled: false
     };
+  }
+
+  private activeRoute() {
+    return this.services?.selected ? this.serviceRoute : this.mission?.route ?? [];
+  }
+
+  private navigationTarget(): Point {
+    if (this.services?.selected) return this.services.selected.stopPoint;
+    if (!this.mission) return this.vehicle?.position ?? { x: 0, y: 0 };
+    return this.mission.mission.phase === 'passenger-on-board'
+      ? this.mission.mission.destination
+      : this.mission.mission.pickup;
+  }
+
+  private navigationDistance() {
+    if (!this.vehicle) return 0;
+    const target = this.navigationTarget();
+    return Math.hypot(this.vehicle.position.x - target.x, this.vehicle.position.y - target.y);
   }
 
   private renderMap(map: CityMapData) {
@@ -550,17 +656,20 @@ export class MainScene extends Phaser.Scene {
   private drawRoute() {
     if (!this.routeGraphics || !this.mission) return;
     this.routeGraphics.clear();
-    const route = this.mission.route;
+    const route = this.activeRoute();
     if (route.length < 2) return;
+    const serviceNavigation = Boolean(this.services?.selected);
     this.routeGraphics.lineStyle(2.25, 0x0c2e38, 0.55);
     this.strokeRoad(this.routeGraphics, route);
-    this.routeGraphics.lineStyle(1.15, this.mission.mission.phase === 'pickup' ? 0x3fe0a6 : 0x51c9ff, 0.98);
+    this.routeGraphics.lineStyle(1.15, serviceNavigation ? 0xf2c14e : this.mission.mission.phase === 'pickup' ? 0x3fe0a6 : 0x51c9ff, 0.98);
     this.strokeRoad(this.routeGraphics, route);
-    const routeColor = this.mission.mission.phase === 'pickup' ? 0x3fe0a6 : 0x51c9ff;
+    const routeColor = serviceNavigation ? 0xf2c14e : this.mission.mission.phase === 'pickup' ? 0x3fe0a6 : 0x51c9ff;
     this.drawRouteArrows(this.routeGraphics, route, routeColor);
-    const target = this.mission.mission.phase === 'pickup' ? this.mission.mission.pickup : this.mission.mission.destination;
+    const target = this.navigationTarget();
     const projectedTarget = this.project(target);
-    const radius = this.mission.mission.phase === 'pickup'
+    const radius = serviceNavigation
+      ? GAME_CONFIG.services.interactionRadiusMeters
+      : this.mission.mission.phase === 'pickup'
       ? GAME_CONFIG.mission.interactionRadiusMeters
       : GAME_CONFIG.mission.autopilotInteractionRadiusMeters;
     this.routeGraphics.lineStyle(0.45, routeColor, 0.65).strokeCircle(projectedTarget.x, projectedTarget.y, radius);
@@ -623,12 +732,14 @@ export class MainScene extends Phaser.Scene {
       this.autopilotStuckSeconds = 0;
       if (this.autopilotEnabled) {
         this.mobileInput = { throttle: 0, steering: 0, handbrake: false };
-        const guidance = this.vehicle && this.mission && this.mission.route.length >= 2
+        if (this.vehicle && this.mission?.mission.phase === 'offered' && !this.services?.selected) this.mission.accept(this.vehicle.position);
+        const route = this.activeRoute();
+        const guidance = this.vehicle && route.length >= 2
           ? guidanceForRoute(
             this.vehicle.position,
             this.vehicle.rotation,
             this.vehicle.speed,
-            this.mission.route,
+            route,
             GAME_CONFIG.vehicle.autopilotCruiseSpeedMps,
             GAME_CONFIG.vehicle.brakeMps2
           )
@@ -688,7 +799,10 @@ export class MainScene extends Phaser.Scene {
     }
     if (command.type === 'cancel-ride' && this.mission) {
       const penalized = this.mission.cancel();
-      if (penalized) this.save.money = Math.max(0, this.save.money - GAME_CONFIG.fare.cancellationPenalty);
+      if (penalized) new EconomyService(this.save).expense(
+        GAME_CONFIG.fare.cancellationPenalty, 'fine', 'Cancelamento após embarque',
+        `cancel-${this.mission.mission.id}`
+      );
       this.emitToast(penalized ? 'Corrida cancelada: -R$ 3,00' : 'Corrida cancelada.', 'warning');
       this.mission.next(this.vehicle?.position ?? { x: 0, y: 0 }, this.save.completedRides + 1);
       this.syncMissionVisuals();
@@ -700,24 +814,189 @@ export class MainScene extends Phaser.Scene {
       this.syncMissionVisuals();
       return;
     }
+    if (command.type === 'accept-ride' && this.mission && this.vehicle) {
+      if (this.mission.accept(this.vehicle.position)) {
+        this.emitToast('Corrida aceita. Siga até o embarque.', 'success');
+        this.syncMissionVisuals();
+      }
+      return;
+    }
+    if (command.type === 'reject-ride' && this.mission && this.vehicle) {
+      if (this.mission.reject(this.vehicle.position, this.save.completedRides)) {
+        this.emitToast('Oferta recusada. Nova corrida recomendada.', 'info');
+        this.syncMissionVisuals();
+      }
+      return;
+    }
+    if (command.type === 'navigate-service') {
+      this.navigateToService(command.serviceId);
+      return;
+    }
+    if (command.type === 'clear-service-route') {
+      this.resumeAfterService();
+      return;
+    }
+    if (command.type === 'buy-fuel') {
+      this.buyFuel(command.liters, command.requestId);
+      return;
+    }
+    if (command.type === 'workshop-service') {
+      this.performWorkshopService(command.service, command.requestId);
+      return;
+    }
+    if (command.type === 'buy-upgrade') {
+      this.buyUpgrade(command.upgrade, command.requestId);
+      return;
+    }
+    if (command.type === 'pay-debt') {
+      const result = new EconomyService(this.save).settleDebt(command.value, command.requestId);
+      this.emitToast(result.applied ? 'Dívida reduzida e registrada no caixa.' : 'Não foi possível pagar esse valor.', result.applied ? 'success' : 'warning');
+      if (result.applied) this.persist();
+      return;
+    }
     if (command.type === 'dev') this.handleDevAction(command.action);
+  }
+
+  private navigateToService(serviceId: string) {
+    if (!this.services || !this.router || !this.vehicle) return;
+    const location = this.services.select(serviceId);
+    if (!location) return;
+    const toEntrance = this.router.drivingRoute(this.vehicle.position, location.entrance);
+    this.serviceRoute = [...toEntrance, location.stopPoint];
+    this.serviceArrived = false;
+    this.drawRoute();
+    this.emitToast(`Rota traçada até ${location.gameName}. O piloto pode levar você, mas não compra serviços.`, 'info');
+  }
+
+  private activeNearbyService(category: MapServiceLocation['category']) {
+    if (!this.services || !this.vehicle) return null;
+    const location = this.services.nearest(this.vehicle.position, category);
+    const speedKmh = Math.abs(this.vehicle.speed) * 3.6;
+    if (!location || speedKmh > GAME_CONFIG.services.maximumInteractionSpeedKmh) {
+      this.emitToast('Entre no local indicado e pare o Hatch para usar o serviço.', 'warning');
+      return null;
+    }
+    return location;
+  }
+
+  private buyFuel(requestedLiters: number | 'full', requestId: string) {
+    const location = this.activeNearbyService('fuel');
+    if (!location) return;
+    const capacity = GAME_CONFIG.vehicle.fuelCapacityLiters;
+    const liters = requestedLiters === 'full'
+      ? capacity - this.save.fuel
+      : Math.min(Math.max(0, requestedLiters), capacity - this.save.fuel);
+    if (liters < 0.05) { this.emitToast('O tanque já está cheio.', 'info'); return; }
+    const cost = fuelPurchaseCost(liters);
+    const result = new EconomyService(this.save).expense(cost, 'fuel', location.gameName, requestId, false, { liters: Math.round(liters * 100) / 100 });
+    if (!result.applied) { this.emitToast(result.reason === 'duplicate' ? 'Abastecimento já registrado.' : 'Saldo insuficiente para esse abastecimento.', 'warning'); return; }
+    this.save.fuel = Math.min(capacity, this.save.fuel + liters);
+    this.save.visitedServices = [...new Set([...this.save.visitedServices, location.id])];
+    refreshProgression(this.save);
+    this.emitToast(`Abastecimento concluído: ${liters.toFixed(1)} L.`, 'success');
+    this.resumeAfterService();
+    this.persist();
+  }
+
+  private performWorkshopService(service: WorkshopServiceId, requestId: string) {
+    const location = this.activeNearbyService('workshop');
+    if (!location) return;
+    const cost = workshopPrice(service, this.save.condition, this.save.maintenanceWear);
+    const emergency = this.save.condition <= 0 && service !== 'diagnosis';
+    const result = new EconomyService(this.save).expense(cost, 'repair', location.gameName, requestId, emergency, { service });
+    if (!result.applied) { this.emitToast(result.reason === 'duplicate' ? 'Serviço já registrado.' : 'Saldo insuficiente para esse reparo.', 'warning'); return; }
+    if (service === 'quick') { this.save.collisionDamage = Math.max(0, this.save.collisionDamage - 8); this.save.maintenanceWear = Math.max(0, this.save.maintenanceWear - 3); }
+    if (service === 'partial') { this.save.collisionDamage = Math.max(0, this.save.collisionDamage - 22); this.save.maintenanceWear = Math.max(0, this.save.maintenanceWear - 10); }
+    if (service === 'full') { this.save.collisionDamage = 0; this.save.maintenanceWear = 0; }
+    if (service === 'preventive') this.save.maintenanceWear = Math.max(0, this.save.maintenanceWear - 28);
+    this.save.condition = vehicleCondition(this.save.collisionDamage, this.save.maintenanceWear);
+    this.save.visitedServices = [...new Set([...this.save.visitedServices, location.id])];
+    refreshProgression(this.save);
+    this.emitToast(service === 'diagnosis' ? `Diagnóstico: condição ${Math.round(this.save.condition)}%, desgaste ${Math.round(this.save.maintenanceWear)}%.` : 'Serviço concluído e salvo.', 'success');
+    this.resumeAfterService();
+    this.persist();
+  }
+
+  private buyUpgrade(upgrade: keyof PlayerSave['upgrades'], requestId: string) {
+    const location = this.activeNearbyService('garage');
+    if (!location || !this.vehicle) return;
+    const price = upgradePrice(upgrade, this.save.upgrades);
+    if (price === null) { this.emitToast('Essa melhoria já está no nível máximo.', 'info'); return; }
+    const requiredLevel = ECONOMY_CONFIG.upgrades[upgrade].requirement[this.save.upgrades[upgrade]];
+    if (this.save.driverLevel < requiredLevel) { this.emitToast(`Requer nível ${requiredLevel} de motorista.`, 'warning'); return; }
+    const nextLevel = this.save.upgrades[upgrade] + 1;
+    const result = new EconomyService(this.save).expense(price, 'upgrade', location.gameName, requestId, false, { upgrade, level: nextLevel });
+    if (!result.applied) { this.emitToast(result.reason === 'duplicate' ? 'Melhoria já registrada.' : 'Saldo insuficiente para essa melhoria.', 'warning'); return; }
+    this.save.upgrades[upgrade] = nextLevel;
+    this.vehicle.setModifiers(upgradeEffects(this.save.upgrades));
+    refreshProgression(this.save);
+    this.emitToast(`${ECONOMY_CONFIG.upgrades[upgrade].name} agora está no nível ${nextLevel}.`, 'success');
+    this.resumeAfterService();
+    this.persist();
+  }
+
+  private resumeAfterService() {
+    this.services?.clearSelection();
+    this.serviceRoute = [];
+    this.serviceArrived = false;
+    if (this.vehicle && this.mission) {
+      if (this.autopilotEnabled && this.mission.mission.phase === 'offered') this.mission.accept(this.vehicle.position);
+      this.mission.recalculate(this.vehicle.position);
+    }
+    this.syncMissionVisuals();
   }
 
   private handleDevAction(action: string) {
     if (!import.meta.env.DEV || !this.vehicle || !this.mission || !this.traffic) return;
-    if (action === 'money-add') this.save.money += 1_000;
-    if (action === 'money-remove') this.save.money = Math.max(0, this.save.money - 100);
+    if (action === 'money-add') new EconomyService(this.save).income(1_000, 'dev', 'Painel dev', `dev-money-add-${Date.now()}`);
+    if (action === 'money-remove') new EconomyService(this.save).expense(100, 'dev', 'Painel dev', `dev-money-remove-${Date.now()}`);
+    if (action === 'fuel-zero') this.save.fuel = 0;
     if (action === 'refuel') this.save.fuel = GAME_CONFIG.vehicle.fuelCapacityLiters;
-    if (action === 'repair') this.save.condition = 100;
-    if (action === 'teleport-pickup') this.vehicle.teleport(this.mission.mission.pickup);
+    if (action === 'damage') this.save.collisionDamage = Math.min(100, this.save.collisionDamage + 25);
+    if (action === 'wear') this.save.maintenanceWear = Math.min(100, this.save.maintenanceWear + 25);
+    if (action === 'repair') { this.save.collisionDamage = 0; this.save.maintenanceWear = 0; }
+    this.save.condition = vehicleCondition(this.save.collisionDamage, this.save.maintenanceWear);
+    if (action === 'teleport-pickup') {
+      if (this.mission.mission.phase === 'offered') this.mission.accept(this.vehicle.position);
+      this.vehicle.teleport(this.mission.mission.pickup);
+    }
     if (action === 'teleport-destination') this.vehicle.teleport(this.mission.mission.destination);
+    if (action === 'service-entry' && this.services?.selected) {
+      this.vehicle.teleport(this.services.selected.entrance);
+      this.serviceRoute = [this.services.selected.entrance, this.services.selected.stopPoint];
+      this.serviceArrived = false;
+    }
     if (action === 'complete') {
+      if (this.mission.mission.phase === 'offered') this.mission.accept(this.vehicle.position);
       if (this.mission.mission.phase === 'pickup') this.vehicle.teleport(this.mission.mission.pickup);
       else this.vehicle.teleport(this.mission.mission.destination);
     }
     if (action === 'generate') {
       this.mission.next(this.vehicle.position, this.save.completedRides + 1);
       this.syncMissionVisuals();
+    }
+    if (action === 'offer-urgent') {
+      this.mission.next(this.vehicle.position, this.save.completedRides + 1);
+      this.mission.mission.category = 'urgent';
+      this.syncMissionVisuals();
+    }
+    if (action === 'rating') this.save.rating = 5;
+    if (action === 'xp') this.save.xp += 500;
+    if (action === 'goals') Object.keys(this.save.goals).forEach((goal) => { this.save.goals[goal as keyof typeof this.save.goals] = true; });
+    if (action === 'regularization') {
+      this.save.completedRides = 20; this.save.xp = 1_000; this.save.rating = 4.8; this.save.totalKm = 30;
+      new EconomyService(this.save).income(1_000, 'dev', 'Regularização dev', `dev-regularization-${Date.now()}`);
+      refreshProgression(this.save);
+    }
+    if (action === 'debt') new EconomyService(this.save).expense(250, 'emergency', 'Dívida dev', `dev-debt-${Date.now()}`, true);
+    if (action === 'upgrade-all') {
+      Object.keys(this.save.upgrades).forEach((id) => { this.save.upgrades[id as keyof typeof this.save.upgrades] = 3; });
+      this.vehicle.setModifiers(upgradeEffects(this.save.upgrades));
+    }
+    if (action.startsWith('simulate-')) {
+      const rides = Number(action.split('-')[1]);
+      const result = simulateEconomy('average', rides);
+      this.emitToast(`Simulação ${rides}: saldo ${result.balance.toFixed(2)}, lucro ${result.profit.toFixed(2)}.`, 'info');
     }
     if (action === 'traffic') this.traffic.enabled = !this.traffic.enabled;
     if (action === 'signals') this.traffic.signalsEnabled = !this.traffic.signalsEnabled;
@@ -745,6 +1024,7 @@ export class MainScene extends Phaser.Scene {
     }
     if (action === 'colliders') this.emitToast('Colisores de pista: limite claro das vias.', 'info');
     if (action === 'reset') localStorage.clear();
+    refreshProgression(this.save);
     this.emitHud();
   }
 
@@ -766,13 +1046,17 @@ export class MainScene extends Phaser.Scene {
 
   private emitHud(time = 0) {
     if (!this.vehicle || !this.mission) return;
+    refreshProgression(this.save);
     const phase = this.mission.mission.phase;
-    const target = phase === 'pickup' ? this.mission.mission.pickup : this.mission.mission.destination;
+    const target = this.navigationTarget();
     const desiredAngle = Math.atan2(target.y - this.vehicle.position.y, target.x - this.vehicle.position.x);
-    const distanceRemaining = this.mission.remainingDistance(this.vehicle.position);
+    const distanceRemaining = this.services?.selected
+      ? routeDistanceFrom(this.serviceRoute, this.vehicle.position, target)
+      : this.mission.remainingDistance(this.vehicle.position);
     const trafficStats = this.traffic?.stats() ?? {
-      total: 0, buses: 0, utility: 0, stunned: 0, ghosted: 0, deadlockRecoveries: 0, brakeReason: 'clear' as const, stopReason: 'Livre'
+      total: 0, capacity: 0, buses: 0, utility: 0, stunned: 0, ghosted: 0, deadlockRecoveries: 0, brakeReason: 'clear' as const, stopReason: 'Livre'
     };
+    const nearbyService = this.services?.nearest(this.vehicle.position) ?? null;
     if (this.simulationSeconds >= this.collisionFeedbackUntil) {
       this.collisionSeverity = null;
       this.collisionRelativeSpeedKmh = 0;
@@ -785,7 +1069,11 @@ export class MainScene extends Phaser.Scene {
       fuel: this.save.fuel,
       fuelCapacity: GAME_CONFIG.vehicle.fuelCapacityLiters,
       condition: this.save.condition,
-      objective: phase === 'pickup'
+      objective: this.services?.selected
+        ? `${this.serviceArrived ? 'Parado em' : 'Siga para'} ${this.services.selected.gameName}`
+        : phase === 'offered'
+          ? `Nova oferta de ${this.mission.mission.passengerName}`
+        : phase === 'pickup'
         ? `Busque ${this.mission.mission.passengerName} • ${this.mission.mission.pickupLabel}`
         : phase === 'passenger-on-board'
           ? `Leve até ${this.mission.mission.destinationLabel}`
@@ -821,7 +1109,24 @@ export class MainScene extends Phaser.Scene {
       repositionProgress: this.repositionProgress,
       routeRecalculations: this.routeRecalculations,
       mission: this.mission.mission,
-      receipt: this.mission.receipt
+      receipt: this.mission.receipt,
+      ledger: this.save.ledger,
+      debts: this.save.debts,
+      upgrades: { ...this.save.upgrades },
+      maintenanceWear: this.save.maintenanceWear,
+      collisionDamage: this.save.collisionDamage,
+      totalKm: this.save.totalKm,
+      totalEarned: this.save.totalEarned,
+      totalSpent: this.save.totalSpent,
+      tipsEarned: this.save.tipsEarned,
+      driverLevel: this.save.driverLevel,
+      goals: { ...this.save.goals },
+      regularizationReady: this.save.regularizationReady,
+      nearbyService,
+      selectedService: this.services?.selected ?? null,
+      airTraffic: this.airTraffic?.count() ?? 0,
+      trafficCapacity: trafficStats.capacity,
+      serviceLocations: this.services?.locations ?? []
     };
     gameEvents.emit('hud', snapshot);
   }
@@ -876,4 +1181,35 @@ function collisionMessage(severity: CollisionSeverity | null, relativeSpeedKmh: 
   if (severity === 'light') return `Batida leve a ${speed} km/h relativos.`;
   if (severity === 'moderate') return `Colisão moderada a ${speed} km/h relativos: dirija com cuidado.`;
   return `Colisão severa a ${speed} km/h relativos: o Hatch sofreu danos.`;
+}
+
+function vehicleCondition(collisionDamage: number, maintenanceWear: number) {
+  return Math.max(0, Math.min(100, 100 - collisionDamage - maintenanceWear * 0.45));
+}
+
+function advanceRoutePoints(route: Point[], position: Point) {
+  if (route.length < 2) return route;
+  let bestIndex = 0;
+  let bestDistance = Number.POSITIVE_INFINITY;
+  for (let index = 0; index < Math.min(route.length - 1, 18); index += 1) {
+    const a = route[index];
+    const b = route[index + 1];
+    const dx = b.x - a.x;
+    const dy = b.y - a.y;
+    const lengthSq = dx * dx + dy * dy;
+    if (!lengthSq) continue;
+    const t = Math.max(0, Math.min(1, ((position.x - a.x) * dx + (position.y - a.y) * dy) / lengthSq));
+    const distance = Math.hypot(position.x - (a.x + dx * t), position.y - (a.y + dy * t));
+    if (distance < bestDistance) { bestDistance = distance; bestIndex = index; }
+  }
+  return bestDistance <= 28 ? [{ ...position }, ...route.slice(bestIndex + 1)] : route;
+}
+
+function routeDistanceFrom(route: Point[], position: Point, target: Point) {
+  if (!route.length) return Math.hypot(position.x - target.x, position.y - target.y);
+  let distance = Math.hypot(position.x - route[0].x, position.y - route[0].y);
+  for (let index = 0; index < route.length - 1; index += 1) {
+    distance += Math.hypot(route[index + 1].x - route[index].x, route[index + 1].y - route[index].y);
+  }
+  return distance;
 }

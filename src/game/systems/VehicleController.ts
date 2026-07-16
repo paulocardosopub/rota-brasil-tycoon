@@ -10,6 +10,15 @@ export interface VehicleInput {
   assistanceHeading?: number;
 }
 
+export interface VehicleModifiers {
+  maxSpeedMultiplier: number;
+  accelerationMultiplier: number;
+  brakingMultiplier: number;
+  steeringMultiplier: number;
+  offRoadMultiplier: number;
+  fuelMultiplier: number;
+}
+
 export class VehicleController {
   position: Point;
   rotation: number;
@@ -20,6 +29,10 @@ export class VehicleController {
   minimumAutopilotRoadClearance = Number.POSITIVE_INFINITY;
   private safePosition: Point;
   private safeRotation: number;
+  private modifiers: VehicleModifiers = {
+    maxSpeedMultiplier: 1, accelerationMultiplier: 1, brakingMultiplier: 1,
+    steeringMultiplier: 1, offRoadMultiplier: 1, fuelMultiplier: 1
+  };
 
   constructor(position: Point, rotation: number, private readonly roads: RoadSurfaceIndex) {
     this.position = { ...position };
@@ -33,11 +46,11 @@ export class VehicleController {
     const previous = { ...this.position };
     const canAccelerate = fuel > 0;
     if (input.throttle > 0 && canAccelerate) {
-      const acceleration = this.speed < -0.35 ? config.brakeMps2 : config.accelerationMps2 * (1 - Math.max(0, this.speed) / config.maxSpeedMps * 0.3);
+      const acceleration = this.speed < -0.35 ? config.brakeMps2 * this.modifiers.brakingMultiplier : config.accelerationMps2 * this.modifiers.accelerationMultiplier * (1 - Math.max(0, this.speed) / (config.maxSpeedMps * this.modifiers.maxSpeedMultiplier) * 0.3);
       this.speed += input.throttle * acceleration * deltaSeconds;
     }
     if (input.throttle < 0) {
-      if (this.speed > 0.35) this.speed += input.throttle * config.brakeMps2 * deltaSeconds;
+      if (this.speed > 0.35) this.speed += input.throttle * config.brakeMps2 * this.modifiers.brakingMultiplier * deltaSeconds;
       else if (canAccelerate) this.speed += input.throttle * config.reverseAccelerationMps2 * deltaSeconds;
     }
     if (!input.throttle) {
@@ -48,14 +61,14 @@ export class VehicleController {
       const braking = config.handbrakeMps2 * deltaSeconds;
       this.speed = Math.abs(this.speed) <= braking ? 0 : this.speed - Math.sign(this.speed) * braking;
     }
-    this.speed = Math.max(-config.maxReverseMps, Math.min(config.maxSpeedMps, this.speed));
+    this.speed = Math.max(-config.maxReverseMps, Math.min(config.maxSpeedMps * this.modifiers.maxSpeedMultiplier, this.speed));
 
     const speedRatio = Math.min(1, Math.abs(this.speed) / config.maxSpeedMps);
     const lowSpeedGrip = config.steeringLowSpeedGrip
       + Math.min(1, Math.abs(this.speed) / config.steeringGripSpeedMps) * (1 - config.steeringLowSpeedGrip);
     const highSpeedStability = 1 - speedRatio * config.steeringHighSpeedReduction;
     const reverseDirection = this.speed < 0 ? -1 : 1;
-    const steeringRate = config.steeringRadiansPerSecond * lowSpeedGrip * highSpeedStability
+    const steeringRate = config.steeringRadiansPerSecond * this.modifiers.steeringMultiplier * lowSpeedGrip * highSpeedStability
       * (input.handbrake ? config.handbrakeSteeringMultiplier : 1);
     const steering = Math.abs(input.steering) < config.steeringCenterDeadzone ? 0 : input.steering;
     this.rotation += steering * steeringRate * reverseDirection * deltaSeconds;
@@ -129,7 +142,7 @@ export class VehicleController {
     if (outsideReliableAsphalt) {
       const speedMagnitude = Math.abs(this.speed);
       const resistance = speedMagnitude > config.offRoadMaxSpeedMps
-        ? config.offRoadBrakingMps2
+        ? config.offRoadBrakingMps2 / this.modifiers.offRoadMultiplier
         : config.offRoadResistance;
       this.speed -= Math.sign(this.speed) * Math.min(speedMagnitude, resistance * deltaSeconds);
     } else if (road && road.unionSurfaceDistance < -0.4) {
@@ -142,8 +155,14 @@ export class VehicleController {
     }
 
     const travelled = Math.hypot(this.position.x - previous.x, this.position.y - previous.y);
-    this.fuelUsed += config.idleFuelLitersPerSecond * deltaSeconds + travelled * config.movingFuelLitersPerMeter;
+    const accelerationLoad = input.throttle > 0.7 ? 1.08 : 1;
+    const highSpeedLoad = Math.abs(this.speed) > config.maxSpeedMps * 0.72 ? 1.08 : 1;
+    this.fuelUsed += (config.idleFuelLitersPerSecond * deltaSeconds + travelled * config.movingFuelLitersPerMeter * accelerationLoad * highSpeedLoad) * this.modifiers.fuelMultiplier;
     return travelled;
+  }
+
+  setModifiers(modifiers: VehicleModifiers) {
+    this.modifiers = { ...modifiers };
   }
 
   alignToRoad(snapToCenter = false, preferredHeading = this.rotation) {

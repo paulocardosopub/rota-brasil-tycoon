@@ -1,0 +1,20 @@
+[
+  {
+    "id": "garage-shs-hatch",
+    "category": "garage",
+    "realName": "Edificação de apoio GDF 0137II2B0066",
+    "gameName": "Garagem do Hatch",
+    "lat": -15.79464,
+    "lon": -47.88879,
+    "sourceType": "adapted-building",
+    "sourceId": "1528581506",
+    "buildingId": "1528581506",
+    "address": "Setor Hoteleiro Sul, Quadra 3, Brasília, DF",
+    "entrance": { "lat": -15.7946958, "lon": -47.8891575, "x": -744.43, "y": 55.13, "graphNodeId": "984930862" },
+    "stopPoint": { "lat": -15.79472, "lon": -47.88888, "x": -714.739, "y": 57.821 },
+    "accessRoad": "OSM way 84830170 (highway=service, SHS Quadra 2)",
+    "sideOfRoad": "lado norte da alça de serviço do SHS",
+    "confidence": "medium",
+    "functionFictional": true
+  }
+]

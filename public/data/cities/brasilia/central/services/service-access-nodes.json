@@ -1,0 +1,6 @@
+[
+  { "serviceId": "fuel-shn-br", "entranceGraphNodeId": "1531823830", "exitGraphNodeId": "1531823830", "accessWayId": "658928044" },
+  { "serviceId": "fuel-shs-imperial", "entranceGraphNodeId": "984930863", "exitGraphNodeId": "984930863", "accessWayId": "124699928" },
+  { "serviceId": "workshop-shn-central", "entranceGraphNodeId": "1531823830", "exitGraphNodeId": "1531823830", "accessWayId": "658928044" },
+  { "serviceId": "garage-shs-hatch", "entranceGraphNodeId": "984930862", "exitGraphNodeId": "984930862", "accessWayId": "84830170" }
+]
