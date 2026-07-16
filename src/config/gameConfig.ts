@@ -1,5 +1,5 @@
 export const GAME_CONFIG = {
-  version: '0.3.1',
+  version: '0.3.2',
   saveVersion: 1,
   map: {
     city: 'Brasília',
@@ -22,7 +22,6 @@ export const GAME_CONFIG = {
     offRoadMaxSpeedMps: 8,
     autopilotCruiseSpeedMps: 16,
     autopilotRecoverySpeedMps: 3.5,
-    autopilotRoadMarginMeters: 0.25,
     autopilotRoadRecoveryRadiansPerSecond: 3.2,
     steeringRadiansPerSecond: 2.65,
     steeringAssistRadiansPerSecond: 0.9,

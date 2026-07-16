@@ -8,7 +8,7 @@ import { gameEvents, type GameCommand } from '../events';
 import { createCarVisual, createPassengerVisual } from '../entities/VehicleVisual';
 import { MissionSystem } from '../missions/MissionSystem';
 import { RoadSurfaceIndex } from '../systems/RoadSurfaceIndex';
-import { steeringForRoute } from '../systems/RouteSteeringAssist';
+import { guidanceForRoute } from '../systems/RouteSteeringAssist';
 import { automaticThrottle, missionApproachTargetSpeed } from '../systems/Autopilot';
 import { VehicleController, type VehicleInput } from '../systems/VehicleController';
 import { TrafficSystem } from '../traffic/TrafficSystem';
@@ -43,6 +43,7 @@ export class MainScene extends Phaser.Scene {
   private autopilotEnabled = false;
   private autopilotNextMissionAt = 0;
   private autopilotCollisionRecoveryUntil = 0;
+  private autopilotStuckSeconds = 0;
   private redLightWarningUntil = 0;
   private unsubscribe?: () => void;
   private save: PlayerSave;
@@ -170,14 +171,14 @@ export class MainScene extends Phaser.Scene {
       this.autopilotEnabled
     );
     if (trafficUpdate.autopilotDeadlockRecovery) {
-      this.vehicle.recoverAutopilotToLane();
+      this.vehicle.recoverAutopilotToLane(input.assistanceHeading);
       this.mission.recalculate(this.vehicle.position);
       this.syncMissionVisuals();
       this.autopilotCollisionRecoveryUntil = this.simulationSeconds + GAME_CONFIG.traffic.autopilotCollisionGhostSeconds;
     }
     const collision = this.traffic.handlePlayerCollision(this.vehicle.position, this.autopilotEnabled);
     if (collision.autopilotRecovery) {
-      this.vehicle.recoverAutopilotToLane();
+      this.vehicle.recoverAutopilotToLane(input.assistanceHeading);
       this.mission.recalculate(this.vehicle.position);
       this.syncMissionVisuals();
       this.autopilotCollisionRecoveryUntil = this.simulationSeconds + GAME_CONFIG.traffic.autopilotCollisionGhostSeconds;
@@ -246,6 +247,30 @@ export class MainScene extends Phaser.Scene {
         this.emitToast('Rota recalculada: retomando o caminho principal.', 'info');
       }
     }
+
+    const shouldRecoverStuckAutopilot = this.autopilotEnabled
+      && this.mission.mission.phase !== 'completed'
+      && input.throttle > 0.15
+      && this.save.fuel > 0
+      && Math.abs(this.vehicle.speed) < 1.2
+      && travelled < 0.015
+      && this.simulationSeconds >= this.autopilotCollisionRecoveryUntil;
+    this.autopilotStuckSeconds = shouldRecoverStuckAutopilot ? this.autopilotStuckSeconds + dt : 0;
+    if (this.autopilotStuckSeconds >= 2.2) {
+      const guidance = guidanceForRoute(
+        this.vehicle.position,
+        this.vehicle.rotation,
+        this.vehicle.speed,
+        this.mission.route,
+        GAME_CONFIG.vehicle.autopilotCruiseSpeedMps,
+        GAME_CONFIG.vehicle.brakeMps2
+      );
+      if (this.vehicle.recoverAutopilotToLane(guidance.preferredRoadHeading)) {
+        this.mission.advanceRoute(this.vehicle.position);
+        this.offRouteSeconds = 0;
+      }
+      this.autopilotStuckSeconds = 0;
+    }
   }
 
   private readInput(): VehicleInput {
@@ -263,6 +288,7 @@ export class MainScene extends Phaser.Scene {
     if (this.autopilotEnabled && manualActivity) {
       this.autopilotEnabled = false;
       this.autopilotNextMissionAt = 0;
+      this.autopilotStuckSeconds = 0;
       this.traffic?.clearPlayerDrivingAdvice();
       this.emitToast('Piloto desligado: controle manual assumido.', 'info');
     }
@@ -288,14 +314,25 @@ export class MainScene extends Phaser.Scene {
           GAME_CONFIG.vehicle.brakeMps2,
           GAME_CONFIG.vehicle.autopilotCruiseSpeedMps
         );
-      const targetSpeed = routeAvailable ? Math.min(advice.targetSpeed, missionTargetSpeed) : 0;
+      const guidance = routeAvailable
+        ? guidanceForRoute(
+          this.vehicle.position,
+          this.vehicle.rotation,
+          this.vehicle.speed,
+          this.mission.route,
+          GAME_CONFIG.vehicle.autopilotCruiseSpeedMps,
+          GAME_CONFIG.vehicle.brakeMps2
+        )
+        : null;
+      const targetSpeed = guidance
+        ? Math.min(advice.targetSpeed, missionTargetSpeed, guidance.targetSpeedMps)
+        : 0;
       return {
         throttle: automaticThrottle(Math.abs(this.vehicle.speed), targetSpeed),
-        steering: routeAvailable && !insideArrivalArea
-          ? steeringForRoute(this.vehicle.position, this.vehicle.rotation, this.vehicle.speed, this.mission.route)
-          : 0,
+        steering: guidance && !insideArrivalArea ? guidance.steering : 0,
         handbrake: false,
-        assistanceEnabled: true
+        assistanceEnabled: true,
+        assistanceHeading: guidance?.preferredRoadHeading
       };
     }
 
@@ -493,9 +530,20 @@ export class MainScene extends Phaser.Scene {
     }
     if (command.type === 'autopilot') {
       this.autopilotEnabled = !this.autopilotEnabled;
+      this.autopilotStuckSeconds = 0;
       if (this.autopilotEnabled) {
         this.mobileInput = { throttle: 0, steering: 0, handbrake: false };
-        if (this.vehicle?.engageAutopilot() && this.mission) {
+        const guidance = this.vehicle && this.mission && this.mission.route.length >= 2
+          ? guidanceForRoute(
+            this.vehicle.position,
+            this.vehicle.rotation,
+            this.vehicle.speed,
+            this.mission.route,
+            GAME_CONFIG.vehicle.autopilotCruiseSpeedMps,
+            GAME_CONFIG.vehicle.brakeMps2
+          )
+          : null;
+        if (this.vehicle?.engageAutopilot(guidance?.preferredRoadHeading) && this.mission) {
           this.mission.recalculate(this.vehicle.position);
           this.syncMissionVisuals();
         }

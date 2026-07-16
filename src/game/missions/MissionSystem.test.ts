@@ -27,6 +27,18 @@ describe('progresso da rota', () => {
     expect(mission.route).toEqual([{ x: 0, y: 0 }, { x: 100, y: 0 }]);
   });
 
+  it('remove pontos duplicados e avança depois de concluir uma curva', () => {
+    const mission = missionWithRoute([
+      { x: 0, y: 0 },
+      { x: 0, y: 0 },
+      { x: 10, y: 0 },
+      { x: 10, y: 10 }
+    ]);
+    expect(mission.advanceRoute({ x: 10, y: 3 })).toBeCloseTo(0);
+    expect(mission.route[0]).toEqual({ x: 10, y: 3 });
+    expect(mission.route[1]).toEqual({ x: 10, y: 10 });
+  });
+
   it('aceita a tolerância maior apenas para a chegada do piloto automático', () => {
     const mission = missionWithRoute([]);
     mission.mission = {

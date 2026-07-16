@@ -1,4 +1,4 @@
-# Rota Brasil Tycoon — Playable 0.3.1
+# Rota Brasil Tycoon — Playable 0.3.2
 
 Protótipo realmente jogável no navegador de um tycoon de transporte brasileiro. Você começa com o **Hatch 1998**, busca um passageiro no centro de Brasília, segue uma rota calculada sobre vias reais e recebe pela corrida.
 
@@ -36,7 +36,7 @@ O teste de navegador abre o jogo, entra como visitante, aguarda o mapa, confirma
 - mapa 2.5D vetorial com escala interna de 1 unidade = 1 metro;
 - recorte de aproximadamente 2 × 2 km da Rodoviária do Plano Piloto e Eixo Monumental;
 - física arcade, direção manual totalmente livre, ré, freio, combustível, condição e redução de velocidade fora do asfalto sem barreiras invisíveis;
-- piloto automático opcional que permanece no asfalto e na mão correta, mantém o ritmo, respeita sinais e trânsito, freia ao entrar na área do destino, embarca, entrega e aceita a próxima corrida recomendada;
+- piloto automático opcional que antecipa curvas fechadas, mantém o progresso correto em cruzamentos, prefere o asfalto e a mão correta sem ficar preso em calçadas ou pequenas falhas do mapa, respeita sinais e trânsito, freia ao entrar na área do destino, embarca, entrega e aceita a próxima corrida recomendada;
 - missão completa com embarque, rota dirigida estável, recálculo somente ao sair do trajeto, desembarque, recibo, dinheiro, XP e avaliação;
 - 35 veículos de trânsito entre carros, táxis, ônibus e utilitários, com prevenção de colisões, recuperação de acidentes e impasses frente a frente, distância de segurança e respeito aos semáforos;
 - simulação contínua ao minimizar o navegador ou trocar de aba, sem perder o progresso da viagem;
@@ -83,7 +83,7 @@ Se ainda não houver remote:
 ```bash
 git init
 git add .
-git commit -m "feat: create playable 0.3.1"
+git commit -m "feat: create playable 0.3.2"
 git branch -M main
 git remote add origin https://github.com/SEU_USUARIO/rota-brasil-tycoon.git
 git push -u origin main

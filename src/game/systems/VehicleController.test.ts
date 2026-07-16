@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { GAME_CONFIG } from '../../config/gameConfig';
 import type { RoadData } from '../../types/game';
+import { MissionSystem } from '../missions/MissionSystem';
 import { RoadSurfaceIndex } from './RoadSurfaceIndex';
-import { steeringForRoute } from './RouteSteeringAssist';
+import { automaticThrottle } from './Autopilot';
+import { guidanceForRoute } from './RouteSteeringAssist';
 import { VehicleController } from './VehicleController';
 
 const road: RoadData = {
@@ -102,7 +104,7 @@ describe('VehicleController', () => {
     expect(vehicle.speed).toBe(GAME_CONFIG.vehicle.autopilotRecoverySpeedMps);
   });
 
-  it('mantém todo o carro no asfalto durante uma curva automática fechada', () => {
+  it('conclui uma curva automática fechada sem criar uma barreira na borda da rua', () => {
     const east: RoadData = {
       ...road,
       id: 'east',
@@ -121,20 +123,63 @@ describe('VehicleController', () => {
     };
     const surface = new RoadSurfaceIndex([east, north]);
     const vehicle = new VehicleController({ x: 0, y: 2.5 }, 0, surface);
-    const route = [{ x: 0, y: 2.5 }, { x: 28.75, y: 1.25 }, { x: 27.5, y: 30 }];
-    vehicle.speed = 12;
+    const progress = Object.create(MissionSystem.prototype) as MissionSystem;
+    progress.route = [{ x: 0, y: 2.5 }, { x: 28.75, y: 1.25 }, { x: 27.5, y: 30 }];
+    vehicle.speed = 16;
     let minimumClearance = Number.POSITIVE_INFINITY;
     for (let frame = 0; frame < 360 && vehicle.position.y < 16; frame += 1) {
+      const guidance = guidanceForRoute(vehicle.position, vehicle.rotation, vehicle.speed, progress.route);
       vehicle.update({
-        throttle: vehicle.speed < 12 ? 1 : 0,
-        steering: steeringForRoute(vehicle.position, vehicle.rotation, vehicle.speed, route),
+        throttle: automaticThrottle(vehicle.speed, guidance.targetSpeedMps),
+        steering: guidance.steering,
         handbrake: false,
-        assistanceEnabled: true
+        assistanceEnabled: true,
+        assistanceHeading: guidance.preferredRoadHeading
       }, 1 / 60, 18);
+      progress.advanceRoute(vehicle.position);
       minimumClearance = Math.min(minimumClearance, vehicle.roadEdgeClearance());
     }
     expect(vehicle.position.y).toBeGreaterThan(12);
-    expect(minimumClearance).toBeGreaterThanOrEqual(-0.001);
-    expect(vehicle.minimumAutopilotRoadClearance).toBeGreaterThanOrEqual(-0.001);
+    expect(minimumClearance).toBeGreaterThan(-2.5);
+    expect(vehicle.minimumAutopilotRoadClearance).toBeGreaterThan(-2.5);
+  });
+
+  it('atravessa uma pequena falha de asfalto e volta para a rua preferida', () => {
+    const approach: RoadData = {
+      ...road,
+      id: 'approach',
+      points: [
+        { x: 0, y: 0, lat: 0, lon: 0, nodeId: 'a' },
+        { x: 20, y: 0, lat: 0, lon: 0, nodeId: 'b' }
+      ]
+    };
+    const exit: RoadData = {
+      ...road,
+      id: 'exit',
+      points: [
+        { x: 35, y: 0, lat: 0, lon: 0, nodeId: 'c' },
+        { x: 35, y: 40, lat: 0, lon: 0, nodeId: 'd' }
+      ]
+    };
+    const vehicle = new VehicleController({ x: 0, y: 2.5 }, 0, new RoadSurfaceIndex([approach, exit]));
+    const progress = Object.create(MissionSystem.prototype) as MissionSystem;
+    progress.route = [{ x: 0, y: 2.5 }, { x: 20, y: 2.5 }, { x: 32.5, y: 0 }, { x: 32.5, y: 35 }];
+    vehicle.speed = 14;
+    let leftAsphalt = false;
+    for (let frame = 0; frame < 720 && vehicle.position.y < 15; frame += 1) {
+      const guidance = guidanceForRoute(vehicle.position, vehicle.rotation, vehicle.speed, progress.route);
+      vehicle.update({
+        throttle: automaticThrottle(vehicle.speed, guidance.targetSpeedMps),
+        steering: guidance.steering,
+        handbrake: false,
+        assistanceEnabled: true,
+        assistanceHeading: guidance.preferredRoadHeading
+      }, 1 / 60, 18);
+      progress.advanceRoute(vehicle.position);
+      leftAsphalt ||= vehicle.roadEdgeClearance(guidance.preferredRoadHeading) < 0;
+    }
+    expect(leftAsphalt).toBe(true);
+    expect(vehicle.position.y).toBeGreaterThan(12);
+    expect(vehicle.position.x).toBeGreaterThan(29);
   });
 });
