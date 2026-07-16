@@ -21,6 +21,11 @@ const initialHud: HudSnapshot = {
   redLightWarning: false,
   trafficVehicles: 0,
   trafficBuses: 0,
+  trafficStunned: 0,
+  collisionEvents: 0,
+  autopilotEnabled: false,
+  autopilotNextMissionSeconds: 0,
+  autoBrakeReason: 'clear',
   routeRecalculations: 0,
   mission: null,
   receipt: null
@@ -68,6 +73,11 @@ export function Hud() {
       data-vehicle-heading={hud.vehicleHeading.toFixed(4)}
       data-traffic-vehicles={hud.trafficVehicles}
       data-traffic-buses={hud.trafficBuses}
+      data-traffic-stunned={hud.trafficStunned}
+      data-collision-events={hud.collisionEvents}
+      data-autopilot-enabled={hud.autopilotEnabled ? 'true' : 'false'}
+      data-autopilot-next-mission-seconds={hud.autopilotNextMissionSeconds}
+      data-auto-brake-reason={hud.autoBrakeReason}
       data-route-recalculations={hud.routeRecalculations}
     >
       <header className="top-hud">
@@ -101,6 +111,16 @@ export function Hud() {
 
       {panel && <PanelContent panel={panel} hud={hud} close={() => setPanel(null)} />}
 
+      <button
+        className={`autopilot-toggle ${hud.autopilotEnabled ? 'active' : ''}`}
+        onClick={() => gameEvents.emit('command', { type: 'autopilot' })}
+        aria-pressed={hud.autopilotEnabled}
+        data-testid="autopilot-button"
+      >
+        <span>{hud.autopilotEnabled ? '●' : '◎'}</span>
+        {hud.autopilotEnabled ? 'Piloto ligado' : 'Piloto automático'}
+      </button>
+
       <nav className="bottom-nav" aria-label="Navegação principal">
         <button className={!panel ? 'active' : ''} onClick={() => setPanel(null)}><span>◉</span>Dirigir</button>
         <button className={panel === 'rides' ? 'active' : ''} onClick={() => choosePanel('rides')} data-testid="rides-button"><span>▣</span>Corridas</button>
@@ -109,7 +129,7 @@ export function Hud() {
         <button className={panel === 'city' ? 'active' : ''} onClick={() => choosePanel('city')}><span>⌖</span>Cidade</button>
       </nav>
 
-      <MobileControls />
+      {!hud.autopilotEnabled && <MobileControls />}
       {paused && <button className="pause-overlay" onClick={togglePause}><span>▶</span><b>Continuar viagem</b><small>O jogo está pausado</small></button>}
       {hud.receipt && <ReceiptCard hud={hud} />}
       {devOpen && <DevPanel close={() => setDevOpen(false)} />}
@@ -145,7 +165,7 @@ function PanelContent({ panel, hud, close }: { panel: Exclude<Panel, null>; hud:
       {panel === 'settings' && <>
         <div className="panel-kicker">CONFIGURAÇÕES</div><h2>Experiência de jogo</h2>
         <label className="quality-select">Qualidade gráfica<select defaultValue="automatic" onChange={(event) => setQuality(event.target.value as Quality)}><option value="automatic">Automática</option><option value="low">Baixa</option><option value="medium">Média</option><option value="high">Alta</option></select></label>
-        <p>W/S aceleram e freiam. Sem comando lateral, a assistência acompanha a rota; A/D ou as setas assumem o volante imediatamente. Espaço: freio de mão • R: reposicionar.</p>
+        <p>WASD e setas controlam o carro livremente, sem assistência. O piloto automático segue a rota, respeita o trânsito e completa as corridas sozinho. Espaço: freio de mão • R: reposicionar.</p>
         <button className="danger-button" onClick={() => { if (confirm('Apagar todo o progresso local?')) { deleteSave(); location.reload(); } }}>Apagar progresso</button>
       </>}
     </aside>
@@ -158,6 +178,7 @@ function ReceiptCard({ hud }: { hud: HudSnapshot }) {
     <section className="receipt-card" data-testid="receipt-card">
       <div className="receipt-success">✓</div><div><small>CORRIDA CONCLUÍDA</small><h2>{formatCurrency(receipt.total)}</h2><p>+{receipt.xp} XP • ★ {receipt.rating.toFixed(2)}</p></div>
       <dl><div><dt>Distância</dt><dd>{receipt.distanceKm.toFixed(2)} km</dd></div><div><dt>Tempo</dt><dd>{receipt.timeMinutes.toFixed(1)} min</dd></div><div><dt>Tarifa base</dt><dd>{formatCurrency(receipt.baseFare)}</dd></div><div><dt>Por distância</dt><dd>{formatCurrency(receipt.distanceFare)}</dd></div><div><dt>Por tempo</dt><dd>{formatCurrency(receipt.timeFare)}</dd></div><div><dt>Bônus de avaliação</dt><dd>{formatCurrency(receipt.ratingBonus)}</dd></div></dl>
+      {hud.autopilotEnabled && hud.autopilotNextMissionSeconds > 0 && <p className="autopilot-wait">Próxima recomendação em {hud.autopilotNextMissionSeconds}s</p>}
       <button className="primary-button" onClick={() => gameEvents.emit('command', { type: 'dismiss-receipt' })}>Próxima corrida</button>
     </section>
   );
@@ -167,7 +188,7 @@ function DevPanel({ close }: { close: () => void }) {
   const actions = [
     ['money-add', '+ R$ 1.000'], ['money-remove', '- R$ 100'], ['refuel', 'Reabastecer'], ['repair', 'Reparar'],
     ['teleport-pickup', 'Ir ao passageiro'], ['teleport-destination', 'Ir ao destino'], ['complete', 'Concluir etapa'], ['generate', 'Gerar corrida'],
-    ['traffic', 'Alternar trânsito'], ['signals', 'Alternar semáforos'], ['taxi', 'Liberar táxi'], ['time', 'Velocidade do tempo'],
+    ['traffic', 'Alternar trânsito'], ['signals', 'Alternar semáforos'], ['traffic-ahead', 'NPC à frente'], ['traffic-collision', 'NPC sobre o carro'], ['taxi', 'Liberar táxi'], ['time', 'Velocidade do tempo'],
     ['graph', 'Grafo de rotas'], ['colliders', 'Mostrar colisores'], ['reset', 'Reiniciar save']
   ];
   return <aside className="dev-panel"><button onClick={close}>×</button><h3>Painel de desenvolvimento</h3><div>{actions.map(([action, label]) => <button key={action} onClick={() => gameEvents.emit('command', { type: 'dev', action })}>{label}</button>)}</div></aside>;

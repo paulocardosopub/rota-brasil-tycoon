@@ -6,6 +6,7 @@ export interface VehicleInput {
   throttle: number;
   steering: number;
   handbrake: boolean;
+  assistanceEnabled?: boolean;
 }
 
 export class VehicleController {
@@ -16,7 +17,6 @@ export class VehicleController {
   conditionDamage = 0;
   private safePosition: Point;
   private safeRotation: number;
-  private curbContact = false;
 
   constructor(position: Point, rotation: number, private readonly roads: RoadSurfaceIndex) {
     this.position = { ...position };
@@ -52,7 +52,7 @@ export class VehicleController {
     this.rotation += input.steering * steeringRate * reverseDirection * deltaSeconds;
 
     const roadBeforeMove = this.roads.nearestRoad(this.position, this.rotation);
-    if (roadBeforeMove && Math.abs(input.steering) < 0.1 && Math.abs(this.speed) > 1.5) {
+    if (input.assistanceEnabled && roadBeforeMove && Math.abs(input.steering) < 0.1 && Math.abs(this.speed) > 1.5) {
       const roadHeading = roadBeforeMove.oneway
         ? roadBeforeMove.tangentAngle
         : closestRoadHeading(this.rotation, roadBeforeMove.tangentAngle);
@@ -67,30 +67,16 @@ export class VehicleController {
     this.position.y += Math.sin(this.rotation) * distance;
 
     const road = this.roads.nearestRoad(this.position, this.rotation);
-    if (!road) {
-      this.position = previous;
-      this.speed *= 0.7;
-    } else {
-      const curbLimit = Math.max(0.95, road.halfWidth - config.widthMeters * 0.48);
-      if (road.unionSurfaceDistance > -config.widthMeters * 0.48 && road.centerDistance > curbLimit) {
-        const speedAtImpact = Math.abs(this.speed);
-        moveToDistanceFrom(this.position, road.closest, curbLimit);
-        const roadHeading = closestRoadHeading(this.rotation, road.tangentAngle);
-        this.rotation += clamp(angleDelta(this.rotation, roadHeading), -0.2, 0.2);
-        this.speed *= 0.82;
-        if (!this.curbContact && speedAtImpact > 10) this.conditionDamage += Math.min(0.3, speedAtImpact * 0.01);
-        this.curbContact = true;
-      } else {
-        this.curbContact = false;
-      }
-
-      if (road.unionSurfaceDistance > -0.25) {
-      this.speed -= Math.sign(this.speed) * Math.min(Math.abs(this.speed), config.offRoadResistance * deltaSeconds);
-      }
-      if (!this.curbContact && road.unionSurfaceDistance < -0.4) {
-        this.safePosition = { ...this.position };
-        this.safeRotation = this.rotation;
-      }
+    const outsideReliableAsphalt = !road || road.unionSurfaceDistance > -config.widthMeters * 0.48;
+    if (outsideReliableAsphalt) {
+      const speedMagnitude = Math.abs(this.speed);
+      const resistance = speedMagnitude > config.offRoadMaxSpeedMps
+        ? config.offRoadBrakingMps2
+        : config.offRoadResistance;
+      this.speed -= Math.sign(this.speed) * Math.min(speedMagnitude, resistance * deltaSeconds);
+    } else if (road.unionSurfaceDistance < -0.4) {
+      this.safePosition = { ...this.position };
+      this.safeRotation = this.rotation;
     }
 
     const travelled = Math.hypot(this.position.x - previous.x, this.position.y - previous.y);
@@ -133,17 +119,4 @@ function closestRoadHeading(current: number, tangent: number) {
 
 function clamp(value: number, min: number, max: number) {
   return Math.max(min, Math.min(max, value));
-}
-
-function moveToDistanceFrom(point: Point, center: Point, distance: number) {
-  const dx = point.x - center.x;
-  const dy = point.y - center.y;
-  const length = Math.hypot(dx, dy);
-  if (!length) {
-    point.x = center.x;
-    point.y = center.y;
-    return;
-  }
-  point.x = center.x + dx / length * distance;
-  point.y = center.y + dy / length * distance;
 }

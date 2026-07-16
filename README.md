@@ -1,4 +1,4 @@
-# Rota Brasil Tycoon — Playable 0.2.0
+# Rota Brasil Tycoon — Playable 0.3.0
 
 Protótipo realmente jogável no navegador de um tycoon de transporte brasileiro. Você começa com o **Hatch 1998**, busca um passageiro no centro de Brasília, segue uma rota calculada sobre vias reais e recebe pela corrida.
 
@@ -11,7 +11,7 @@ npm install
 npm run dev
 ```
 
-Abra o endereço mostrado no terminal e escolha **Jogar como visitante**. Use `WASD` ou as setas, `Espaço` para o freio de mão, `R` para reposicionar e a roda do mouse para zoom. Em telas de toque, os controles aparecem automaticamente.
+Abra o endereço mostrado no terminal e escolha **Jogar como visitante**. Use `WASD` ou as setas para dirigir livremente, `Espaço` para o freio de mão, `R` para reposicionar e a roda do mouse para zoom. O botão flutuante **Piloto automático** assume a rota e completa as corridas. Em telas de toque, volante e pedais somem enquanto o piloto está ligado.
 
 Para testar a build final:
 
@@ -35,10 +35,10 @@ O teste de navegador abre o jogo, entra como visitante, aguarda o mapa, confirma
 
 - mapa 2.5D vetorial com escala interna de 1 unidade = 1 metro;
 - recorte de aproximadamente 2 × 2 km da Rodoviária do Plano Piloto e Eixo Monumental;
-- física arcade, direção manual mais rápida, ré, freio, combustível, condição e colisão com os limites reais do asfalto;
-- assistência de direção que acompanha a rota ao acelerar e libera o volante imediatamente quando o jogador usa os controles laterais;
+- física arcade, direção manual totalmente livre, ré, freio, combustível, condição e redução de velocidade fora do asfalto sem barreiras invisíveis;
+- piloto automático opcional que mantém o ritmo, segue a rota, para em semáforos e trânsito, embarca, entrega e aceita a próxima corrida recomendada;
 - missão completa com embarque, rota dirigida estável, recálculo somente ao sair do trajeto, desembarque, recibo, dinheiro, XP e avaliação;
-- 35 veículos de trânsito entre carros, táxis, ônibus e utilitários, com aceleração, frenagem, distância de segurança e respeito aos semáforos;
+- 35 veículos de trânsito entre carros, táxis, ônibus e utilitários, com prevenção de colisões, pausa após impacto, distância de segurança e respeito aos semáforos;
 - faixas separadas por sentido, tráfego pela direita, mãos únicas e rotas sem vias de pedestres;
 - semáforos com fases opostas, infração e pequena penalidade;
 - pontos de ônibus, abrigos e grupos de NPCs animados;
@@ -82,7 +82,7 @@ Se ainda não houver remote:
 ```bash
 git init
 git add .
-git commit -m "feat: create playable 0.2.0"
+git commit -m "feat: create playable 0.3.0"
 git branch -M main
 git remote add origin https://github.com/SEU_USUARIO/rota-brasil-tycoon.git
 git push -u origin main

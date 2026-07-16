@@ -1,5 +1,5 @@
 export const GAME_CONFIG = {
-  version: '0.2.0',
+  version: '0.3.0',
   saveVersion: 1,
   map: {
     city: 'Brasília',
@@ -18,6 +18,9 @@ export const GAME_CONFIG = {
     brakeMps2: 10,
     rollingResistance: 0.65,
     offRoadResistance: 3.5,
+    offRoadBrakingMps2: 14,
+    offRoadMaxSpeedMps: 8,
+    autopilotCruiseSpeedMps: 16,
     steeringRadiansPerSecond: 2.65,
     steeringAssistRadiansPerSecond: 0.9,
     steeringAssistMaxAngle: 0.72,
@@ -75,6 +78,8 @@ export const GAME_CONFIG = {
     npcUtilityCount: 5,
     npcSpeedMps: 8.5,
     safetyDistanceMeters: 9,
+    collisionStunSeconds: 3.2,
+    collisionCooldownSeconds: 2.5,
     signal: { greenSeconds: 12, yellowSeconds: 3, allRedSeconds: 1 },
     redLightPenalty: 2
   },

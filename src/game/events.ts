@@ -4,6 +4,7 @@ export type GameCommand =
   | { type: 'mobile-input'; throttle: number; steering: number; handbrake: boolean }
   | { type: 'pause' }
   | { type: 'camera' }
+  | { type: 'autopilot' }
   | { type: 'set-quality'; quality: Quality }
   | { type: 'cancel-ride' }
   | { type: 'dismiss-receipt' }

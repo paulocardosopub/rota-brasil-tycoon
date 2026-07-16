@@ -138,6 +138,11 @@ export interface HudSnapshot {
   redLightWarning: boolean;
   trafficVehicles: number;
   trafficBuses: number;
+  trafficStunned: number;
+  collisionEvents: number;
+  autopilotEnabled: boolean;
+  autopilotNextMissionSeconds: number;
+  autoBrakeReason: 'clear' | 'traffic' | 'red-signal';
   routeRecalculations: number;
   mission: MissionSnapshot | null;
   receipt: Receipt | null;

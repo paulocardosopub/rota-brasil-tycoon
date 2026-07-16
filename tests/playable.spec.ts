@@ -76,3 +76,86 @@ test('controles móveis aceleram o Hatch continuamente', async ({ page }) => {
   await expect.poll(async () => Number(await hud.getAttribute('data-speed-kmh')), { timeout: 6_000 }).toBeGreaterThan(5);
   await page.mouse.up();
 });
+
+test('piloto automático dirige sozinho e recolhe os controles no celular', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('./');
+  await page.getByTestId('guest-button').click();
+  const hud = page.locator('[data-game-ready="true"]');
+  await expect(hud).toBeVisible({ timeout: 25_000 });
+  await expect(page.locator('.mobile-controls')).toBeVisible();
+
+  await page.getByTestId('autopilot-button').click();
+  await expect(hud).toHaveAttribute('data-autopilot-enabled', 'true');
+  await expect(page.locator('.mobile-controls')).toBeHidden();
+  const pilotBox = await page.getByTestId('autopilot-button').boundingBox();
+  const menuBox = await page.locator('.bottom-nav').boundingBox();
+  expect(pilotBox).not.toBeNull();
+  expect(menuBox).not.toBeNull();
+  expect(pilotBox!.y + pilotBox!.height).toBeLessThanOrEqual(menuBox!.y + 3);
+  await expect.poll(async () => Number(await hud.getAttribute('data-speed-kmh')), { timeout: 8_000 }).toBeGreaterThan(10);
+
+  await page.getByTestId('autopilot-button').click();
+  await expect(hud).toHaveAttribute('data-autopilot-enabled', 'false');
+  await expect(page.locator('.mobile-controls')).toBeVisible();
+});
+
+test('piloto automático embarca, entrega e aceita a próxima recomendação', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('./');
+  await page.getByTestId('guest-button').click();
+  const hud = page.locator('[data-game-ready="true"]');
+  await expect(hud).toBeVisible({ timeout: 25_000 });
+  await page.keyboard.press('Control+Shift+D');
+  await page.getByTestId('autopilot-button').click();
+
+  await page.getByRole('button', { name: 'Ir ao passageiro' }).click();
+  await expect(page.getByTestId('objective-card')).toContainText('Leve', { timeout: 5_000 });
+  await page.getByRole('button', { name: 'Ir ao destino' }).click();
+  await expect(page.getByTestId('receipt-card')).toBeVisible({ timeout: 5_000 });
+  await expect(hud).toHaveAttribute('data-autopilot-enabled', 'true');
+  await expect.poll(async () => Number(await hud.getAttribute('data-autopilot-next-mission-seconds'))).toBeGreaterThan(0);
+
+  await expect(page.getByTestId('receipt-card')).toBeHidden({ timeout: 8_000 });
+  await expect(page.getByTestId('objective-card')).toContainText('Busque');
+  await expect(hud).toHaveAttribute('data-autopilot-enabled', 'true');
+  await expect(page.locator('.mobile-controls')).toBeHidden();
+});
+
+test('WASD assume imediatamente a direção manual livre', async ({ page }) => {
+  await page.goto('./');
+  await page.getByTestId('guest-button').click();
+  const hud = page.locator('[data-game-ready="true"]');
+  await expect(hud).toBeVisible({ timeout: 25_000 });
+  await page.getByTestId('autopilot-button').click();
+  await expect(hud).toHaveAttribute('data-autopilot-enabled', 'true');
+  await page.keyboard.down('KeyA');
+  await expect(hud).toHaveAttribute('data-autopilot-enabled', 'false');
+  await page.keyboard.up('KeyA');
+});
+
+test('uma colisão imobiliza o NPC e gera apenas um impacto enquanto há contato', async ({ page }) => {
+  await page.goto('./');
+  await page.getByTestId('guest-button').click();
+  const hud = page.locator('[data-game-ready="true"]');
+  await expect(hud).toBeVisible({ timeout: 25_000 });
+  await page.keyboard.press('Control+Shift+D');
+  await page.getByRole('button', { name: 'NPC sobre o carro' }).click();
+  await expect.poll(async () => Number(await hud.getAttribute('data-collision-events')), { timeout: 5_000 }).toBe(1);
+  await expect.poll(async () => Number(await hud.getAttribute('data-traffic-stunned'))).toBeGreaterThanOrEqual(1);
+  await page.waitForTimeout(1_500);
+  expect(Number(await hud.getAttribute('data-collision-events'))).toBe(1);
+});
+
+test('piloto automático freia para tráfego à frente sem bater', async ({ page }) => {
+  await page.goto('./');
+  await page.getByTestId('guest-button').click();
+  const hud = page.locator('[data-game-ready="true"]');
+  await expect(hud).toBeVisible({ timeout: 25_000 });
+  await page.keyboard.press('Control+Shift+D');
+  await page.getByRole('button', { name: 'NPC à frente' }).click();
+  await page.keyboard.press('Control+Shift+D');
+  await page.getByTestId('autopilot-button').click();
+  await expect.poll(async () => await hud.getAttribute('data-auto-brake-reason'), { timeout: 8_000 }).toBe('traffic');
+  expect(Number(await hud.getAttribute('data-collision-events'))).toBe(0);
+});

@@ -1,4 +1,4 @@
-# Decisões de arquitetura — Playable 0.2.0
+# Decisões de arquitetura — Playable 0.3.0
 
 ## Limites dos módulos
 
@@ -17,4 +17,4 @@ Latitude/longitude é convertida para coordenadas cartesianas locais em metros. 
 
 ## Expansão futura
 
-O grafo dirigido já serve a missões, tráfego e ao futuro piloto automático. Novos veículos devem implementar parâmetros compatíveis com `VehicleController`; novas carreiras podem reutilizar rotas e lançar suas próprias missões sem alterar o HUD principal.
+O grafo dirigido serve a missões, tráfego e piloto automático. O modo manual envia entradas sem correção de direção; o piloto usa a rota e os avisos do trânsito para controlar direção e velocidade. Novos veículos devem implementar parâmetros compatíveis com `VehicleController`; novas carreiras podem reutilizar rotas e lançar suas próprias missões sem alterar o HUD principal.

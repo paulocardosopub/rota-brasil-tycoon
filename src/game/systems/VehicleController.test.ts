@@ -20,12 +20,13 @@ describe('VehicleController', () => {
     expect(vehicle.fuelUsed).toBeGreaterThan(0);
   });
 
-  it('impede que o carro atravesse para fora da pista', () => {
+  it('reduz a velocidade fora do asfalto sem criar uma trava', () => {
     const vehicle = new VehicleController({ x: 0, y: 0 }, Math.PI / 2, new RoadSurfaceIndex([road]));
     vehicle.speed = 15;
     for (let frame = 0; frame < 60; frame += 1) vehicle.update({ throttle: 0, steering: 0, handbrake: false }, 1 / 60, 18);
-    expect(Math.abs(vehicle.position.y)).toBeLessThan(4.2);
-    expect(vehicle.speed).toBeGreaterThanOrEqual(0);
+    expect(Math.abs(vehicle.position.y)).toBeGreaterThan(4.2);
+    expect(vehicle.speed).toBeGreaterThan(0);
+    expect(vehicle.speed).toBeLessThan(15);
   });
 
   it('alinha o carro na faixa correta ao carregar', () => {
@@ -70,5 +71,14 @@ describe('VehicleController', () => {
     }
     expect(vehicle.position.y).toBeLessThan(5.5);
     expect(vehicle.speed).toBeGreaterThan(8);
+  });
+
+  it('não corrige o volante escondido no modo manual', () => {
+    const vehicle = new VehicleController({ x: 0, y: 0 }, 0.2, new RoadSurfaceIndex([road]));
+    vehicle.speed = 6;
+    for (let frame = 0; frame < 30; frame += 1) {
+      vehicle.update({ throttle: 0, steering: 0, handbrake: false, assistanceEnabled: false }, 1 / 60, 18);
+    }
+    expect(vehicle.rotation).toBeCloseTo(0.2);
   });
 });
