@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { createNewSave } from '../../services/storage/saveService';
 import { regularizeTaxi } from '../progression/RegularizationService';
-import { advanceFleetShift, assignEmployee, fleetSimulationLevel, hireEmployee, purchaseSecondVehicle, simulateOfflineReturn, startFleetShift } from './FleetService';
+import { advanceFleetShift, assignEmployee, fleetOperationalState, fleetSimulationLevel, hireEmployee, purchaseSecondVehicle, simulateOfflineReturn, startFleetShift } from './FleetService';
 
 function fleetReady() {
   const save = createNewSave();
@@ -61,5 +61,11 @@ describe('primeira frota', () => {
     expect(fleetSimulationLevel(100)).toBe('detailed');
     expect(fleetSimulationLevel(900)).toBe('simplified');
     expect(fleetSimulationLevel(2_000)).toBe('economic');
+  });
+
+  it('alterna busca e passageiro conforme o progresso da rota simulada', () => {
+    expect(fleetOperationalState(20, 300)).toBe('seeking-trip');
+    expect(fleetOperationalState(150, 300)).toBe('with-passenger');
+    expect(fleetOperationalState(0, 0)).toBe('seeking-trip');
   });
 });

@@ -176,7 +176,7 @@ export function advanceFleetShift(save: PlayerSave, elapsedSeconds: number, offl
   const completedRides = Math.floor(totalProgress / tripSeconds);
   shift.routeProgress = totalProgress % tripSeconds;
   shift.lastSimulatedAt = new Date(Date.parse(shift.lastSimulatedAt) + seconds * 1_000).toISOString();
-  shift.state = completedRides ? 'with-passenger' : 'seeking-trip';
+  shift.state = fleetOperationalState(shift.routeProgress, tripSeconds);
   employee.state = shift.state;
 
   if (completedRides) settleFleetBatch(save, shift, employee, vehicle, completedRides, offline);
@@ -244,6 +244,11 @@ export function fleetSimulationLevel(distanceMeters: number): FleetSimulationLev
   if (distanceMeters <= GAME_CONFIG.fleet.physicalDetailRadiusMeters) return 'detailed';
   if (distanceMeters <= GAME_CONFIG.fleet.simplifiedRadiusMeters) return 'simplified';
   return 'economic';
+}
+
+export function fleetOperationalState(routeProgress: number, tripSeconds: number): FleetEmployee['state'] {
+  if (!Number.isFinite(routeProgress) || !Number.isFinite(tripSeconds) || tripSeconds <= 0) return 'seeking-trip';
+  return routeProgress / tripSeconds < 0.36 ? 'seeking-trip' : 'with-passenger';
 }
 
 export function acknowledgeFleetReport(save: PlayerSave) {

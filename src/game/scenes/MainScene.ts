@@ -1343,6 +1343,9 @@ export class MainScene extends Phaser.Scene {
       buses: 0, utility: 0, stunned: 0, ghosted: 0, deadlockRecoveries: 0, brakeReason: 'clear' as const, stopReason: 'Livre'
     };
     const nearbyService = this.services?.nearest(this.vehicle.position) ?? null;
+    const fleetTelemetry = this.fleetVehicles?.routeTelemetry() ?? {
+      target: null, remaining: 0, completedStops: 0, identification: null
+    };
     if (this.simulationSeconds >= this.collisionFeedbackUntil) {
       this.collisionSeverity = null;
       this.collisionRelativeSpeedKmh = 0;
@@ -1425,6 +1428,10 @@ export class MainScene extends Phaser.Scene {
       activeVehicleId: this.save.activeVehicleId,
       fleet: structuredClone(this.save.fleet),
       fleetVehicleVisible: this.fleetVehicles?.isVisible() ?? false,
+      fleetRouteTarget: fleetTelemetry.target,
+      fleetRouteRemaining: fleetTelemetry.remaining,
+      fleetCompletedStops: fleetTelemetry.completedStops,
+      fleetDriverIdentification: fleetTelemetry.identification,
       totalTerrestrialEntities: Math.min(trafficStats.hardCeiling, trafficStats.total + 1 + (this.fleetVehicles?.isVisible() ? 1 : 0))
     };
     gameEvents.emit('hud', snapshot);

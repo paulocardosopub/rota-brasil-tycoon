@@ -5,6 +5,7 @@ import { ECONOMY_CONFIG, UPGRADE_IDS } from '../../game/economy/EconomyConfig';
 import { fuelPurchaseCost, upgradePrice, workshopPrice, type WorkshopServiceId } from '../../game/economy/ExpenseCalculator';
 import { gameEvents, type GameCommand } from '../../game/events';
 import { EMPLOYEE_CANDIDATES } from '../../game/fleet/FleetConfig';
+import { employeeIdentification } from '../../game/fleet/FleetRoutePlan';
 import { createNewSave, deleteSave } from '../../services/storage/saveService';
 import type { CameraZoom, HudSnapshot, Quality, TrafficDensity } from '../../types/game';
 import { MobileControls } from './MobileControls';
@@ -28,7 +29,8 @@ const initialHud: HudSnapshot = {
   trafficHardCeiling: GAME_CONFIG.traffic.maximumTerrestrialEntities, trafficReservedSlots: 0, serviceLocations: [], taxiPoints: [],
   professionalStatus: emptySave.professionalStatus, taxiLicense: emptySave.taxiLicense, taxiMeter: emptySave.taxiMeter,
   officialTaxiRides: 0, activeVehicleId: emptySave.activeVehicleId, fleet: emptySave.fleet,
-  fleetVehicleVisible: false, totalTerrestrialEntities: 1
+  fleetVehicleVisible: false, fleetRouteTarget: null, fleetRouteRemaining: 0, fleetCompletedStops: 0,
+  fleetDriverIdentification: null, totalTerrestrialEntities: 1
 };
 
 type Panel = 'rides' | 'garage' | 'fleet' | 'city' | 'settings' | 'cash' | null;
@@ -84,7 +86,9 @@ export function Hud() {
       data-official-taxi-rides={hud.officialTaxiRides} data-fleet-vehicles={hud.fleet.vehicles.length}
       data-fleet-employees={hud.fleet.employees.length} data-fleet-shift={hud.fleet.activeShift?.state ?? 'none'}
       data-fleet-vehicle-visible={hud.fleetVehicleVisible ? 'true' : 'false'} data-terrestrial-entities={hud.totalTerrestrialEntities}
-      data-traffic-reserved-slots={hud.trafficReservedSlots}
+      data-traffic-reserved-slots={hud.trafficReservedSlots} data-fleet-driver-identification={hud.fleetDriverIdentification ?? 'none'}
+      data-fleet-route-target={hud.fleetRouteTarget ? `${hud.fleetRouteTarget.x.toFixed(2)},${hud.fleetRouteTarget.y.toFixed(2)}` : 'none'}
+      data-fleet-route-remaining={hud.fleetRouteRemaining.toFixed(2)} data-fleet-completed-stops={hud.fleetCompletedStops}
     >
       <header className="top-hud">
         <div className="brand-chip"><span>RB</span><div><b>Brasília</b><small>Centro • Dia</small></div></div>
@@ -206,7 +210,7 @@ function FleetPanel({ hud, confirm }: { hud: HudSnapshot; confirm: ConfirmFn }) 
     <h3>Motorista</h3>
     {!employee && licensed && <div className="candidate-list">{EMPLOYEE_CANDIDATES.map((candidate) => <article key={candidate.id}><span className="candidate-avatar">{candidate.avatar}</span><div><b>{candidate.name}</b><small>{candidate.description}</small><em>Direção {candidate.driving} • Segurança {candidate.safety} • Atendimento {candidate.service} • Eficiência {candidate.efficiency}</em><em>Comissão {candidate.commissionPercent}% • contratação {formatCurrency(candidate.hireCost)}</em></div><button onClick={() => confirm(`contratar ${candidate.name} por ${formatCurrency(candidate.hireCost)}`, { type: 'hire-employee', candidateId: candidate.id, requestId: requestId(`hire-${candidate.id}`) })}>Contratar</button></article>)}</div>}
     {!licensed && <p>Conclua a regularização para contratar seu primeiro motorista.</p>}
-    {employee && <section className="fleet-card employee-card"><div className="candidate-avatar">{employee.avatar}</div><div><b>{employee.name}</b><small>{employee.state} • comissão {employee.commissionPercent}%</small><em>{employee.tripsCompleted} corridas • {formatCurrency(employee.grossRevenue)} produzidos</em></div>{!shift && employee.vehicleId && <button className="ghost-button" onClick={() => gameEvents.emit('command', { type: 'unassign-employee', employeeId: employee.id })}>Remover veículo</button>}</section>}
+    {employee && <section className="fleet-card employee-card"><div className="candidate-avatar">{employee.avatar}</div><div><b>{employeeIdentification(employee.name)}</b><small>{employee.state} • comissão {employee.commissionPercent}%</small><em>{employee.tripsCompleted} corridas • {formatCurrency(employee.grossRevenue)} produzidos</em></div>{!shift && employee.vehicleId && <button className="ghost-button" onClick={() => gameEvents.emit('command', { type: 'unassign-employee', employeeId: employee.id })}>Remover veículo</button>}</section>}
 
     {employee && !employee.vehicleId && <div className="fleet-actions"><h3>Atribuir veículo</h3>{assignable.length ? assignable.map((vehicle) => <button key={vehicle.id} disabled={!vehicle.taxiLicensed} onClick={() => gameEvents.emit('command', { type: 'assign-employee', employeeId: employee.id, vehicleId: vehicle.id })}>{vehicle.model} • {vehicle.taxiLicensed ? 'atribuir' : 'requer conversão em táxi'}</button>) : <p>Adquira um segundo veículo: o veículo dirigido pelo jogador não pode ser atribuído ao mesmo tempo.</p>}</div>}
 
@@ -261,7 +265,7 @@ function DevPanel({ hud, close }: { hud: HudSnapshot; close: () => void }) {
     ['traffic-ahead','NPC à frente'],['traffic-collision','NPC sobre o carro'],['traffic-head-on','NPC de frente'],['collision-light','Colisão leve'],['collision-moderate','Colisão moderada'],['collision-severe','Colisão severa'],
     ['traffic','Alternar trânsito'],['signals','Alternar semáforos'],['signal-phase','Avançar fase dos sinais'],['graph','Grafo de rotas'],['reset','Reiniciar save']
   ];
-  return <aside className="dev-panel"><button onClick={close}>×</button><h3>Painel de desenvolvimento 0.6.0</h3><p className="dev-metrics">{hud.fps} FPS • {hud.trafficVehicles}/{hud.trafficCapacity} NPCs • teto {hud.trafficHardCeiling}<br />Frota: {hud.fleet.vehicles.length} veículos • {hud.fleet.employees.length} motorista • vaga reservada {hud.trafficReservedSlots}</p><div>{actions.map(([action,label]) => <button key={action} onClick={() => gameEvents.emit('command', { type: 'dev', action })}>{label}</button>)}</div></aside>;
+  return <aside className="dev-panel"><button onClick={close}>×</button><h3>Painel de desenvolvimento 0.6.1</h3><p className="dev-metrics">{hud.fps} FPS • {hud.trafficVehicles}/{hud.trafficCapacity} NPCs • teto {hud.trafficHardCeiling}<br />Frota: {hud.fleet.vehicles.length} veículos • {hud.fleet.employees.length} motorista • vaga reservada {hud.trafficReservedSlots}</p><div>{actions.map(([action,label]) => <button key={action} onClick={() => gameEvents.emit('command', { type: 'dev', action })}>{label}</button>)}</div></aside>;
 }
 
 type ConfirmFn = (label: string, command: GameCommand) => void;

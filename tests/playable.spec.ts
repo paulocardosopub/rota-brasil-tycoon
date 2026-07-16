@@ -358,6 +358,16 @@ test('táxi oficial, funcionário e segundo veículo sobrevivem ao recarregament
   await page.getByRole('button', { name: 'Localizar veículo' }).click();
   await expect(hud).toHaveAttribute('data-fleet-vehicle-visible', 'true');
   await expect(hud).toHaveAttribute('data-traffic-reserved-slots', '1');
+  await expect(hud).toHaveAttribute('data-fleet-driver-identification', 'Motorista Bia Rocha');
+  await expect(page.getByText('Motorista Bia Rocha', { exact: true })).toBeVisible();
+  await expect.poll(async () => Number(await hud.getAttribute('data-fleet-route-remaining')), { timeout: 10_000 }).toBeGreaterThan(120);
+  const targetBefore = await hud.getAttribute('data-fleet-route-target');
+  const stopsBefore = await hud.getAttribute('data-fleet-completed-stops');
+  const remainingBefore = Number(await hud.getAttribute('data-fleet-route-remaining'));
+  await expect.poll(async () => Math.abs(Number(await hud.getAttribute('data-fleet-route-remaining')) - remainingBefore), { timeout: 10_000 })
+    .toBeGreaterThan(2);
+  await expect(hud).toHaveAttribute('data-fleet-route-target', targetBefore!);
+  await expect(hud).toHaveAttribute('data-fleet-completed-stops', stopsBefore!);
 
   await expect(page.getByTestId('active-fleet-shift')).toBeVisible();
   await page.getByRole('button', { name: 'Encerrar turno' }).click();
