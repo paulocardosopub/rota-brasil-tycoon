@@ -9,12 +9,15 @@ test('visitante entra e encontra a primeira corrida jogável', async ({ page }) 
   await expect(page.locator('[data-game-ready="true"]')).toBeVisible({ timeout: 25_000 });
   await expect(page.getByTestId('game-canvas')).toBeVisible();
   await expect(page.locator('[data-vehicle-name="Hatch 1998"]')).toBeVisible();
+  await expect(page.getByTestId('ride-offer')).toContainText('garantido');
+  await page.getByRole('button', { name: 'Aceitar' }).click();
   await expect(page.getByTestId('objective-card')).toContainText('Busque');
   await expect(page.getByTestId('speedometer')).toContainText('km/h');
 
   const hud = page.locator('.hud');
-  await expect.poll(async () => Number(await hud.getAttribute('data-traffic-vehicles'))).toBeGreaterThanOrEqual(30);
-  await expect.poll(async () => Number(await hud.getAttribute('data-traffic-buses'))).toBeGreaterThanOrEqual(4);
+  await expect.poll(async () => Number(await hud.getAttribute('data-traffic-vehicles'))).toBe(350);
+  await expect.poll(async () => Number(await hud.getAttribute('data-traffic-buses'))).toBeGreaterThanOrEqual(40);
+  await expect(hud).toHaveAttribute('data-air-traffic', '10');
   await page.keyboard.down('ArrowUp');
   await expect.poll(async () => Number(await hud.getAttribute('data-speed-kmh')), { timeout: 6_000 }).toBeGreaterThan(5);
   const headingBeforeManualTurn = Number(await hud.getAttribute('data-vehicle-heading'));
@@ -27,7 +30,7 @@ test('visitante entra e encontra a primeira corrida jogável', async ({ page }) 
   await page.keyboard.up('ArrowUp');
 
   await page.getByTestId('rides-button').click();
-  await expect(page.getByText('CORRIDA ATIVA')).toBeVisible();
+  await expect(page.getByText('CORRIDAS', { exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Cancelar corrida' })).toBeVisible();
   expect(criticalErrors).toEqual([]);
 });
@@ -57,7 +60,7 @@ test('controle volta após trocar de aba e uma nova corrida continua dirigível'
   await page.keyboard.press('Control+Shift+D');
   await page.getByRole('button', { name: 'Próxima corrida' }).click();
   await expect(page.getByTestId('receipt-card')).toBeHidden();
-  await expect(page.getByTestId('objective-card')).toContainText('Busque');
+  await expect(page.getByTestId('objective-card')).toContainText('Nova oferta');
 
   await page.keyboard.down('ArrowUp');
   await expect.poll(async () => Number(await hud.getAttribute('data-speed-kmh')), { timeout: 6_000 }).toBeGreaterThan(5);
@@ -221,4 +224,70 @@ test('recarregar preserva a corrida em andamento sem duplicar progresso', async 
   await expect(page.locator('[data-game-ready="true"]')).toBeVisible({ timeout: 25_000 });
   await expect(page.getByTestId('objective-card')).toContainText('Leve');
   await expect(page.getByTestId('receipt-card')).toBeHidden();
+});
+
+test('pagamento da corrida entra uma vez no ledger e persiste no save v3', async ({ page }) => {
+  await page.goto('./');
+  await page.getByTestId('guest-button').click();
+  const hud = page.locator('[data-game-ready="true"]');
+  await expect(hud).toBeVisible({ timeout: 25_000 });
+  await page.keyboard.press('Control+Shift+D');
+  await page.getByRole('button', { name: 'Ir ao passageiro' }).click();
+  await page.getByRole('button', { name: 'Ir ao destino' }).click();
+  await expect(page.getByTestId('receipt-card')).toBeVisible({ timeout: 5_000 });
+  const ledgerCount = Number(await hud.getAttribute('data-ledger-count'));
+  expect(ledgerCount).toBeGreaterThanOrEqual(1);
+  await page.waitForTimeout(5_500);
+  await page.reload();
+  await page.getByRole('button', { name: 'Continuar' }).click();
+  const restored = page.locator('[data-game-ready="true"]');
+  await expect(restored).toBeVisible({ timeout: 25_000 });
+  await expect.poll(async () => Number(await restored.getAttribute('data-ledger-count'))).toBe(ledgerCount);
+});
+
+test('piloto entra no posto real, para e abastece somente após confirmação', async ({ page }) => {
+  test.setTimeout(70_000);
+  await page.goto('./');
+  await page.getByTestId('guest-button').click();
+  const hud = page.locator('[data-game-ready="true"]');
+  await expect(hud).toBeVisible({ timeout: 25_000 });
+  const fuelBefore = Number(await hud.getAttribute('data-fuel'));
+  await page.getByRole('button', { name: /Serviços/ }).click();
+  await page.getByRole('button', { name: /Posto Eixo Norte/ }).click();
+  await expect(hud).toHaveAttribute('data-selected-service', 'fuel-shn-br');
+  await page.keyboard.press('Control+Shift+D');
+  await page.getByRole('button', { name: 'Ir à entrada do serviço' }).click();
+  await page.keyboard.press('Control+Shift+D');
+  await page.getByTestId('autopilot-button').click();
+  await expect(hud).toHaveAttribute('data-nearby-service', 'fuel-shn-br', { timeout: 15_000 });
+  await expect.poll(async () => Number(await hud.getAttribute('data-speed-kmh')), { timeout: 10_000 }).toBeLessThanOrEqual(4);
+  await page.getByRole('button', { name: /5 L/ }).click();
+  const confirmation = page.locator('.confirm-strip');
+  await expect(confirmation).toContainText('Confirmar 5 L');
+  await confirmation.getByRole('button', { name: 'Confirmar' }).click();
+  await expect.poll(async () => Number(await hud.getAttribute('data-fuel'))).toBeGreaterThan(fuelBefore + 4.5);
+  await expect.poll(async () => Number(await hud.getAttribute('data-ledger-count'))).toBeGreaterThanOrEqual(1);
+  await expect(hud).toHaveAttribute('data-selected-service', 'none');
+});
+
+test('oficina real recebe o piloto e registra reparo sem atravessar prédio', async ({ page }) => {
+  test.setTimeout(70_000);
+  await page.goto('./');
+  await page.getByTestId('guest-button').click();
+  const hud = page.locator('[data-game-ready="true"]');
+  await expect(hud).toBeVisible({ timeout: 25_000 });
+  await page.keyboard.press('Control+Shift+D');
+  await page.getByRole('button', { name: 'Dano +25' }).click();
+  await page.keyboard.press('Control+Shift+D');
+  await page.getByRole('button', { name: /Serviços/ }).click();
+  await page.getByRole('button', { name: /Oficina Central do Eixo/ }).click();
+  await page.keyboard.press('Control+Shift+D');
+  await page.getByRole('button', { name: 'Ir à entrada do serviço' }).click();
+  await page.keyboard.press('Control+Shift+D');
+  await page.getByTestId('autopilot-button').click();
+  await expect(hud).toHaveAttribute('data-nearby-service', 'workshop-shn-central', { timeout: 15_000 });
+  await page.getByRole('button', { name: /Reparo rápido/ }).click();
+  await page.locator('.confirm-strip').getByRole('button', { name: 'Confirmar' }).click();
+  await expect.poll(async () => Number(await hud.getAttribute('data-ledger-count'))).toBeGreaterThanOrEqual(1);
+  await expect(hud).toHaveAttribute('data-selected-service', 'none');
 });

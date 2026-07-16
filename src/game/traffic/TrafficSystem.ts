@@ -10,7 +10,7 @@ type SignalState = 'green' | 'yellow' | 'red';
 type VehicleKind = 'car' | 'taxi' | 'bus' | 'utility';
 
 type TrafficVehicle = {
-  visual: Phaser.GameObjects.Container;
+  visual?: Phaser.GameObjects.Container;
   position: Point;
   targetPosition: Point;
   current: GraphNode;
@@ -33,6 +33,7 @@ type TrafficVehicle = {
   headOnDeadlockSeconds: number;
   state: TrafficVehicleState;
   stopReason: 'clear' | 'signal' | 'traffic' | 'player' | 'collision';
+  color: number;
 };
 
 export type PlayerCollisionResult = {
@@ -67,6 +68,9 @@ export class TrafficSystem {
   private deadlockRecoveries = 0;
   private activeVehicleLimit = Number.POSITIVE_INFINITY;
   private signalOverride: SignalState | null = null;
+  private readonly spatialVehicles = new Map<string, TrafficVehicle[]>();
+  private pendingUpdateSeconds = 0;
+  private readonly crowdGraphics: Phaser.GameObjects.Graphics;
 
   constructor(
     scene: Phaser.Scene,
@@ -76,6 +80,7 @@ export class TrafficSystem {
     private readonly project: Project,
     spawn: Point
   ) {
+    this.crowdGraphics = scene.add.graphics().setDepth(23);
     for (const node of graph.nodes) this.nodes.set(node.id, node);
     for (const road of roads) this.roads.set(road.id, road);
     signals.forEach((signal, index) => {
@@ -85,7 +90,7 @@ export class TrafficSystem {
 
     const candidates = graph.nodes.filter((node) => {
       const distance = Math.hypot(node.x - spawn.x, node.y - spawn.y);
-      return distance > 55 && distance < 900 && this.validEdges(node).length > 0;
+      return distance > 55 && distance < 700 && this.validEdges(node).length > 0;
     });
     if (!candidates.length) return;
 
@@ -115,12 +120,18 @@ export class TrafficSystem {
       const position = pointInTrafficLane(current, current, target, road, laneIndex);
       const targetPosition = pointInTrafficLane(target, current, target, road, laneIndex);
       const spec = vehicleSpec(kind, index);
-      const visual = kind === 'bus'
-        ? createBusVisual(scene, index % 2 ? 0x2b7a78 : 0xc44d36).setScale(0.64)
-        : kind === 'utility'
-          ? createUtilityVehicleVisual(scene, index % 2 ? 0xe8ecef : 0x7c8f9e).setScale(0.68)
-          : createCarVisual(scene, kind === 'taxi' ? 0xf2c744 : colors[index % colors.length]).setScale(0.68);
-      visual.setDepth(24);
+      const color = kind === 'bus' ? (index % 2 ? 0x2b7a78 : 0xc44d36)
+        : kind === 'utility' ? (index % 2 ? 0xe8ecef : 0x7c8f9e)
+          : kind === 'taxi' ? 0xf2c744 : colors[index % colors.length];
+      const detailed = index < 48 || (kind === 'bus' && index < carCount + 8) || (kind === 'utility' && index < carCount + busCount + 6);
+      const visual = detailed
+        ? kind === 'bus'
+          ? createBusVisual(scene, color).setScale(0.64)
+          : kind === 'utility'
+            ? createUtilityVehicleVisual(scene, color).setScale(0.68)
+            : createCarVisual(scene, color).setScale(0.68)
+        : undefined;
+      visual?.setDepth(24);
       this.vehicles.push({
         visual,
         position,
@@ -140,6 +151,7 @@ export class TrafficSystem {
         headOnDeadlockSeconds: 0,
         state: 'cruising',
         stopReason: 'clear',
+        color,
         ...spec
       });
     }
@@ -148,18 +160,25 @@ export class TrafficSystem {
   update(deltaSeconds: number, playerPosition: Point, playerSpeed = 0, playerHeading = 0, autopilotEnabled = false): TrafficUpdateResult {
     let autopilotDeadlockRecovery = false;
     if (!this.enabled) {
-      for (const vehicle of this.vehicles) vehicle.visual.setVisible(false);
+      for (const vehicle of this.vehicles) vehicle.visual?.setVisible(false);
+      this.crowdGraphics.clear();
       return { autopilotDeadlockRecovery };
     }
+    this.pendingUpdateSeconds += deltaSeconds;
+    if (this.pendingUpdateSeconds < 0.1) return { autopilotDeadlockRecovery };
+    deltaSeconds = Math.min(0.2, this.pendingUpdateSeconds);
+    this.pendingUpdateSeconds = 0;
     this.elapsed += deltaSeconds * this.timeScale;
+    this.crowdGraphics.clear();
+    this.rebuildSpatialIndex();
     for (const vehicle of this.vehicles) {
       if (vehicle.index >= this.activeVehicleLimit) {
-        vehicle.visual.setVisible(false);
+        vehicle.visual?.setVisible(false);
         continue;
       }
       const distanceFromPlayer = Math.hypot(vehicle.position.x - playerPosition.x, vehicle.position.y - playerPosition.y);
-      vehicle.visual.setVisible(distanceFromPlayer < 650);
-      if (distanceFromPlayer > 900 && (Math.floor(this.elapsed * 10) + vehicle.index) % 4 !== 0) continue;
+      vehicle.visual?.setVisible(distanceFromPlayer < 520);
+      if (distanceFromPlayer > 520 && (Math.floor(this.elapsed * 10) + vehicle.index) % 5 !== 0) continue;
 
       const dx = vehicle.targetPosition.x - vehicle.position.x;
       const dy = vehicle.targetPosition.y - vehicle.position.y;
@@ -253,7 +272,8 @@ export class TrafficSystem {
       const nextHeading = Math.atan2(vehicle.targetPosition.y - vehicle.position.y, vehicle.targetPosition.x - vehicle.position.x);
       vehicle.heading = rotateTowards(vehicle.heading, nextHeading, 2.8 * deltaSeconds);
       const projected = this.project(vehicle.position);
-      vehicle.visual.setPosition(projected.x, projected.y).setRotation(projectedHeading(this.project, vehicle.position, vehicle.heading));
+      if (vehicle.visual) vehicle.visual.setPosition(projected.x, projected.y).setRotation(projectedHeading(this.project, vehicle.position, vehicle.heading));
+      else if (distanceFromPlayer < 520) this.drawCrowdVehicle(vehicle, projected);
     }
     return { autopilotDeadlockRecovery };
   }
@@ -313,6 +333,7 @@ export class TrafficSystem {
 
     if (this.enabled) for (const vehicle of this.vehicles) {
       if (this.elapsed < vehicle.ghostWithPlayerUntil) continue;
+      if (Math.abs(vehicle.position.x - position.x) > 55 || Math.abs(vehicle.position.y - position.y) > 55) continue;
       const gap = closestGap(
         distanceAhead(position, heading, vehicle.position, 3.6),
         route.length >= 2 ? distanceAlongRoute(position, route, vehicle.position, 3.6, 42) : null
@@ -365,6 +386,7 @@ export class TrafficSystem {
     let resolvedPosition: Point | null = null;
     for (const vehicle of this.vehicles) {
       if (vehicle.index >= this.activeVehicleLimit) continue;
+      if (Math.abs(vehicle.position.x - position.x) > 18 || Math.abs(vehicle.position.y - position.y) > 18) continue;
       const sweptContact = sweptPointOverlapsVehicle(
         previousPosition,
         position,
@@ -455,7 +477,7 @@ export class TrafficSystem {
     vehicle.stunnedUntil = this.elapsed + 5;
     vehicle.ghostWithPlayerUntil = 0;
     vehicle.headOnDeadlockSeconds = 0;
-    vehicle.visual.setVisible(true);
+    vehicle.visual?.setVisible(true);
   }
 
   debugPlaceHeadOnVehicle(position: Point, heading: number) {
@@ -487,6 +509,7 @@ export class TrafficSystem {
   stats() {
     return {
       total: Math.min(this.vehicles.length, this.activeVehicleLimit),
+      capacity: this.vehicles.length,
       buses: this.vehicles.filter((vehicle) => vehicle.index < this.activeVehicleLimit && vehicle.kind === 'bus').length,
       utility: this.vehicles.filter((vehicle) => vehicle.index < this.activeVehicleLimit && vehicle.kind === 'utility').length,
       stunned: this.vehicles.filter((vehicle) => vehicle.index < this.activeVehicleLimit && (vehicle.contactWithPlayer || this.elapsed < vehicle.stunnedUntil)).length,
@@ -527,8 +550,9 @@ export class TrafficSystem {
 
   private nearestLeadGap(vehicle: TrafficVehicle, heading: number) {
     let best = Number.POSITIVE_INFINITY;
-    for (const other of this.vehicles) {
+    for (const other of this.nearbyVehicles(vehicle.position)) {
       if (other === vehicle || Math.cos(other.heading - heading) < 0.55) continue;
+      if (Math.abs(other.position.x - vehicle.position.x) > 42 || Math.abs(other.position.y - vehicle.position.y) > 42) continue;
       const gap = distanceAhead(vehicle.position, heading, other.position, (vehicle.width + other.width) * 0.62);
       if (gap !== null) best = Math.min(best, gap - other.length * 0.5);
     }
@@ -536,8 +560,9 @@ export class TrafficSystem {
   }
 
   private hasIntersectionConflict(vehicle: TrafficVehicle, heading: number) {
-    for (const other of this.vehicles) {
+    for (const other of this.nearbyVehicles(vehicle.position)) {
       if (other === vehicle || vehicle.index < other.index || Math.cos(other.heading - heading) > 0.72) continue;
+      if (Math.abs(other.position.x - vehicle.position.x) > 28 || Math.abs(other.position.y - vehicle.position.y) > 28) continue;
       if (pathsConflict(
         { position: vehicle.position, heading, speed: vehicle.speed },
         { position: other.position, heading: other.heading, speed: other.speed },
@@ -546,6 +571,44 @@ export class TrafficSystem {
       )) return true;
     }
     return false;
+  }
+
+  private rebuildSpatialIndex() {
+    this.spatialVehicles.clear();
+    for (const vehicle of this.vehicles) {
+      if (vehicle.index >= this.activeVehicleLimit) continue;
+      const key = spatialKey(vehicle.position);
+      const bucket = this.spatialVehicles.get(key);
+      if (bucket) bucket.push(vehicle);
+      else this.spatialVehicles.set(key, [vehicle]);
+    }
+  }
+
+  private nearbyVehicles(position: Point) {
+    const cellX = Math.floor(position.x / 40);
+    const cellY = Math.floor(position.y / 40);
+    const nearby: TrafficVehicle[] = [];
+    for (let x = cellX - 1; x <= cellX + 1; x += 1) for (let y = cellY - 1; y <= cellY + 1; y += 1) {
+      const bucket = this.spatialVehicles.get(`${x}:${y}`);
+      if (bucket) nearby.push(...bucket);
+    }
+    return nearby;
+  }
+
+  private drawCrowdVehicle(vehicle: TrafficVehicle, projected: Point) {
+    const heading = projectedHeading(this.project, vehicle.position, vehicle.heading);
+    const halfLength = vehicle.kind === 'bus' ? 3.7 : vehicle.kind === 'utility' ? 2.5 : 2;
+    const halfWidth = vehicle.kind === 'bus' ? 0.95 : 0.72;
+    const forward = { x: Math.cos(heading) * halfLength, y: Math.sin(heading) * halfLength };
+    const side = { x: -Math.sin(heading) * halfWidth, y: Math.cos(heading) * halfWidth };
+    const a = { x: projected.x + forward.x + side.x, y: projected.y + forward.y + side.y };
+    const b = { x: projected.x + forward.x - side.x, y: projected.y + forward.y - side.y };
+    const c = { x: projected.x - forward.x - side.x, y: projected.y - forward.y - side.y };
+    const d = { x: projected.x - forward.x + side.x, y: projected.y - forward.y + side.y };
+    this.crowdGraphics.fillStyle(0x07111a, 0.18).fillCircle(projected.x + 0.7, projected.y + 0.7, halfLength * 0.72);
+    this.crowdGraphics.fillStyle(vehicle.color, 0.94)
+      .fillTriangle(a.x, a.y, b.x, b.y, c.x, c.y)
+      .fillTriangle(a.x, a.y, c.x, c.y, d.x, d.y);
   }
 }
 
@@ -593,4 +656,8 @@ function closestGap(a: number | null, b: number | null) {
   if (a === null) return b;
   if (b === null) return a;
   return Math.min(a, b);
+}
+
+function spatialKey(position: Point) {
+  return `${Math.floor(position.x / 40)}:${Math.floor(position.y / 40)}`;
 }

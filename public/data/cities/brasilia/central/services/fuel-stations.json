@@ -1,0 +1,38 @@
+[
+  {
+    "id": "fuel-shn-br",
+    "category": "fuel",
+    "realName": "BR",
+    "gameName": "Posto Eixo Norte",
+    "lat": -15.7897976,
+    "lon": -47.885995,
+    "sourceType": "node",
+    "sourceId": "1412091593",
+    "buildingId": "41647726",
+    "address": "Setor Hoteleiro Norte, Quadra 2, Brasília, DF",
+    "entrance": { "lat": -15.7896545, "lon": -47.886075, "x": -414.613, "y": -505.437, "graphNodeId": "1531823830" },
+    "stopPoint": { "lat": -15.7897976, "lon": -47.885995, "x": -406.053, "y": -489.525 },
+    "accessRoad": "OSM way 658928044 (highway=service)",
+    "sideOfRoad": "lado oeste da via de serviço do SHN Quadra 2",
+    "confidence": "high",
+    "functionFictional": false
+  },
+  {
+    "id": "fuel-shs-imperial",
+    "category": "fuel",
+    "realName": "Posto Imperial",
+    "gameName": "Posto Eixo Sul",
+    "lat": -15.7943667,
+    "lon": -47.8888887,
+    "sourceType": "node",
+    "sourceId": "1685869086",
+    "buildingId": "141913005",
+    "address": "Setor Hoteleiro Sul, Quadra 3, Brasília, DF",
+    "entrance": { "lat": -15.793988, "lon": -47.8889396, "x": -721.116, "y": -23.573, "graphNodeId": "984930863" },
+    "stopPoint": { "lat": -15.79404, "lon": -47.88885, "x": -711.529, "y": -17.791 },
+    "accessRoad": "OSM way 124699928 (highway=service)",
+    "sideOfRoad": "lado sul da via interna do SHS Quadra 3",
+    "confidence": "medium",
+    "functionFictional": false
+  }
+]

@@ -1,0 +1,9 @@
+{
+  "validatedAt": "2026-07-16",
+  "source": "OpenStreetMap",
+  "sourceApi": "https://api.openstreetmap.org/api/0.6/map",
+  "bbox": [-47.89155, -15.8032, -47.87285, -15.7852],
+  "license": "Open Database License (ODbL) 1.0",
+  "attribution": "© OpenStreetMap contributors",
+  "notes": "Postos mantêm a função real mapeada. Oficina e garagem adaptam apenas a função de edifícios reais do GDF; geometria e acessos não foram inventados."
+}

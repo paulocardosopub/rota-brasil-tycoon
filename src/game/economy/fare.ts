@@ -1,28 +1,15 @@
-import { GAME_CONFIG } from '../../config/gameConfig';
 import type { Receipt } from '../../types/game';
+import { createFareQuote, settleFare } from './FareCalculator';
 
+/** Compatibilidade com chamadas históricas; toda a regra vive em FareCalculator. */
 export function calculateFare(distanceMeters: number, elapsedSeconds: number, rating: number): Receipt {
-  const distanceKm = Math.max(0, distanceMeters) / 1000;
-  const timeMinutes = Math.max(0, elapsedSeconds) / 60;
-  const baseFare = GAME_CONFIG.fare.base;
-  const distanceFare = distanceKm * GAME_CONFIG.fare.perKilometer;
-  const timeFare = timeMinutes * GAME_CONFIG.fare.perMinute;
-  const subtotal = (baseFare + distanceFare + timeFare) * GAME_CONFIG.fare.testMultiplier;
-  const ratingRatio = Math.max(0, Math.min(1, (rating - 4) / 1));
-  const ratingBonus = subtotal * GAME_CONFIG.fare.maxRatingBonusPercent * ratingRatio;
-  const total = subtotal + ratingBonus;
-
-  return {
-    distanceKm,
-    timeMinutes,
-    baseFare,
-    distanceFare,
-    timeFare,
-    ratingBonus,
-    total,
-    xp: Math.round(20 + distanceKm * 12),
-    rating: Math.max(4.5, Math.min(5, rating + 0.01))
-  };
+  const quote = createFareQuote({
+    distanceMeters, estimatedSeconds: elapsedSeconds, category: 'popular', demand: 1, difficulty: 1,
+    condition: 70, comfortLevel: 0, rating
+  });
+  return settleFare(quote, {
+    collisions: 0, redLights: 0, deviationSeconds: 0, aggressiveSeconds: 0, startedAt: new Date(0).toISOString()
+  }, distanceMeters, elapsedSeconds, 70);
 }
 
 export function formatCurrency(value: number) {

@@ -1,4 +1,4 @@
-import type { BusStop, CityMapData, MapBuilding, MapMetadata, MapSignal, NavigationGraph, RoadData } from '../types/game';
+import type { BusStop, CityMapData, MapBuilding, MapMetadata, MapServiceLocation, MapSignal, NavigationGraph, RoadData } from '../types/game';
 
 async function loadJson<T>(filename: string): Promise<T> {
   const url = `${import.meta.env.BASE_URL}data/cities/brasilia/central/${filename}`;
@@ -8,13 +8,16 @@ async function loadJson<T>(filename: string): Promise<T> {
 }
 
 export async function loadCityMap(): Promise<CityMapData> {
-  const [metadata, roads, graph, signals, busStops, buildings] = await Promise.all([
+  const [metadata, roads, graph, signals, busStops, buildings, fuelStations, workshops, garages] = await Promise.all([
     loadJson<MapMetadata>('metadata.json'),
     loadJson<RoadData[]>('roads.json'),
     loadJson<NavigationGraph>('navigation-graph.json'),
     loadJson<MapSignal[]>('traffic-signals.json'),
     loadJson<BusStop[]>('bus-stops.json'),
-    loadJson<MapBuilding[]>('buildings.json')
+    loadJson<MapBuilding[]>('buildings.json'),
+    loadJson<MapServiceLocation[]>('services/fuel-stations.json'),
+    loadJson<MapServiceLocation[]>('services/workshops.json'),
+    loadJson<MapServiceLocation[]>('services/garages.json')
   ]);
-  return { metadata, roads, graph, signals, busStops, buildings };
+  return { metadata, roads, graph, signals, busStops, buildings, services: [...fuelStations, ...workshops, ...garages] };
 }

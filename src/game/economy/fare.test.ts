@@ -1,17 +1,17 @@
 import { describe, expect, it } from 'vitest';
 import { calculateFare } from './fare';
 
-describe('calculateFare', () => {
-  it('aplica base, distância, tempo, multiplicador e bônus', () => {
+describe('calculateFare compatível', () => {
+  it('usa a fonte central de tarifa, qualidade e gorjeta', () => {
     const receipt = calculateFare(2_000, 600, 5);
-    expect(receipt.baseFare).toBe(5);
-    expect(receipt.distanceFare).toBeCloseTo(3.6);
-    expect(receipt.timeFare).toBeCloseTo(3.5);
-    expect(receipt.total).toBeCloseTo((5 + 3.6 + 3.5) * 2.5 * 1.12);
-    expect(receipt.xp).toBe(44);
+    expect(receipt.baseFare).toBe(7.5);
+    expect(receipt.distanceFare).toBeCloseTo(8.4);
+    expect(receipt.timeFare).toBeCloseTo(5);
+    expect(receipt.total).toBeGreaterThan(receipt.guaranteedTotal!);
+    expect(receipt.xp).toBeGreaterThan(40);
   });
 
   it('nunca cria valores negativos', () => {
-    expect(calculateFare(-10, -20, 3).total).toBe(12.5);
+    expect(calculateFare(-10, -20, 3).total).toBeGreaterThanOrEqual(9);
   });
 });

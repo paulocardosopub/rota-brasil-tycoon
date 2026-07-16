@@ -8,7 +8,7 @@ export default defineConfig({
   timeout: 30_000,
   // Um runner compartilhado não representa desempenho gráfico e dois jogos
   // Phaser simultâneos tornam a direção automática artificialmente instável.
-  workers: process.env.CI ? 1 : undefined,
+  workers: 1,
   use: {
     baseURL: `http://127.0.0.1:4173${path}`,
     trace: 'retain-on-failure'
