@@ -1,19 +1,21 @@
 {
   "source": "OpenStreetMap",
   "license": "ODbL 1.0",
-  "importedAt": "2026-07-16T23:23:32.108Z",
+  "importedAt": "2026-07-17T16:43:53.718Z",
   "bbox": {
-    "south": -15.84,
+    "south": -15.9,
     "west": -47.95,
-    "north": -15.73,
-    "east": -47.83
+    "north": -15.68,
+    "east": -47.74
   },
-  "overpassQueryVersion": "0.7.0",
+  "overpassQueryVersion": "0.8.2",
   "modifications": [
+    "expansão incremental Lago Sul/Jardim Botânico/Lago Norte",
     "filtro de vias dirigíveis",
     "inferência canônica de corredores",
     "grafo por faixa",
-    "chunks de 800 m"
+    "chunks de 800 m",
+    "geofences OSM"
   ],
   "overrideFile": "data/map-overrides/brasilia/road-overrides.json"
 }

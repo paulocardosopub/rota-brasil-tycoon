@@ -51,8 +51,8 @@ export function settleFare(quote: FareQuote, quality: RideQuality, distanceMeter
   if (!quality.redLights) positives.push('sinais respeitados');
   if (quality.deviationSeconds <= 12) positives.push('rota bem seguida');
   const rating = Math.round(clamp(score, 1, 5) * 10) / 10;
-  const qualityBonus = rating >= 4.7 ? roundMoney(quote.guaranteedTotal * 0.04) : 0;
-  const tipPercent = rating >= 4.8 ? 0.06 : rating >= 4.5 ? 0.035 : rating >= 4.2 ? 0.015 : 0;
+  const qualityBonus = rating >= 4.7 ? roundMoney(quote.guaranteedTotal * 0.05) : 0;
+  const tipPercent = rating >= 4.8 ? 0.07 : rating >= 4.5 ? 0.04 : rating >= 4.2 ? 0.02 : 0;
   const tip = roundMoney(Math.min(quote.guaranteedTotal * ECONOMY_CONFIG.fare.maximumTipPercent, quote.guaranteedTotal * tipPercent));
   return {
     distanceKm: Math.max(0, distanceMeters) / 1000,

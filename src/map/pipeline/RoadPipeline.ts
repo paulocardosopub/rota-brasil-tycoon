@@ -169,8 +169,10 @@ export function buildLaneGraph(roads: RoadData[], chunkSizeMeters = 800): { lane
   }
 
   const laneById = new Map(lanes.map((lane) => [lane.id, lane]));
+  const roadById = new Map(roads.map((road) => [road.id, road]));
+  const lanesByRoad = groupBy(lanes, (lane) => lane.roadSegmentId);
   for (const lane of lanes) {
-    lane.neighborLaneIds = lanes
+    lane.neighborLaneIds = (lanesByRoad.get(lane.roadSegmentId) ?? [])
       .filter((candidate) => candidate.roadSegmentId === lane.roadSegmentId && candidate.direction === lane.direction && candidate.id !== lane.id)
       .map((candidate) => candidate.id);
   }
@@ -204,7 +206,7 @@ export function buildLaneGraph(roads: RoadData[], chunkSizeMeters = 800): { lane
         fromNode.edges.push({
           to: target.id, distance: Math.max(0.5, distance(fromNode, target)),
           roadId: toLane.roadSegmentId, laneId: toLane.id,
-          highway: roadFor(roads, toLane.roadSegmentId)?.highway, connector: true
+          highway: roadById.get(toLane.roadSegmentId)?.highway, connector: true
         });
         arrival.lane.nextLaneIds.push(toLane.id);
       }
@@ -220,14 +222,67 @@ export function buildLaneGraph(roads: RoadData[], chunkSizeMeters = 800): { lane
   const routingNodes = [...graphNodes.values()].filter((node) => node.laneId && routingLaneIds.has(node.laneId));
   const routingNodeIds = new Set(routingNodes.map((node) => node.id));
   for (const node of routingNodes) node.edges = node.edges.filter((edge) => routingNodeIds.has(edge.to));
-  // Keep the complete connected street network, including legitimate one-way
-  // feeders and local access roads. Restricting the graph to its largest
-  // strongly connected core discarded those roads and forced the GPS to join
-  // a parallel avenue with a straight chord across grass or sidewalks.
-  const coreNodeIds = largestWeakComponent(routingNodes);
-  const coreNodes = routingNodes.filter((node) => coreNodeIds.has(node.id));
-  for (const node of coreNodes) node.edges = node.edges.filter((edge) => coreNodeIds.has(edge.to));
-  return { lanes, graph: { kind: 'lane', version: '0.7.0', nodes: coreNodes } };
+  // Rebuild the junction connector for the hierarchy explicitly between
+  // index-zero lanes. A connector selected for lane 1/2 is intentionally
+  // discarded above; without this pass that could split an otherwise
+  // continuous OSM corridor into regional graph islands.
+  for (const [sourceNodeId, incoming] of arrivals) {
+    const routingIncoming = incoming.filter((arrival) => arrival.lane.index === 0);
+    const routingOutgoing = (departures.get(sourceNodeId) ?? []).filter((departure) => departure.lane.index === 0);
+    for (const arrival of routingIncoming) {
+      const hasAlternativeRoad = routingOutgoing.some((departure) =>
+        departure.lane.layer === arrival.lane.layer
+        && departure.lane.roadSegmentId !== arrival.lane.roadSegmentId
+      );
+      const legal = routingOutgoing.filter((departure) => {
+        if (departure.lane.id === arrival.lane.id || departure.lane.layer !== arrival.lane.layer) return false;
+        if (departure.lane.roadSegmentId === arrival.lane.roadSegmentId && departure.lane.direction !== arrival.lane.direction) {
+          const actualRoadEnd = arrival.nodeId === arrival.lane.endNodeId
+            && departure.nodeId === departure.lane.startNodeId;
+          return actualRoadEnd && !hasAlternativeRoad;
+        }
+        return Math.abs(angleDelta(arrival.heading, departure.heading)) < Math.PI * 0.86;
+      });
+      for (const candidates of groupBy(legal, (departure) => departure.lane.roadSegmentId).values()) {
+        const departure = candidates[0];
+        const fromNode = graphNodes.get(arrival.nodeId)!;
+        const target = graphNodes.get(departure.nodeId)!;
+        if (fromNode.edges.some((edge) => edge.to === target.id)) continue;
+        fromNode.edges.push({
+          to: target.id, distance: Math.max(0.5, distance(fromNode, target)),
+          roadId: departure.lane.roadSegmentId, laneId: departure.lane.id,
+          highway: roadById.get(departure.lane.roadSegmentId)?.highway, connector: true
+        });
+      }
+    }
+  }
+  // Some OSM junctions join one-way fragments with only arrivals (or only
+  // departures). They are physically the same node, but cannot be recovered
+  // by the movement pass above. Join different real ways at that exact node
+  // on the same layer so regional routing remains continuous.
+  const routingBySource = groupBy(routingNodes, (node) => node.sourceNodeId ?? node.id);
+  for (const colocated of routingBySource.values()) {
+    if (colocated.length < 2 || colocated.length > 24) continue;
+    for (const fromNode of colocated) for (const target of colocated) {
+      if (fromNode.id === target.id || fromNode.roadSegmentId === target.roadSegmentId) continue;
+      const fromLane = fromNode.laneId ? laneById.get(fromNode.laneId) : undefined;
+      const toLane = target.laneId ? laneById.get(target.laneId) : undefined;
+      const fromRoad = fromLane ? roadById.get(fromLane.roadSegmentId) : undefined;
+      const toRoad = toLane ? roadById.get(toLane.roadSegmentId) : undefined;
+      if (!fromLane || !toLane || !fromRoad || !toRoad) continue;
+      if (!sameLevelOrStructureEndpoint(fromRoad, toRoad, fromNode.sourceNodeId)) continue;
+      if (fromNode.edges.some((edge) => edge.to === target.id)) continue;
+      fromNode.edges.push({
+        to: target.id, distance: Math.max(0.5, distance(fromNode, target)),
+        roadId: toLane.roadSegmentId, laneId: toLane.id,
+        highway: toRoad.highway, connector: true
+      });
+    }
+  }
+  // Keep every real routing component. Regional service roads and gated lots
+  // can be small components, but removing them also removed their geometry
+  // from GPS lookup and made the closest lane several kilometres away.
+  return { lanes, graph: { kind: 'lane', version: '0.8.2', nodes: routingNodes } };
 }
 
 export function chunkIdFor(point: { x: number; y: number }, size = 800) {
@@ -290,33 +345,9 @@ function distance(a: { x: number; y: number }, b: { x: number; y: number }) {
   return Math.hypot(a.x - b.x, a.y - b.y);
 }
 
-function roadFor(roads: RoadData[], id: string) {
-  return roads.find((road) => road.id === id);
-}
-
-function largestWeakComponent(nodes: NavigationGraph['nodes']) {
-  const adjacency = new Map(nodes.map((node) => [node.id, [] as string[]]));
-  for (const node of nodes) for (const edge of node.edges) if (adjacency.has(edge.to)) {
-    adjacency.get(node.id)!.push(edge.to);
-    adjacency.get(edge.to)!.push(node.id);
-  }
-  const visited = new Set<string>();
-  let largest = new Set<string>();
-  for (const node of nodes) {
-    const start = node.id;
-    if (visited.has(start)) continue;
-    const component = new Set<string>([start]);
-    const pending = [start];
-    visited.add(start);
-    while (pending.length) {
-      const id = pending.pop()!;
-      for (const neighbor of adjacency.get(id) ?? []) if (!visited.has(neighbor)) {
-        visited.add(neighbor);
-        component.add(neighbor);
-        pending.push(neighbor);
-      }
-    }
-    if (component.size > largest.size) largest = component;
-  }
-  return largest;
+function sameLevelOrStructureEndpoint(from: RoadData, to: RoadData, sourceNodeId?: string) {
+  if (from.layer === to.layer) return true;
+  if (!sourceNodeId) return false;
+  return [from, to].some((road) => (road.bridge || road.tunnel)
+    && (road.points[0]?.nodeId === sourceNodeId || road.points.at(-1)?.nodeId === sourceNodeId));
 }

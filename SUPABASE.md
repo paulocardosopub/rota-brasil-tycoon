@@ -9,7 +9,9 @@ supabase link --project-ref ahryycnozuyolmrbbslo
 supabase db push
 ```
 
-Também é possível aplicar, em ordem, os arquivos de `supabase/migrations/` no SQL Editor. A migration inicial cria saves e estatísticas; `202607170001_online_alpha_080.sql` acrescenta mundos, perfis públicos, sessões, concessões, localizações, frotas, turnos, incidentes, bloqueios e limites, todos protegidos por RLS.
+Também é possível aplicar, em ordem, os arquivos de `supabase/migrations/` no SQL Editor. A migration inicial cria saves e estatísticas; `202607170001_online_alpha_080.sql` acrescenta mundos, perfis públicos, sessões, concessões, localizações, frotas, turnos, incidentes, bloqueios e limites, todos protegidos por RLS. A migration `202607170004_playable_082_regions.sql` autoriza exclusivamente o mapa `brasilia-0.8.2`, preserva o protocolo 1 e mantém a função de entrada restrita a usuários autenticados.
+
+Sem essa última migration, o backend recusa corretamente o cliente 0.8.2 com `VERSION_MISMATCH`; o jogo continua em Solo temporário. A migration está preparada no repositório, mas não deve ser aplicada nem publicada sem uma sessão autenticada da CLI ou ação explícita do responsável pelo ambiente.
 
 Depois da migration, publique as funções autenticadas:
 

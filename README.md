@@ -1,4 +1,17 @@
-# Rota Brasil Tycoon — Playable 0.8.1 Online Alpha
+# Rota Brasil Tycoon — PLAYABLE 0.8.2
+
+## Expansão regional, economia e serviços
+
+- Lago Sul, Jardim Botânico, Lago Norte, Aeroporto e os setores do Plano Piloto participam do mesmo grafo dirigido, com ofertas regionais válidas;
+- o jogador escolhe uma região preferida, acumula familiaridade e recebe ofertas com distância e preço calculados pela rota real;
+- funcionários recebem região, alcance, política de retorno, combustível, condição e serviços preferidos;
+- 7 postos, 5 oficinas e 4 garagens/bases usam posições e acessos OpenStreetMap reais; adaptações fictícias são identificadas;
+- o progresso normal ficou 16,3% mais acessível, mantendo combustível, desgaste, reparos e risco de operação;
+- rotas de posto, oficina e garagem recalculam sozinhas quando o jogador assume a direção manual e se afasta;
+- piloto, funcionários e NPCs ativam recuperação imprudente após 10 segundos de bloqueio persistente;
+- save v7 preserva patrimônio anterior e acrescenta região, familiaridade, preferências regionais e linhagem segura da nuvem.
+
+Esta versão foi validada localmente e será publicada como uma release própria, preservando a 0.8.1 e todo o histórico anterior.
 
 Jogo 2.5D de transporte brasileiro para navegador. Você começa ao volante de um Hatch 1998 em Brasília, atende passageiros, torna-se taxista e monta uma frota com funcionários que percorrem a mesma cidade física do jogador.
 
@@ -96,6 +109,13 @@ O workflow `.github/workflows/web.yml` testa, compila e publica `main`. Em **Set
 
 ## Auditorias
 
+- [auditoria da PLAYABLE 0.8.2](./docs/playable-0.8.2-audit.md)
+- [cobertura regional 0.8.2](./docs/regional-coverage-0.8.2.md)
+- [rebalanceamento econômico 0.8.2](./docs/economy-rebalance-0.8.2.md)
+- [cobertura de serviços 0.8.2](./docs/service-coverage-0.8.2.md)
+- [malha viária 0.8.2](./docs/road-network-audit-0.8.2.md)
+- [simulação de trânsito 0.8.2](./docs/traffic-simulation-0.8.2.md)
+- [desempenho 0.8.2](./docs/performance-0.8.2.md)
 - [arquitetura online 0.8.0](./docs/online-architecture-0.8.0.md)
 - [segurança online 0.8.0](./docs/online-security-0.8.0.md)
 - [simulação e carga online](./docs/online-load-test-0.8.0.md)
@@ -116,5 +136,5 @@ O workflow `.github/workflows/web.yml` testa, compila e publica `main`. Em **Set
 - o processo de licença e os valores do taxímetro são regras de gameplay;
 - colisões usam física arcade, sem deformação visual complexa;
 - autenticação por e-mail depende do Supabase opcional;
-- a publicação do GitHub Pages permanece em Solo temporário até receber as variáveis e o backend Supabase do ambiente;
+- o backend público precisa receber a migration `202607170004_playable_082_regions.sql` antes de aceitar o mapa 0.8.2 no modo online;
 - a câmera inclinada é uma projeção 2.5D estilizada.

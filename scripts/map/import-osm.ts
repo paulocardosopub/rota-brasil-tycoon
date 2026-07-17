@@ -4,9 +4,10 @@ import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { XMLParser } from 'fast-xml-parser';
 import type {
-  BusStop, CityMapChunk, CityMapManifest, MapBuilding, MapRegion, MapSignal, RoadPoint
+  BusStop, CityMapChunk, CityMapManifest, MapBuilding, MapSignal, RoadPoint
 } from '../../src/types/game';
 import { latLonToLocalMeters } from '../../src/map/projection/localMeters';
+import { buildRegionCatalog, regionAt } from '../../src/map/regions/RegionCatalog';
 import {
   buildLaneGraph, canonicalizeRoads, chunkIdFor,
   type RawRoadSpec, type RoadOverride
@@ -26,11 +27,16 @@ type OverpassResponse = { version: number; generator: string; osm3s?: unknown; e
 const outputRoot = path.resolve('public/data/cities/brasilia');
 const sourceRoot = path.resolve('data/map-sources/brasilia');
 const overrideFile = path.resolve('data/map-overrides/brasilia/road-overrides.json');
-const sourceFile = path.join(sourceRoot, 'osm-0.7.0.json.gz');
+const sourceFile = path.join(sourceRoot, 'osm-0.8.2.json.gz');
+const legacySourceFile = path.join(sourceRoot, 'osm-0.7.0.json.gz');
 const origin = { lat: -15.7942, lon: -47.8822 };
-const bbox = { south: -15.84, west: -47.95, north: -15.73, east: -47.83 };
+const bbox = { south: -15.90, west: -47.95, north: -15.68, east: -47.74 };
+const expansionAreas = [
+  { id: 'lago-sul-jardim-botanico', bounds: { south: -15.90, west: -47.93, north: -15.79, east: -47.74 }, rows: 8, columns: 12 },
+  { id: 'lago-norte', bounds: { south: -15.79, west: -47.91, north: -15.68, east: -47.77 }, rows: 8, columns: 9 }
+] as const;
 const chunkSizeMeters = 800;
-const mapVersion = 'brasilia-0.7.0';
+const mapVersion = 'brasilia-0.8.2';
 const gzipAsync = promisify(gzip);
 const gunzipAsync = promisify(gunzip);
 
@@ -42,25 +48,32 @@ const allowedHighways = new Set([
 
 async function download() {
   const merged = new Map<string, OsmElement>();
-  const rows = 8;
-  const columns = 8;
+  const legacy = await readCompressedSnapshot(legacySourceFile);
+  for (const element of legacy.elements) mergeElement(merged, element);
   const cacheRoot = path.join(sourceRoot, 'cache');
   await mkdir(cacheRoot, { recursive: true });
-  for (let row = 0; row < rows; row += 1) for (let column = 0; column < columns; column += 1) {
-    const tile = {
-      south: bbox.south + (bbox.north - bbox.south) * row / rows,
-      north: bbox.south + (bbox.north - bbox.south) * (row + 1) / rows,
-      west: bbox.west + (bbox.east - bbox.west) * column / columns,
-      east: bbox.west + (bbox.east - bbox.west) * (column + 1) / columns
-    };
-    const cacheFile = path.join(cacheRoot, `tile-${row}-${column}.json.gz`);
-    const tileData = await readCachedTile(cacheFile) ?? await fetchTile(tile, row, column);
-    if (!(await readCachedTile(cacheFile))) await writeFile(cacheFile, await gzipAsync(Buffer.from(JSON.stringify(tileData))));
-    for (const element of tileData.elements) mergeElement(merged, element);
-    console.log(`Bloco geográfico ${row * columns + column + 1}/${rows * columns}: ${merged.size} elementos únicos.`);
-    await new Promise((resolve) => setTimeout(resolve, 700));
+  const totalTiles = expansionAreas.reduce((sum, area) => sum + area.rows * area.columns, 0);
+  let completedTiles = 0;
+  for (const area of expansionAreas) {
+    const { rows, columns } = area;
+    for (let row = 0; row < rows; row += 1) for (let column = 0; column < columns; column += 1) {
+      const tile = {
+        south: area.bounds.south + (area.bounds.north - area.bounds.south) * row / rows,
+        north: area.bounds.south + (area.bounds.north - area.bounds.south) * (row + 1) / rows,
+        west: area.bounds.west + (area.bounds.east - area.bounds.west) * column / columns,
+        east: area.bounds.west + (area.bounds.east - area.bounds.west) * (column + 1) / columns
+      };
+      const cacheFile = path.join(cacheRoot, `tile-0.8.2-${area.id}-${row}-${column}.json.gz`);
+      const cached = await readCachedTile(cacheFile);
+      const tileData = cached ?? await fetchTile(tile, row, column);
+      if (!cached) await writeFile(cacheFile, await gzipAsync(Buffer.from(JSON.stringify(tileData))));
+      for (const element of tileData.elements) mergeElement(merged, element);
+      completedTiles += 1;
+      console.log(`Expansão ${area.id} ${completedTiles}/${totalTiles}: ${merged.size} elementos únicos.`);
+      if (!cached) await new Promise((resolve) => setTimeout(resolve, 700));
+    }
   }
-  return { version: 0.6, generator: 'Rota Brasil Tycoon tiled Overpass importer', elements: [...merged.values()] };
+  return { version: 0.6, generator: 'Rota Brasil Tycoon incremental OSM importer 0.8.2', elements: [...merged.values()] };
 }
 
 async function fetchTile(tile: typeof bbox, row: number, column: number) {
@@ -69,11 +82,11 @@ async function fetchTile(tile: typeof bbox, row: number, column: number) {
 
 async function fetchTileRecursive(tile: typeof bbox, row: number, column: number, depth: number): Promise<OverpassResponse> {
   let lastError: unknown;
-  for (let attempt = 0; attempt < 4; attempt += 1) {
+  for (let attempt = 0; attempt < 7; attempt += 1) {
     try {
       const url = `https://api.openstreetmap.org/api/0.6/map?bbox=${tile.west},${tile.south},${tile.east},${tile.north}`;
       const response = await fetch(url, {
-        headers: { Accept: 'application/xml', 'User-Agent': 'RotaBrasilTycoonMapImporter/0.7 (local development)' },
+        headers: { Accept: 'application/xml', 'User-Agent': 'RotaBrasilTycoonMapImporter/0.8.2 (local development)' },
         signal: AbortSignal.timeout(120_000)
       });
       if (response.status === 400 && depth < 3) {
@@ -81,12 +94,18 @@ async function fetchTileRecursive(tile: typeof bbox, row: number, column: number
         console.warn(`Bloco ${row + 1}/${column + 1} denso; subdividindo (${detail.slice(0, 90)}).`);
         return mergeResponses(await Promise.all(splitTile(tile).map((part) => fetchTileRecursive(part, row, column, depth + 1))));
       }
+      if (response.status === 429 || response.status === 509) {
+        const waitMs = 30_000 + attempt * 15_000;
+        console.warn(`OpenStreetMap limitou a coleta; aguardando ${Math.round(waitMs / 1_000)} s.`);
+        await new Promise((resolve) => setTimeout(resolve, waitMs));
+        continue;
+      }
       if (!response.ok) throw new Error(`OpenStreetMap API: ${response.status} ${response.statusText}`);
       return parseOsmXml(await response.text());
     } catch (error) {
       lastError = error;
       console.warn(`Bloco ${row + 1}/${column + 1}, tentativa ${attempt + 1}: ${String(error)}`);
-      await new Promise((resolve) => setTimeout(resolve, 3_000 + attempt * 3_000));
+      await new Promise((resolve) => setTimeout(resolve, 5_000 + attempt * 5_000));
     }
   }
   throw lastError;
@@ -190,7 +209,7 @@ async function main() {
   });
 
   for (const road of roads) road.chunkIds = [...new Set(road.points.map((point) => chunkIdFor(point, chunkSizeMeters)))];
-  const regions = buildRegions();
+  const regions = buildRegionCatalog(origin);
   const chunkIds = new Set<string>();
   for (const road of roads) for (const id of road.chunkIds ?? []) chunkIds.add(id);
   for (const building of buildings) chunkIds.add(chunkIdFor(centroid(building.points), chunkSizeMeters));
@@ -199,7 +218,7 @@ async function main() {
   await Promise.all([mkdir(path.join(outputRoot, 'chunks'), { recursive: true }), mkdir(sourceRoot, { recursive: true })]);
   for (const id of [...chunkIds].sort(chunkSort)) {
     const bounds = chunkBounds(id, chunkSizeMeters);
-    const region = nearestRegion({ x: (bounds.minX + bounds.maxX) / 2, y: (bounds.minY + bounds.maxY) / 2 }, regions);
+    const region = regionAt({ x: (bounds.minX + bounds.maxX) / 2, y: (bounds.minY + bounds.maxY) / 2 }, regions);
     const chunkRoads = roads.filter((road) => road.chunkIds?.includes(id));
     const chunkLanes = lanes.filter((lane) => lane.chunkIds.includes(id));
     const chunk: CityMapChunk = {
@@ -217,12 +236,13 @@ async function main() {
       capacity: 96, spawnBudget: 72, playerBudget: 8, fleetBudget: 16, npcBudget: 72
     };
     chunkEntries.push(entry);
+    region.chunkIds.push(id);
     await writeJson(path.join(outputRoot, entry.file), chunk, false);
   }
 
   const metadata = {
     city: 'Brasília',
-    area: 'Plano Piloto, Sudoeste, Cruzeiro, Noroeste e Vila Planalto',
+    area: 'Plano Piloto, Lagos Norte e Sul, Jardim Botânico e Aeroporto',
     origin, bbox, importedAt,
     source: 'OpenStreetMap',
     sourceUrl: 'https://www.openstreetmap.org/copyright',
@@ -242,10 +262,10 @@ async function main() {
     writeJson(path.join(outputRoot, 'metadata.json'), metadata),
     writeFile(path.join(outputRoot, 'lane-graph.json.gz'), graphCompressed),
     writeJson(path.join(outputRoot, 'traffic-signals.json'), signals),
-    writeFile(path.join(sourceRoot, 'osm-0.7.0.json.gz'), rawCompressed),
+    writeFile(sourceFile, rawCompressed),
     writeJson(path.join(sourceRoot, 'source-metadata.json'), {
       source: 'OpenStreetMap', license: 'ODbL 1.0', importedAt, bbox,
-      overpassQueryVersion: '0.7.0', modifications: ['filtro de vias dirigíveis', 'inferência canônica de corredores', 'grafo por faixa', 'chunks de 800 m'],
+      overpassQueryVersion: '0.8.2', modifications: ['expansão incremental Lago Sul/Jardim Botânico/Lago Norte', 'filtro de vias dirigíveis', 'inferência canônica de corredores', 'grafo por faixa', 'chunks de 800 m', 'geofences OSM'],
       overrideFile: 'data/map-overrides/brasilia/road-overrides.json'
     })
   ]);
@@ -254,7 +274,11 @@ async function main() {
 }
 
 async function readSourceSnapshot() {
-  const compressed = await readFile(sourceFile);
+  return readCompressedSnapshot(sourceFile);
+}
+
+async function readCompressedSnapshot(filename: string) {
+  const compressed = await readFile(filename);
   return JSON.parse((await gunzipAsync(compressed)).toString('utf8')) as OverpassResponse;
 }
 
@@ -273,27 +297,6 @@ async function readOverrides(): Promise<RoadOverride[]> {
   } catch {
     return [];
   }
-}
-
-function buildRegions(): MapRegion[] {
-  const definitions = [
-    ['asa-norte', 'Asa Norte', -15.755, -47.885, 2_700, 2_900],
-    ['asa-sul', 'Asa Sul', -15.815, -47.900, 2_900, 3_200],
-    ['centro', 'Setores Centrais', -15.794, -47.882, 2_000, 2_000],
-    ['sudoeste', 'Sudoeste', -15.797, -47.925, 1_800, 1_800],
-    ['cruzeiro', 'Cruzeiro', -15.790, -47.938, 1_700, 1_800],
-    ['noroeste', 'Noroeste', -15.750, -47.910, 2_100, 2_100],
-    ['vila-planalto', 'Vila Planalto', -15.790, -47.850, 1_900, 2_000],
-    ['unb', 'Universidade de Brasília', -15.765, -47.870, 2_000, 2_000]
-  ] as const;
-  return definitions.map(([id, name, lat, lon, width, height]) => {
-    const center = latLonToLocalMeters(lat, lon, origin);
-    return { id, name, center, bounds: { minX: center.x - width / 2, minY: center.y - height / 2, maxX: center.x + width / 2, maxY: center.y + height / 2 } };
-  });
-}
-
-function nearestRegion(point: { x: number; y: number }, regions: MapRegion[]) {
-  return regions.reduce((best, region) => distance(point, region.center) < distance(point, best.center) ? region : best);
 }
 
 function chunkBounds(id: string, size: number) {
@@ -319,10 +322,6 @@ function validCoordinate(element: OsmElement | undefined): element is OsmElement
 function numberTag(value: string | undefined) {
   const parsed = Number(value?.replace(',', '.').match(/[\d.]+/)?.[0]);
   return Number.isFinite(parsed) ? parsed : undefined;
-}
-
-function distance(a: { x: number; y: number }, b: { x: number; y: number }) {
-  return Math.hypot(a.x - b.x, a.y - b.y);
 }
 
 function chunkSort(a: string, b: string) {

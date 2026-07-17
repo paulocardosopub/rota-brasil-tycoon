@@ -1,4 +1,4 @@
-import type { AccountLinkState, CameraZoom, HudSnapshot, PlayerSave, Quality, ServiceCategory, TrafficDensity, VehicleUpgradeId } from '../types/game';
+import type { AccountLinkState, CameraZoom, EmployeeRegionalPreferences, HudSnapshot, PlayerSave, Quality, RegionPreference, ServiceCategory, TrafficDensity, VehicleUpgradeId } from '../types/game';
 import type { WorkshopServiceId } from './economy/ExpenseCalculator';
 
 export type GameCommand =
@@ -15,6 +15,8 @@ export type GameCommand =
   | { type: 'set-account-link-state'; state: AccountLinkState }
   | { type: 'set-online-visibility'; setting: 'showPlayerNames' | 'showFleetNames' | 'showPlayersOnMap' | 'remoteSounds' | 'publicPresence'; enabled: boolean }
   | { type: 'set-online-visual-limit'; limit: number }
+  | { type: 'set-preferred-region'; regionId: RegionPreference }
+  | { type: 'set-employee-regional-preferences'; employeeId: string; preferences: Partial<EmployeeRegionalPreferences> }
   | { type: 'cancel-ride' }
   | { type: 'dismiss-receipt' }
   | { type: 'accept-ride' }

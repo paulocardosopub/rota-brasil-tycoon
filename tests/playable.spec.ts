@@ -190,7 +190,7 @@ test('jogador e toda a fila saem de um engarrafamento travado após dez segundos
   await expect.poll(
     async () => Number(await hud.getAttribute('data-autopilot-deadlock-recoveries')),
     { timeout: 15_000 }
-  ).toBeGreaterThanOrEqual(4);
+  ).toBeGreaterThanOrEqual(5);
   await expect.poll(async () => Number(await hud.getAttribute('data-speed-kmh')), { timeout: 8_000 }).toBeGreaterThan(5);
   expect(Number(await hud.getAttribute('data-collision-events'))).toBe(0);
 });

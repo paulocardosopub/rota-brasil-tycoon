@@ -11,17 +11,27 @@ try {
   ]) {
     const context = await browser.newContext({ viewport: { width: preset.width, height: preset.height } });
     const page = await context.newPage();
+    const startedAt = Date.now();
     await page.goto(target);
+    const documentLoadMs = Date.now() - startedAt;
     await page.getByTestId('guest-button').click();
     const hud = page.locator('[data-game-ready="true"]');
     await hud.waitFor({ state: 'visible', timeout: 25_000 });
+    const gameReadyMs = Date.now() - startedAt;
     if (preset.autopilot) await page.getByTestId('autopilot-button').click();
     // Descarta a compilação inicial dos gráficos/chunks pela GPU. A medição
     // representa a partida estabilizada, não a tela de carregamento.
     await page.waitForTimeout(2_500);
     const fps = await collectFps(page, hud);
+    const heapUsedMB = await page.evaluate(() => {
+      const memory = (performance as Performance & { memory?: { usedJSHeapSize: number } }).memory;
+      return memory ? Math.round(memory.usedJSHeapSize / 1_048_576) : null;
+    });
     results.push({
       preset: preset.name,
+      documentLoadMs,
+      gameReadyMs,
+      heapUsedMB,
       minimumFps: Math.min(...fps),
       medianFps: median(fps),
       maximumFps: Math.max(...fps),

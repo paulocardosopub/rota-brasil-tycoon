@@ -1,9 +1,9 @@
 import { COLLISION_PHYSICS, VEHICLE_PHYSICS } from './vehiclePhysics';
 
 export const GAME_CONFIG = {
-  version: '0.8.1',
-  saveVersion: 6,
-  mapVersion: 'brasilia-0.7.0',
+  version: '0.8.2',
+  saveVersion: 7,
+  mapVersion: 'brasilia-0.8.2',
   map: {
     city: 'Brasília',
     district: 'Rodoviária do Plano Piloto e Eixo Monumental',
@@ -118,8 +118,8 @@ export const GAME_CONFIG = {
     regularizationCost: 220,
     conversionCost: 75,
     meter: {
-      initialFare: 6.5,
-      perKilometer: 4.6,
+      initialFare: 6.75,
+      perKilometer: 4.9,
       waitingPerMinute: 0.42,
       minimumFare: 12,
       safetyLimit: 85

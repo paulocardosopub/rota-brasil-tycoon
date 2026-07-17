@@ -121,4 +121,17 @@ describe('pipeline viário 0.7', () => {
     const groundNodes = graph.nodes.filter((node) => node.roadSegmentId === 'ground');
     expect(groundNodes.flatMap((node) => node.edges).some((edge) => edge.roadId === 'bridge')).toBe(false);
   });
+
+  it('liga a mudança de layer somente na cabeceira real de uma ponte', () => {
+    const roads = canonicalizeRoads([
+      { id: 'approach', points: [point('n0', -100, 0), point('head', 0, 0)], tags: { highway: 'trunk', oneway: 'yes', layer: '0' } },
+      { id: 'bridge', points: [point('head', 0, 0), point('end', 100, 0)], tags: { highway: 'trunk', oneway: 'yes', bridge: 'yes', layer: '1' } },
+      { id: 'exit', points: [point('end', 100, 0), point('n3', 200, 0)], tags: { highway: 'trunk', oneway: 'yes', layer: '0' } }
+    ]);
+    const { graph } = buildLaneGraph(roads);
+    expect(graph.nodes.filter((node) => node.roadSegmentId === 'approach').flatMap((node) => node.edges)
+      .some((edge) => edge.roadId === 'bridge')).toBe(true);
+    expect(graph.nodes.filter((node) => node.roadSegmentId === 'bridge').flatMap((node) => node.edges)
+      .some((edge) => edge.roadId === 'exit')).toBe(true);
+  });
 });

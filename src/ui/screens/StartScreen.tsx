@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { GAME_CONFIG } from '../../config/gameConfig';
 import { forceCloudSave } from '../../services/supabase/cloudSaveService';
-import { getAccountStatus, finishPermanentAccount, registerPermanentAccount, signInPermanent, type AccountStatus } from '../../services/supabase/authService';
+import { getAccountStatus, finishPermanentAccount, onPasswordRecovery, registerPermanentAccount, requestPasswordRecovery, signInPermanent, updateRecoveredPassword, type AccountStatus } from '../../services/supabase/authService';
 import { isCloudEnabled, supabase } from '../../services/supabase/client';
 import { hasSave, loadSave, writeSave } from '../../services/storage/saveService';
 
@@ -38,6 +38,7 @@ export function StartScreen({ onContinue, onNewGame, onGuest }: Props) {
   const [confirmationEmail, setConfirmationEmail] = useState<string | null>(null);
   const [message, setMessage] = useState('');
   const [busy, setBusy] = useState(false);
+  const [recoveringPassword, setRecoveringPassword] = useState(false);
 
   const refreshAccount = async () => {
     const status = await getAccountStatus();
@@ -49,6 +50,11 @@ export function StartScreen({ onContinue, onNewGame, onGuest }: Props) {
 
   useEffect(() => {
     void refreshAccount().catch(() => undefined);
+    return onPasswordRecovery(() => {
+      setAuthMode('signin');
+      setRecoveringPassword(true);
+      setMessage('Link confirmado. Crie uma nova senha para recuperar a conta.');
+    });
   }, []);
 
   const openAuth = (mode: Exclude<AuthMode, null>) => {
@@ -56,7 +62,37 @@ export function StartScreen({ onContinue, onNewGame, onGuest }: Props) {
     setMessage('');
     setPassword('');
     setConfirmPassword('');
+    setRecoveringPassword(false);
     void refreshAccount().catch(() => undefined);
+  };
+
+  const recoverPassword = async () => {
+    if (!email.trim()) { setMessage('Informe o e-mail da conta.'); return; }
+    setBusy(true);
+    try {
+      await requestPasswordRecovery(email);
+      setMessage('Enviamos um link seguro para redefinir sua senha. Seu save não será alterado.');
+    } catch (error) {
+      setMessage(authErrorMessage(error));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const finishPasswordRecovery = async () => {
+    if (password.length < 8) { setMessage('Use uma senha com pelo menos 8 caracteres.'); return; }
+    if (password !== confirmPassword) { setMessage('As senhas não coincidem.'); return; }
+    setBusy(true);
+    try {
+      await updateRecoveredPassword(password);
+      setRecoveringPassword(false);
+      setMessage('Senha atualizada. Carregando seu progresso protegido…');
+      await onContinue();
+    } catch (error) {
+      setMessage(authErrorMessage(error));
+    } finally {
+      setBusy(false);
+    }
   };
 
   const signIn = async () => {
@@ -164,7 +200,7 @@ export function StartScreen({ onContinue, onNewGame, onGuest }: Props) {
         <div className="hero-car"><i /><b /><em /></div>
       </div>
       <section className="start-card">
-        <div className="eyebrow">PLAYABLE {GAME_CONFIG.version} • ONLINE ALPHA</div>
+        <div className="eyebrow">PLAYABLE {GAME_CONFIG.version} — EXPANSÃO REGIONAL, ECONOMIA E SERVIÇOS</div>
         <h1><span>Rota Brasil</span> Tycoon</h1>
         <p>Comece ao volante de um Hatch 1998. Busque passageiros e construa sua futura empresa de transporte.</p>
         {!authMode ? (
@@ -182,7 +218,7 @@ export function StartScreen({ onContinue, onNewGame, onGuest }: Props) {
             <button className="back-link" onClick={() => setAuthMode(null)}>← Voltar</button>
             <div className="auth-heading">
               <div className="panel-kicker">{authMode === 'signin' ? 'CONTA EXISTENTE' : isGuestLink || pendingEmail || needsPassword ? 'PROTEGER PROGRESSO' : 'NOVA CONTA'}</div>
-              <h2>{authMode === 'signin' ? 'Entrar' : needsPassword ? 'Defina sua senha' : awaitingConfirmation ? 'Confirme seu e-mail' : isGuestLink ? 'Vincule seu convidado' : 'Criar sua conta'}</h2>
+              <h2>{recoveringPassword ? 'Redefinir senha' : authMode === 'signin' ? 'Entrar' : needsPassword ? 'Defina sua senha' : awaitingConfirmation ? 'Confirme seu e-mail' : isGuestLink ? 'Vincule seu convidado' : 'Criar sua conta'}</h2>
               {authMode === 'signup' && <p>{isGuestLink
                 ? 'Seu jogador, dinheiro, veículos e corridas continuarão iguais. Primeiro enviaremos a confirmação do e-mail.'
                 : needsPassword ? `E-mail ${account.email ?? email} confirmado. Falta apenas criar a senha.`
@@ -190,17 +226,20 @@ export function StartScreen({ onContinue, onNewGame, onGuest }: Props) {
                     : 'Crie uma conta para acessar o mesmo progresso em outros dispositivos.'}</p>}
             </div>
 
-            {!needsPassword && !awaitingConfirmation && <label>E-mail<input type="email" value={email} onChange={(event) => setEmail(event.target.value)} autoComplete="email" /></label>}
-            {authMode === 'signin' && <label>Senha<input type="password" value={password} onChange={(event) => setPassword(event.target.value)} autoComplete="current-password" /></label>}
+            {!needsPassword && !awaitingConfirmation && !recoveringPassword && <label>E-mail<input type="email" value={email} onChange={(event) => setEmail(event.target.value)} autoComplete="email" /></label>}
+            {authMode === 'signin' && <label>{recoveringPassword ? 'Nova senha' : 'Senha'}<input type="password" value={password} onChange={(event) => setPassword(event.target.value)} autoComplete={recoveringPassword ? 'new-password' : 'current-password'} /></label>}
+            {recoveringPassword && <label>Confirmar nova senha<input type="password" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} autoComplete="new-password" /></label>}
             {authMode === 'signup' && !isGuestLink && !awaitingConfirmation && <>
               <label>Senha<input type="password" value={password} onChange={(event) => setPassword(event.target.value)} autoComplete="new-password" minLength={8} /></label>
               <label>Confirmar senha<input type="password" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} autoComplete="new-password" minLength={8} /></label>
             </>}
 
-            {authMode === 'signin' && <button className="primary-button" onClick={signIn} disabled={busy}>Entrar na minha conta</button>}
+            {authMode === 'signin' && !recoveringPassword && <button className="primary-button" onClick={signIn} disabled={busy}>Entrar na minha conta</button>}
+            {authMode === 'signin' && !recoveringPassword && <button className="auth-switch" onClick={recoverPassword} disabled={busy}>Esqueci minha senha</button>}
+            {recoveringPassword && <button className="primary-button" onClick={finishPasswordRecovery} disabled={busy}>Salvar nova senha</button>}
             {authMode === 'signup' && awaitingConfirmation && <button className="primary-button" onClick={verifyConfirmation} disabled={busy}>Já confirmei o e-mail</button>}
             {authMode === 'signup' && !awaitingConfirmation && <button className="primary-button" onClick={createOrProtectAccount} disabled={busy}>{needsPassword ? 'Concluir e proteger progresso' : isGuestLink ? 'Vincular e-mail sem perder progresso' : 'Criar conta grátis'}</button>}
-            {authMode === 'signin' && <button className="auth-switch" onClick={() => openAuth('signup')}>Ainda não tenho conta</button>}
+            {authMode === 'signin' && !recoveringPassword && <button className="auth-switch" onClick={() => openAuth('signup')}>Ainda não tenho conta</button>}
             {authMode === 'signup' && !needsPassword && !awaitingConfirmation && <button className="auth-switch" onClick={() => openAuth('signin')}>Já tenho uma conta</button>}
             <small role="status">{message || (isCloudEnabled ? 'Seu progresso local será sincronizado com segurança.' : 'Supabase opcional não configurado.')}</small>
           </div>

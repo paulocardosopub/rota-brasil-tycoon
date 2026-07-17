@@ -2,7 +2,10 @@ import { GAME_CONFIG } from '../../config/gameConfig';
 import { GraphRouter } from '../../map/routing/GraphRouter';
 import type { GraphNode, MapRegion, MissionSnapshot, Point, Receipt, RideCategory, RideQuality, TaxiPoint } from '../../types/game';
 import { createFareQuote, settleFare } from '../economy/FareCalculator';
+import { ECONOMY_CONFIG } from '../economy/EconomyConfig';
 import { advanceActiveRoute } from '../systems/RouteProgress';
+import { familiarityLevel, regionAt } from '../../map/regions/RegionCatalog';
+import type { MapServiceLocation, RegionalFamiliarity, RegionPreference } from '../../types/game';
 
 type MissionVehicleContext = {
   condition: number;
@@ -11,6 +14,10 @@ type MissionVehicleContext = {
   taxiLicensed?: boolean;
   taxiPoints?: TaxiPoint[];
   regions?: MapRegion[];
+  preferredRegionId?: RegionPreference;
+  regionalFamiliarity?: Record<string, RegionalFamiliarity>;
+  services?: MapServiceLocation[];
+  fuelLiters?: number;
 };
 
 export class MissionSystem {
@@ -36,63 +43,110 @@ export class MissionSystem {
 
   private pickReachableCandidates(start: Point) {
     const all = this.router.candidates(80);
-    const stride = Math.max(1, Math.floor(all.length / 240));
-    const distributed = all.filter((_, index) => index % stride === 0)
-      .map((node) => ({ node, distance: Math.hypot(node.x - start.x, node.y - start.y) }))
-      .filter(({ distance }) => distance > 100 && distance < 9_000)
-      .sort((a, b) => a.distance - b.distance);
-    const count = Math.min(120, distributed.length);
-    return Array.from({ length: count }, (_, index) => distributed[Math.floor(index * distributed.length / count)].node);
+    const regions = this.vehicleContext.regions?.filter((region) => region.playable) ?? [];
+    if (!regions.length) {
+      const distributed = all.filter((_, index) => index % Math.max(1, Math.floor(all.length / 240)) === 0);
+      return evenlyDistributed(distributed, 160);
+    }
+    const byRegion = new Map(regions.map((region) => [region.id, [] as GraphNode[]]));
+    for (const node of all) byRegion.get(regionAt(node, regions).id)?.push(node);
+    const regional = regions.flatMap((region) => evenlyDistributed(byRegion.get(region.id) ?? [], 42));
+    const local = all
+      .filter((node) => Math.hypot(node.x - start.x, node.y - start.y) > 100 && Math.hypot(node.x - start.x, node.y - start.y) < 2_000)
+      .slice(0, 48);
+    return [...new Map([...regional, ...local].map((node) => [node.id, node])).values()];
   }
 
   private createMission(start: Point, rideIndex: number): MissionSnapshot {
     const pool = this.candidateNodes.length >= 8 ? this.candidateNodes : this.router.candidates(40);
-    const nearbyCount = Math.max(1, Math.min(24, pool.length));
+    const regions = this.vehicleContext.regions?.filter((region) => region.playable) ?? [];
+    const currentRegion = regions.length ? regionAt(start, regions) : null;
+    const regionalPlan = chooseRegionalPlan(
+      regions,
+      currentRegion,
+      this.vehicleContext.preferredRegionId ?? 'any',
+      rideIndex,
+      pool
+    );
     const taxiPoints = this.vehicleContext.taxiPoints ?? [];
     const official = isOfficialTaxiRide(this.vehicleContext.taxiLicensed === true, taxiPoints.length);
     const requestTypes = ['taxi-rank', 'street-hail', 'dispatch'] as const;
     const taxiRequestType = requestTypes[rideIndex % requestTypes.length];
     const taxiPoint = official && taxiRequestType === 'taxi-rank' ? taxiPoints[rideIndex % taxiPoints.length] : undefined;
-    const pickup: Point = taxiPoint?.entrance ?? pool[(rideIndex * 7) % nearbyCount] ?? this.router.nearest(start);
+    const pickupPool = regionalPlan.pickupRegion
+      ? pool.filter((node) => regionAt(node, regions).id === regionalPlan.pickupRegion!.id)
+      : pool;
+    const pickupCandidates = taxiPoint ? [taxiPoint.entrance, ...pickupPool] : pickupPool;
+    let pickup: Point = pickupCandidates[(rideIndex * 7) % Math.max(1, pickupCandidates.length)]
+      ?? pool[(rideIndex * 7) % Math.max(1, pool.length)]
+      ?? this.router.nearest(start);
+    let pickupRoute: Point[] = [];
+    for (let offset = 0; offset < Math.min(36, pickupCandidates.length); offset += 1) {
+      const candidate = pickupCandidates[(rideIndex * 7 + offset) % pickupCandidates.length];
+      const testRoute = this.router.drivingRoute(start, candidate);
+      if (testRoute.length >= 2) { pickup = candidate; pickupRoute = testRoute; break; }
+    }
+    if (pickupRoute.length < 2) for (const candidate of pool) {
+      const testRoute = this.router.drivingRoute(start, candidate);
+      if (testRoute.length >= 2) { pickup = candidate; pickupRoute = testRoute; break; }
+    }
     const bands = [
       { id: 'short', min: 300, max: 1_500 },
       { id: 'medium', min: 1_500, max: 3_500 },
       { id: 'long', min: 3_500, max: 7_500 },
-      { id: 'inter-region', min: 2_500, max: 8_500 }
+      { id: 'inter-region', min: 2_500, max: 18_000 }
     ] as const;
-    const band = bands[rideIndex % bands.length];
-    const destinationPool = pool
-      .filter((candidate) => {
-        const direct = Math.hypot(candidate.x - pickup.x, candidate.y - pickup.y);
-        return direct >= band.min * 0.7 && direct <= band.max;
-      })
+    const band = regionalPlan.kind === 'long' ? bands[3] : bands[rideIndex % 3];
+    const destinationPool = pool.filter((candidate) => {
+      if (regionalPlan.destinationRegion && regionAt(candidate, regions).id !== regionalPlan.destinationRegion.id) return false;
+      const direct = Math.hypot(candidate.x - pickup.x, candidate.y - pickup.y);
+      return direct >= band.min * 0.55 && direct <= band.max;
+    })
       .sort((a, b) => Math.hypot(a.x - pickup.x, a.y - pickup.y) - Math.hypot(b.x - pickup.x, b.y - pickup.y));
-    let destination = destinationPool[(rideIndex * 7) % Math.max(1, destinationPool.length)] ?? pool[Math.floor(pool.length / 2)];
-    for (let offset = 0; offset < Math.min(18, destinationPool.length); offset += 1) {
+    let destination = destinationPool[(rideIndex * 11) % Math.max(1, destinationPool.length)] ?? pool[Math.floor(pool.length / 2)];
+    let rideRoute: Point[] = [];
+    for (let offset = 0; offset < Math.min(28, destinationPool.length); offset += 1) {
       const candidate = destinationPool[(rideIndex * 7 + offset) % destinationPool.length];
-      const testRoute = this.router.route(pickup, candidate);
+      const testRoute = this.router.drivingRoute(pickup, candidate);
       const distance = this.router.distance(testRoute);
       if (testRoute.length > 2 && distance >= band.min && distance <= band.max * 1.25) {
         destination = candidate;
+        rideRoute = testRoute;
         break;
       }
     }
     destination ??= this.router.nearest({ x: -pickup.x * 0.55, y: -pickup.y * 0.55 });
-    const pickupRoute = this.router.drivingRoute(start, pickup);
-    const rideRoute = this.router.drivingRoute(pickup, destination);
+    if (!rideRoute.length) rideRoute = this.router.drivingRoute(pickup, destination);
+    if (rideRoute.length < 2) {
+      for (const candidate of pool) {
+        const testRoute = this.router.drivingRoute(pickup, candidate);
+        if (testRoute.length >= 2 && this.router.distance(testRoute) >= 300) {
+          destination = candidate;
+          rideRoute = testRoute;
+          break;
+        }
+      }
+    }
     const rideDistance = this.router.distance(rideRoute);
     const category = categoryForRide(rideIndex);
-    const labels = GAME_CONFIG.mission.locationLabels;
-    const pickupRegion = nearestRegion(pickup, this.vehicleContext.regions);
-    const destinationRegion = nearestRegion(destination, this.vehicleContext.regions);
+    const pickupRegion = regions.length ? regionAt(pickup, regions) : null;
+    const destinationRegion = regions.length ? regionAt(destination, regions) : null;
+    const familiarity = pickupRegion ? this.vehicleContext.regionalFamiliarity?.[pickupRegion.id] : undefined;
+    const familiarityClass = familiarityLevel(familiarity?.completedRides ?? 0, familiarity?.kilometers ?? 0);
+    const familiarityBonus = familiarityClass === 'favorite'
+      ? ECONOMY_CONFIG.regional.favoriteEfficiencyBonus
+      : familiarityClass === 'known' ? ECONOMY_CONFIG.regional.knownEfficiencyBonus : 0;
+    const demand = demandMultiplier(pickupRegion?.demandLevel, rideIndex) * (1 + familiarityBonus);
+    const recommendedFuelLiters = Math.ceil((this.router.distance(pickupRoute) + rideDistance) / 8.8 * 1.15 / 100) / 10;
+    const usesTaxiPoint = taxiPoint && Math.hypot(pickup.x - taxiPoint.entrance.x, pickup.y - taxiPoint.entrance.y) < 2;
     return {
       id: `ride-${Date.now()}-${rideIndex}`,
       passengerName: GAME_CONFIG.mission.passengerNames[rideIndex % GAME_CONFIG.mission.passengerNames.length],
       phase: 'offered',
       pickup: { x: pickup.x, y: pickup.y },
       destination: { x: destination.x, y: destination.y },
-      pickupLabel: taxiPoint?.gameName ?? labels[(rideIndex * 2) % labels.length],
-      destinationLabel: `${labels[(rideIndex * 2 + 5) % labels.length]}${destinationRegion ? ` • ${destinationRegion.name}` : ''}`,
+      pickupLabel: usesTaxiPoint ? taxiPoint.gameName : `Embarque ${pickupRegion?.name ?? 'Brasília'}`,
+      destinationLabel: `Destino ${destinationRegion?.name ?? 'Brasília'}`,
       distanceTravelled: 0,
       elapsedSeconds: 0,
       category,
@@ -106,7 +160,7 @@ export class MissionSystem {
         distanceMeters: rideDistance,
         estimatedSeconds: Math.max(90, rideDistance / 7.5 + 75),
         category,
-        demand: 0.97 + (rideIndex % 5) * 0.035,
+        demand,
         difficulty: 1 + Math.min(0.09, pickupRoute.length / 900),
         condition: this.vehicleContext.condition,
         comfortLevel: this.vehicleContext.comfortLevel,
@@ -115,7 +169,14 @@ export class MissionSystem {
       quality: freshQuality(),
       rideMode: official ? 'official-taxi' : 'informal',
       taxiRequestType: official ? taxiRequestType : undefined,
-      taxiPointId: taxiPoint?.id
+      taxiPointId: usesTaxiPoint ? taxiPoint.id : undefined,
+      pickupRegionId: pickupRegion?.id,
+      destinationRegionId: destinationRegion?.id,
+      regionalCategory: regionalCategory(regionalPlan.kind, category, official),
+      demandLevel: pickupRegion?.demandLevel ?? 'medium',
+      familiarityLevel: familiarityClass,
+      recommendedFuelLiters,
+      routeDistanceMeters: rideDistance
     };
   }
 
@@ -250,6 +311,7 @@ export class MissionSystem {
     if (!mission.quote) {
       const route = this.router.drivingRoute(mission.pickup, mission.destination);
       const distance = this.router.distance(route);
+      mission.routeDistanceMeters = distance;
       mission.quote = createFareQuote({
         distanceMeters: distance, estimatedSeconds: Math.max(90, distance / 7.5 + 75), category: mission.category,
         demand: 1, difficulty: 1, condition: this.vehicleContext.condition,
@@ -273,8 +335,36 @@ function freshQuality(): RideQuality {
   return { collisions: 0, redLights: 0, deviationSeconds: 0, aggressiveSeconds: 0, startedAt: new Date().toISOString() };
 }
 
-function nearestRegion(point: Point, regions: MapRegion[] | undefined) {
-  if (!regions?.length) return null;
-  return regions.reduce((best, region) => Math.hypot(point.x - region.center.x, point.y - region.center.y)
-    < Math.hypot(point.x - best.center.x, point.y - best.center.y) ? region : best);
+function evenlyDistributed(nodes: GraphNode[], maximum: number) {
+  const count = Math.min(maximum, nodes.length);
+  if (!count) return [];
+  return Array.from({ length: count }, (_, index) => nodes[Math.floor(index * nodes.length / count)]);
+}
+
+function chooseRegionalPlan(regions: MapRegion[], current: MapRegion | null, preferredId: RegionPreference, rideIndex: number, candidates: GraphNode[]) {
+  const withCandidates = regions.filter((region) => candidates.some((node) => regionAt(node, regions).id === region.id));
+  const preferred = (preferredId !== 'any' ? withCandidates.find((region) => region.id === preferredId) : null) ?? current ?? withCandidates[0] ?? null;
+  const roll = Math.abs(rideIndex * 37) % 100;
+  if (!preferred) return { pickupRegion: null, destinationRegion: null, kind: 'between-sectors' as const };
+  if (roll < ECONOMY_CONFIG.regional.preferredShare * 100) return { pickupRegion: preferred, destinationRegion: preferred, kind: 'within-region' as const };
+  const neighbors = withCandidates.filter((region) => preferred.neighbors.includes(region.id));
+  if (roll < (ECONOMY_CONFIG.regional.preferredShare + ECONOMY_CONFIG.regional.neighborShare) * 100 && neighbors.length) {
+    const neighbor = neighbors[rideIndex % neighbors.length];
+    return { pickupRegion: neighbor, destinationRegion: preferred, kind: 'neighbor-region' as const };
+  }
+  const distant = [...withCandidates].sort((a, b) => Math.hypot(b.center.x - preferred.center.x, b.center.y - preferred.center.y)
+    - Math.hypot(a.center.x - preferred.center.x, a.center.y - preferred.center.y))[rideIndex % Math.max(1, withCandidates.length)] ?? preferred;
+  return { pickupRegion: preferred, destinationRegion: distant, kind: 'long' as const };
+}
+
+function demandMultiplier(level: MapRegion['demandLevel'] | undefined, rideIndex: number) {
+  const base = level === 'high' ? 1.06 : level === 'low' ? 0.96 : 1;
+  return base + (rideIndex % 3) * 0.015;
+}
+
+function regionalCategory(plan: 'within-region' | 'neighbor-region' | 'between-sectors' | 'long', category: RideCategory, official: boolean): NonNullable<MissionSnapshot['regionalCategory']> {
+  if (official) return 'taxi';
+  if (category === 'urgent') return 'urgent';
+  if (category === 'comfort') return 'comfort';
+  return plan;
 }

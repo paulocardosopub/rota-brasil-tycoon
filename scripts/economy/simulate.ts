@@ -1,12 +1,16 @@
 import { simulateAll } from '../../src/game/economy/EconomySimulator';
 import { simulatePlayable060 } from '../../src/game/economy/FleetEconomySimulator';
+import { simulateRegionalEconomy } from '../../src/game/economy/RegionalEconomySimulator';
 
 const rides = Number(process.argv[2] ?? 30);
 const results = simulateAll(Number.isFinite(rides) && rides > 0 ? Math.floor(rides) : 30);
 console.table(results);
 
+console.log('\nCenários regionais da 0.8.2 (antes/depois):');
+console.table(simulateRegionalEconomy());
+
 const playable060 = simulatePlayable060();
-console.log('\nCenários jogáveis, táxi e frota preservados na 0.7.0:');
+console.log('\nCenários jogáveis, táxi e frota preservados na 0.8.2:');
 console.table(playable060.results);
 console.log('\nMarcos de progressão:');
 console.table([playable060.milestones]);
@@ -30,4 +34,4 @@ if (offline.netProfit >= employee.netProfit * 8) failures.push('renda offline cr
 if (failures.length) {
   console.error(`Falhas de balanceamento: ${failures.join('; ')}`);
   process.exitCode = 1;
-} else console.log('Balanceamento aprovado para os critérios automáticos da 0.7.0.');
+} else console.log('Balanceamento aprovado para os critérios automáticos da 0.8.2.');

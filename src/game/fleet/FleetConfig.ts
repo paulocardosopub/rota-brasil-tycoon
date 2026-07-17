@@ -1,4 +1,5 @@
 import type { EmployeeCandidate, ShiftPolicy } from '../../types/game';
+import { DEFAULT_EMPLOYEE_REGIONAL_PREFERENCES } from '../regions/RegionalDefaults';
 
 export const EMPLOYEE_CANDIDATES: EmployeeCandidate[] = [
   { id: 'bia-rocha', name: 'Bia Rocha', avatar: 'BR', experience: 2, driving: 72, safety: 88, service: 82, efficiency: 78, commissionPercent: 24, hireCost: 160, description: 'Direção segura e atendimento consistente; ótima primeira contratação.' },
@@ -13,5 +14,6 @@ export const DEFAULT_SHIFT_POLICY: ShiftPolicy = {
   categories: ['popular', 'comfort'],
   durationMinutes: 240,
   returnToGarage: true,
-  pauseOnLoss: true
+  pauseOnLoss: true,
+  regional: { ...DEFAULT_EMPLOYEE_REGIONAL_PREFERENCES }
 };

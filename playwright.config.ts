@@ -17,7 +17,15 @@ export default defineConfig({
   webServer: [{
     command: `npm run dev -- --port ${port}`,
     url: `http://127.0.0.1:${port}`,
-    reuseExistingServer: true
+    reuseExistingServer: true,
+    env: {
+      // Os E2E locais precisam ser determinísticos e não devem escrever no
+      // projeto Supabase público. O transporte online é exercitado pelo mock.
+      VITE_SUPABASE_URL: '',
+      VITE_SUPABASE_PUBLISHABLE_KEY: '',
+      VITE_SUPABASE_ANON_KEY: '',
+      VITE_DISABLE_SUPABASE: 'true'
+    }
   }, {
     command: 'npm run online:mock',
     url: 'http://127.0.0.1:4175',

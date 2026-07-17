@@ -31,7 +31,7 @@ describe('save local versionado', () => {
       rotation: 1.2,
       settings: { quality: 'high', cameraMode: 'fixed', audio: true }
     });
-    expect(migrated.saveVersion).toBe(6);
+    expect(migrated.saveVersion).toBe(7);
     expect(migrated.money).toBe(432);
     expect(migrated.completedRides).toBe(3);
     expect(migrated.settings.cameraZoom).toBe('normal');
@@ -41,12 +41,33 @@ describe('save local versionado', () => {
     expect(migrated.collisionDamage).toBe(36);
     expect(migrated.maintenanceWear).toBe(0);
     expect(migrated.goals.firstRide).toBe(false);
-    expect(migrated.mapVersion).toBe('brasilia-0.7.0');
+    expect(migrated.mapVersion).toBe('brasilia-0.8.2');
     expect(migrated.publicPlayerId).toMatch(/^rbp_/);
     expect(migrated.onlinePreference).toBe('online');
     expect(migrated.settings.showPlayerNames).toBe(true);
     expect(migrated.currentChunk).toBe('0_0');
     expect(migrated.lastSafePosition).toEqual({ x: 10, y: 20 });
+    expect(migrated.preferredRegionId).toBe('any');
+    expect(migrated.currentRegionId).toBe('centro');
+    expect(migrated.regionalFamiliarity).toEqual({});
+    expect(migrated.favoriteServiceIds).toEqual([]);
+    expect(migrated.cloudLineageId).toMatch(/^rbl_/);
+  });
+
+  it('migra funcionário antigo com política regional idempotente', () => {
+    const original = createNewSave();
+    original.fleet.employees.push({
+      id: 'legacy-driver', fleetId: original.fleet.id, ownerId: original.ownerId,
+      name: 'Motorista Legado', avatar: 'ML', driving: 70, safety: 75, service: 80,
+      efficiency: 72, commissionPercent: 22, hireCost: 100, description: 'Legado',
+      state: 'waiting-vehicle', vehicleId: null, hiredAt: original.updatedAt,
+      grossRevenue: 0, commissionPaid: 0, tripsCompleted: 0
+    } as never);
+    const migrated = migrateSave({ ...original, saveVersion: 6 });
+    expect(migrated.fleet.employees[0].regionalPreferences).toMatchObject({
+      preferredRegionId: 'any', maximumDistanceKm: 18, acceptLongTrips: true
+    });
+    expect(migrateSave(migrated)).toEqual(migrated);
   });
 
   it('preserva ledger, melhorias e progressão do save v3 sem aceitar valores inválidos', () => {
@@ -83,7 +104,7 @@ describe('save local versionado', () => {
 
     const migrated = loadSave();
 
-    expect(migrated.saveVersion).toBe(6);
+    expect(migrated.saveVersion).toBe(7);
     expect(migrated.money).toBe(321);
     expect(localStorage.getItem(GAME_CONFIG.storage.backupKey)).toBe(legacy);
   });

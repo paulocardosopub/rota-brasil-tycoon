@@ -4,7 +4,7 @@ import { RemoteInterpolationBuffer } from './interpolation';
 
 function snapshot(sequence: number, clientTime: number, localX: number, heading = 0): MovementSnapshot {
   return { protocolVersion: 1, sessionId: 'rbs_12345678', publicPlayerId: 'rbp_12345678', vehicleId: 'rbp_12345678__vehicle-one', sequence,
-    serverTimeOffset: 0, clientTime, mapVersion: 'brasilia-0.7.0', chunkId: '0_0', localX, localY: 0, layer: 0,
+    serverTimeOffset: 0, clientTime, mapVersion: 'brasilia-0.8.2', chunkId: '0_0', localX, localY: 0, layer: 0,
     heading, speed: 10, acceleration: 0, vehicleState: 'free', autopilot: false, turnSignal: 'none', braking: false,
     controllerType: 'PLAYER', vehicleModel: 'Hatch 1998', colorId: 'amber', fleetPublicId: null };
 }
