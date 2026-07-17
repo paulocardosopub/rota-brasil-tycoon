@@ -1,4 +1,4 @@
-# Decisões de arquitetura — Playable 0.6.0
+# Decisões de arquitetura — Playable 0.7.0
 
 ## Limites dos módulos
 
@@ -13,11 +13,11 @@ Phaser e React trocam apenas comandos e snapshots por `game/events.ts`. Isso man
 
 `src/config/vehiclePhysics.ts` é a fonte única para aceleração, frenagem, direção, resistência, recuperação e resposta de colisão. `TrafficPhysics.ts` mantém cálculos puros (previsão, contato varrido, velocidade relativa e gravidade), enquanto `TrafficSystem.ts` administra o estado dos veículos e a política de sinais.
 
-`TransactionLedger.ts` é o único módulo autorizado a alterar o dinheiro. `FareCalculator.ts` fixa o preço informal no aceite; `TaxiMeter.ts` mede a corrida oficial a partir do embarque. `ExpenseCalculator.ts` concentra combustível, reparos e melhorias. `DriverProgression.ts` e `RegularizationService.ts` governam a mudança profissional sem duplicar regras no HUD. O save v4 acrescenta licença, taxímetro, frota, turnos e proteção de relógio ao ledger, dívida, dano, desgaste, melhorias, metas, histórico e serviços já persistidos; ele cria backup antes de migrar e nunca apaga automaticamente conteúdo corrompido.
+`TransactionLedger.ts` é o único módulo autorizado a alterar o dinheiro. `FareCalculator.ts` fixa o preço informal no aceite; `TaxiMeter.ts` mede a corrida oficial a partir do embarque. `ExpenseCalculator.ts` concentra combustível, reparos e melhorias. `DriverProgression.ts` e `RegularizationService.ts` governam a mudança profissional sem duplicar regras no HUD. O save v5 acrescenta versão do mapa, chunk, região, faixa, segmento, posição geográfica e última posição segura ao estado anterior; ele cria backup antes de migrar e nunca apaga automaticamente conteúdo corrompido.
 
 ## Mapa e desempenho
 
-Latitude/longitude é convertida para coordenadas cartesianas locais em metros. O render usa uma transformação ortográfica inclinada, mas física, distância, combustível e rotas permanecem no espaço métrico. O importador gera chunks de 400 m e o índice de superfície agrupa segmentos em células de 100 m. O pool suporta teto 350, porém a população padrão 0.6.0 é 72 NPCs. Modelos próximos recebem detalhes próprios e os demais compartilham uma camada desenhada em lote. Estreitamentos usam capacidade por sentido, formação antecipada de fila e prioridade progressiva para impedir que faixas largas travem ao convergir. Aviões e helicópteros são ambiente visual sem colisão.
+Latitude/longitude é convertida para coordenadas cartesianas locais em metros. O pipeline canônico normaliza vias, propaga largura/faixas ao corredor, gera faixas dirigidas e conectores por cruzamento e publica um grafo global compactado. O mapa é dividido em chunks de 800 m; uma janela 3×3 alimenta render, superfície, sinais e trânsito, enquanto o roteador mantém o grafo conectado da cidade. O render usa projeção ortográfica inclinada e LOD espacial adaptativo, mas física, distância, combustível e rotas permanecem métricos. O pool suporta teto 350 e usa 72 NPCs por padrão. Modelos próximos recebem detalhes próprios e os demais compartilham uma camada desenhada em lote. Aviões e helicópteros são ambiente visual sem colisão.
 
 `FleetService.ts` é a autoridade transacional da frota. Um turno possui um motorista e um veículo exclusivos. `FleetVehicleSystem.ts` materializa esse veículo quando ele está no raio do jogador, usa o mesmo grafo dirigido e reserva uma vaga no pool de trânsito. Fora do raio, `fleetSimulationLevel` troca para simulação simplificada/econômica e `advanceFleetShift` agrega corridas sem instanciar entidades. A autoridade e o lease ficam explícitos no estado para evitar dupla simulação em futura sincronização online.
 

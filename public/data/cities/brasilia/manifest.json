@@ -1,0 +1,8225 @@
+{
+  "mapVersion": "brasilia-0.7.0",
+  "city": "Brasília",
+  "origin": {
+    "lat": -15.7942,
+    "lon": -47.8822
+  },
+  "bbox": {
+    "south": -15.84,
+    "west": -47.95,
+    "north": -15.73,
+    "east": -47.83
+  },
+  "chunkSizeMeters": 800,
+  "graphFile": "lane-graph.json.gz",
+  "signalFile": "traffic-signals.json",
+  "serviceBase": "central/services",
+  "regions": [
+    {
+      "id": "asa-norte",
+      "name": "Asa Norte",
+      "center": {
+        "x": -299.59151958189955,
+        "y": -4358.847145154405
+      },
+      "bounds": {
+        "minX": -1649.5915195818995,
+        "minY": -5808.847145154405,
+        "maxX": 1050.4084804181005,
+        "maxY": -2908.8471451544046
+      }
+    },
+    {
+      "id": "asa-sul",
+      "name": "Asa Sul",
+      "center": {
+        "x": -1904.5460887703755,
+        "y": 2312.8576688574276
+      },
+      "bounds": {
+        "minX": -3354.5460887703757,
+        "minY": 712.8576688574276,
+        "maxX": -454.5460887703755,
+        "maxY": 3912.8576688574276
+      }
+    },
+    {
+      "id": "centro",
+      "name": "Setores Centrais",
+      "center": {
+        "x": 21.399394255795663,
+        "y": -22.23901604665475
+      },
+      "bounds": {
+        "minX": -978.6006057442044,
+        "minY": -1022.2390160466548,
+        "maxX": 1021.3993942557956,
+        "maxY": 977.7609839533452
+      }
+    },
+    {
+      "id": "sudoeste",
+      "name": "Sudoeste",
+      "center": {
+        "x": -4579.470370750915,
+        "y": 311.3462246539566
+      },
+      "bounds": {
+        "minX": -5479.470370750915,
+        "minY": -588.6537753460434,
+        "maxX": -3679.470370750915,
+        "maxY": 1211.3462246539566
+      }
+    },
+    {
+      "id": "cruzeiro",
+      "name": "Cruzeiro",
+      "center": {
+        "x": -5970.430997381435,
+        "y": -467.0193369809349
+      },
+      "bounds": {
+        "minX": -6820.430997381435,
+        "minY": -1367.019336980935,
+        "maxX": -5120.430997381435,
+        "maxY": 432.9806630190651
+      }
+    },
+    {
+      "id": "noroeste",
+      "name": "Noroeste",
+      "center": {
+        "x": -2974.5158015624393,
+        "y": -4914.822546322156
+      },
+      "bounds": {
+        "minX": -4024.5158015624393,
+        "minY": -5964.822546322156,
+        "maxX": -1924.5158015624393,
+        "maxY": -3864.822546322156
+      }
+    },
+    {
+      "id": "vila-planalto",
+      "name": "Vila Planalto",
+      "center": {
+        "x": 3445.3024751907046,
+        "y": -467.0193369809349
+      },
+      "bounds": {
+        "minX": 2495.3024751907046,
+        "minY": -1467.019336980935,
+        "maxX": 4395.302475190705,
+        "maxY": 532.9806630190651
+      }
+    },
+    {
+      "id": "unb",
+      "name": "Universidade de Brasília",
+      "center": {
+        "x": 1305.3630496065766,
+        "y": -3246.896342819099
+      },
+      "bounds": {
+        "minX": 305.3630496065766,
+        "minY": -4246.896342819099,
+        "maxX": 2305.3630496065766,
+        "maxY": -2246.896342819099
+      }
+    }
+  ],
+  "chunks": [
+    {
+      "id": "-12_1",
+      "regionId": "cruzeiro",
+      "bounds": {
+        "minX": -9600,
+        "minY": 800,
+        "maxX": -8800,
+        "maxY": 1600
+      },
+      "adjacent": [
+        "-13_0",
+        "-13_1",
+        "-13_2",
+        "-12_0",
+        "-12_2",
+        "-11_0",
+        "-11_1",
+        "-11_2"
+      ],
+      "file": "chunks/-12_1.json",
+      "roadCount": 2,
+      "buildingCount": 0,
+      "laneCount": 2,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "-11_-6",
+      "regionId": "cruzeiro",
+      "bounds": {
+        "minX": -8800,
+        "minY": -4800,
+        "maxX": -8000,
+        "maxY": -4000
+      },
+      "adjacent": [
+        "-12_-7",
+        "-12_-6",
+        "-12_-5",
+        "-11_-7",
+        "-11_-5",
+        "-10_-7",
+        "-10_-6",
+        "-10_-5"
+      ],
+      "file": "chunks/-11_-6.json",
+      "roadCount": 1,
+      "buildingCount": 0,
+      "laneCount": 2,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "-11_-5",
+      "regionId": "cruzeiro",
+      "bounds": {
+        "minX": -8800,
+        "minY": -4000,
+        "maxX": -8000,
+        "maxY": -3200
+      },
+      "adjacent": [
+        "-12_-6",
+        "-12_-5",
+        "-12_-4",
+        "-11_-6",
+        "-11_-4",
+        "-10_-6",
+        "-10_-5",
+        "-10_-4"
+      ],
+      "file": "chunks/-11_-5.json",
+      "roadCount": 2,
+      "buildingCount": 0,
+      "laneCount": 4,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "-11_1",
+      "regionId": "cruzeiro",
+      "bounds": {
+        "minX": -8800,
+        "minY": 800,
+        "maxX": -8000,
+        "maxY": 1600
+      },
+      "adjacent": [
+        "-12_0",
+        "-12_1",
+        "-12_2",
+        "-11_0",
+        "-11_2",
+        "-10_0",
+        "-10_1",
+        "-10_2"
+      ],
+      "file": "chunks/-11_1.json",
+      "roadCount": 2,
+      "buildingCount": 0,
+      "laneCount": 2,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "-11_2",
+      "regionId": "cruzeiro",
+      "bounds": {
+        "minX": -8800,
+        "minY": 1600,
+        "maxX": -8000,
+        "maxY": 2400
+      },
+      "adjacent": [
+        "-12_1",
+        "-12_2",
+        "-12_3",
+        "-11_1",
+        "-11_3",
+        "-10_1",
+        "-10_2",
+        "-10_3"
+      ],
+      "file": "chunks/-11_2.json",
+      "roadCount": 2,
+      "buildingCount": 0,
+      "laneCount": 2,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "-10_-7",
+      "regionId": "noroeste",
+      "bounds": {
+        "minX": -8000,
+        "minY": -5600,
+        "maxX": -7200,
+        "maxY": -4800
+      },
+      "adjacent": [
+        "-11_-8",
+        "-11_-7",
+        "-11_-6",
+        "-10_-8",
+        "-10_-6",
+        "-9_-8",
+        "-9_-7",
+        "-9_-6"
+      ],
+      "file": "chunks/-10_-7.json",
+      "roadCount": 1,
+      "buildingCount": 0,
+      "laneCount": 2,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "-10_-6",
+      "regionId": "cruzeiro",
+      "bounds": {
+        "minX": -8000,
+        "minY": -4800,
+        "maxX": -7200,
+        "maxY": -4000
+      },
+      "adjacent": [
+        "-11_-7",
+        "-11_-6",
+        "-11_-5",
+        "-10_-7",
+        "-10_-5",
+        "-9_-7",
+        "-9_-6",
+        "-9_-5"
+      ],
+      "file": "chunks/-10_-6.json",
+      "roadCount": 1,
+      "buildingCount": 0,
+      "laneCount": 2,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "-10_-5",
+      "regionId": "cruzeiro",
+      "bounds": {
+        "minX": -8000,
+        "minY": -4000,
+        "maxX": -7200,
+        "maxY": -3200
+      },
+      "adjacent": [
+        "-11_-6",
+        "-11_-5",
+        "-11_-4",
+        "-10_-6",
+        "-10_-4",
+        "-9_-6",
+        "-9_-5",
+        "-9_-4"
+      ],
+      "file": "chunks/-10_-5.json",
+      "roadCount": 10,
+      "buildingCount": 14,
+      "laneCount": 20,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "-10_-4",
+      "regionId": "cruzeiro",
+      "bounds": {
+        "minX": -8000,
+        "minY": -3200,
+        "maxX": -7200,
+        "maxY": -2400
+      },
+      "adjacent": [
+        "-11_-5",
+        "-11_-4",
+        "-11_-3",
+        "-10_-5",
+        "-10_-3",
+        "-9_-5",
+        "-9_-4",
+        "-9_-3"
+      ],
+      "file": "chunks/-10_-4.json",
+      "roadCount": 5,
+      "buildingCount": 18,
+      "laneCount": 10,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "-10_-1",
+      "regionId": "cruzeiro",
+      "bounds": {
+        "minX": -8000,
+        "minY": -800,
+        "maxX": -7200,
+        "maxY": 0
+      },
+      "adjacent": [
+        "-11_-2",
+        "-11_-1",
+        "-11_0",
+        "-10_-2",
+        "-10_0",
+        "-9_-2",
+        "-9_-1",
+        "-9_0"
+      ],
+      "file": "chunks/-10_-1.json",
+      "roadCount": 15,
+      "buildingCount": 8,
+      "laneCount": 28,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "-10_0",
+      "regionId": "cruzeiro",
+      "bounds": {
+        "minX": -8000,
+        "minY": 0,
+        "maxX": -7200,
+        "maxY": 800
+      },
+      "adjacent": [
+        "-11_-1",
+        "-11_0",
+        "-11_1",
+        "-10_-1",
+        "-10_1",
+        "-9_-1",
+        "-9_0",
+        "-9_1"
+      ],
+      "file": "chunks/-10_0.json",
+      "roadCount": 23,
+      "buildingCount": 12,
+      "laneCount": 37,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "-10_1",
+      "regionId": "cruzeiro",
+      "bounds": {
+        "minX": -8000,
+        "minY": 800,
+        "maxX": -7200,
+        "maxY": 1600
+      },
+      "adjacent": [
+        "-11_0",
+        "-11_1",
+        "-11_2",
+        "-10_0",
+        "-10_2",
+        "-9_0",
+        "-9_1",
+        "-9_2"
+      ],
+      "file": "chunks/-10_1.json",
+      "roadCount": 25,
+      "buildingCount": 2,
+      "laneCount": 42,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "-10_2",
+      "regionId": "cruzeiro",
+      "bounds": {
+        "minX": -8000,
+        "minY": 1600,
+        "maxX": -7200,
+        "maxY": 2400
+      },
+      "adjacent": [
+        "-11_1",
+        "-11_2",
+        "-11_3",
+        "-10_1",
+        "-10_3",
+        "-9_1",
+        "-9_2",
+        "-9_3"
+      ],
+      "file": "chunks/-10_2.json",
+      "roadCount": 9,
+      "buildingCount": 0,
+      "laneCount": 24,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "-10_3",
+      "regionId": "cruzeiro",
+      "bounds": {
+        "minX": -8000,
+        "minY": 2400,
+        "maxX": -7200,
+        "maxY": 3200
+      },
+      "adjacent": [
+        "-11_2",
+        "-11_3",
+        "-11_4",
+        "-10_2",
+        "-10_4",
+        "-9_2",
+        "-9_3",
+        "-9_4"
+      ],
+      "file": "chunks/-10_3.json",
+      "roadCount": 12,
+      "buildingCount": 0,
+      "laneCount": 32,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "-10_4",
+      "regionId": "cruzeiro",
+      "bounds": {
+        "minX": -8000,
+        "minY": 3200,
+        "maxX": -7200,
+        "maxY": 4000
+      },
+      "adjacent": [
+        "-11_3",
+        "-11_4",
+        "-11_5",
+        "-10_3",
+        "-10_5",
+        "-9_3",
+        "-9_4",
+        "-9_5"
+      ],
+      "file": "chunks/-10_4.json",
+      "roadCount": 9,
+      "buildingCount": 0,
+      "laneCount": 11,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "-10_5",
+      "regionId": "sudoeste",
+      "bounds": {
+        "minX": -8000,
+        "minY": 4000,
+        "maxX": -7200,
+        "maxY": 4800
+      },
+      "adjacent": [
+        "-11_4",
+        "-11_5",
+        "-11_6",
+        "-10_4",
+        "-10_6",
+        "-9_4",
+        "-9_5",
+        "-9_6"
+      ],
+      "file": "chunks/-10_5.json",
+      "roadCount": 28,
+      "buildingCount": 2,
+      "laneCount": 52,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "-10_6",
+      "regionId": "sudoeste",
+      "bounds": {
+        "minX": -8000,
+        "minY": 4800,
+        "maxX": -7200,
+        "maxY": 5600
+      },
+      "adjacent": [
+        "-11_5",
+        "-11_6",
+        "-11_7",
+        "-10_5",
+        "-10_7",
+        "-9_5",
+        "-9_6",
+        "-9_7"
+      ],
+      "file": "chunks/-10_6.json",
+      "roadCount": 1,
+      "buildingCount": 0,
+      "laneCount": 2,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "-9_-7",
+      "regionId": "noroeste",
+      "bounds": {
+        "minX": -7200,
+        "minY": -5600,
+        "maxX": -6400,
+        "maxY": -4800
+      },
+      "adjacent": [
+        "-10_-8",
+        "-10_-7",
+        "-10_-6",
+        "-9_-8",
+        "-9_-6",
+        "-8_-8",
+        "-8_-7",
+        "-8_-6"
+      ],
+      "file": "chunks/-9_-7.json",
+      "roadCount": 4,
+      "buildingCount": 0,
+      "laneCount": 8,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "-9_-6",
+      "regionId": "noroeste",
+      "bounds": {
+        "minX": -7200,
+        "minY": -4800,
+        "maxX": -6400,
+        "maxY": -4000
+      },
+      "adjacent": [
+        "-10_-7",
+        "-10_-6",
+        "-10_-5",
+        "-9_-7",
+        "-9_-5",
+        "-8_-7",
+        "-8_-6",
+        "-8_-5"
+      ],
+      "file": "chunks/-9_-6.json",
+      "roadCount": 1,
+      "buildingCount": 0,
+      "laneCount": 2,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "-9_-5",
+      "regionId": "cruzeiro",
+      "bounds": {
+        "minX": -7200,
+        "minY": -4000,
+        "maxX": -6400,
+        "maxY": -3200
+      },
+      "adjacent": [
+        "-10_-6",
+        "-10_-5",
+        "-10_-4",
+        "-9_-6",
+        "-9_-4",
+        "-8_-6",
+        "-8_-5",
+        "-8_-4"
+      ],
+      "file": "chunks/-9_-5.json",
+      "roadCount": 11,
+      "buildingCount": 53,
+      "laneCount": 22,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "-9_-4",
+      "regionId": "cruzeiro",
+      "bounds": {
+        "minX": -7200,
+        "minY": -3200,
+        "maxX": -6400,
+        "maxY": -2400
+      },
+      "adjacent": [
+        "-10_-5",
+        "-10_-4",
+        "-10_-3",
+        "-9_-5",
+        "-9_-3",
+        "-8_-5",
+        "-8_-4",
+        "-8_-3"
+      ],
+      "file": "chunks/-9_-4.json",
+      "roadCount": 4,
+      "buildingCount": 5,
+      "laneCount": 8,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "-9_-2",
+      "regionId": "cruzeiro",
+      "bounds": {
+        "minX": -7200,
+        "minY": -1600,
+        "maxX": -6400,
+        "maxY": -800
+      },
+      "adjacent": [
+        "-10_-3",
+        "-10_-2",
+        "-10_-1",
+        "-9_-3",
+        "-9_-1",
+        "-8_-3",
+        "-8_-2",
+        "-8_-1"
+      ],
+      "file": "chunks/-9_-2.json",
+      "roadCount": 14,
+      "buildingCount": 3,
+      "laneCount": 32,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "-9_-1",
+      "regionId": "cruzeiro",
+      "bounds": {
+        "minX": -7200,
+        "minY": -800,
+        "maxX": -6400,
+        "maxY": 0
+      },
+      "adjacent": [
+        "-10_-2",
+        "-10_-1",
+        "-10_0",
+        "-9_-2",
+        "-9_0",
+        "-8_-2",
+        "-8_-1",
+        "-8_0"
+      ],
+      "file": "chunks/-9_-1.json",
+      "roadCount": 208,
+      "buildingCount": 72,
+      "laneCount": 363,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "-9_0",
+      "regionId": "cruzeiro",
+      "bounds": {
+        "minX": -7200,
+        "minY": 0,
+        "maxX": -6400,
+        "maxY": 800
+      },
+      "adjacent": [
+        "-10_-1",
+        "-10_0",
+        "-10_1",
+        "-9_-1",
+        "-9_1",
+        "-8_-1",
+        "-8_0",
+        "-8_1"
+      ],
+      "file": "chunks/-9_0.json",
+      "roadCount": 221,
+      "buildingCount": 177,
+      "laneCount": 409,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "-9_1",
+      "regionId": "cruzeiro",
+      "bounds": {
+        "minX": -7200,
+        "minY": 800,
+        "maxX": -6400,
+        "maxY": 1600
+      },
+      "adjacent": [
+        "-10_0",
+        "-10_1",
+        "-10_2",
+        "-9_0",
+        "-9_2",
+        "-8_0",
+        "-8_1",
+        "-8_2"
+      ],
+      "file": "chunks/-9_1.json",
+      "roadCount": 156,
+      "buildingCount": 34,
+      "laneCount": 267,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "-9_2",
+      "regionId": "cruzeiro",
+      "bounds": {
+        "minX": -7200,
+        "minY": 1600,
+        "maxX": -6400,
+        "maxY": 2400
+      },
+      "adjacent": [
+        "-10_1",
+        "-10_2",
+        "-10_3",
+        "-9_1",
+        "-9_3",
+        "-8_1",
+        "-8_2",
+        "-8_3"
+      ],
+      "file": "chunks/-9_2.json",
+      "roadCount": 127,
+      "buildingCount": 13,
+      "laneCount": 278,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "-9_3",
+      "regionId": "sudoeste",
+      "bounds": {
+        "minX": -7200,
+        "minY": 2400,
+        "maxX": -6400,
+        "maxY": 3200
+      },
+      "adjacent": [
+        "-10_2",
+        "-10_3",
+        "-10_4",
+        "-9_2",
+        "-9_4",
+        "-8_2",
+        "-8_3",
+        "-8_4"
+      ],
+      "file": "chunks/-9_3.json",
+      "roadCount": 67,
+      "buildingCount": 3,
+      "laneCount": 123,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "-9_4",
+      "regionId": "sudoeste",
+      "bounds": {
+        "minX": -7200,
+        "minY": 3200,
+        "maxX": -6400,
+        "maxY": 4000
+      },
+      "adjacent": [
+        "-10_3",
+        "-10_4",
+        "-10_5",
+        "-9_3",
+        "-9_5",
+        "-8_3",
+        "-8_4",
+        "-8_5"
+      ],
+      "file": "chunks/-9_4.json",
+      "roadCount": 60,
+      "buildingCount": 0,
+      "laneCount": 96,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "-9_5",
+      "regionId": "sudoeste",
+      "bounds": {
+        "minX": -7200,
+        "minY": 4000,
+        "maxX": -6400,
+        "maxY": 4800
+      },
+      "adjacent": [
+        "-10_4",
+        "-10_5",
+        "-10_6",
+        "-9_4",
+        "-9_6",
+        "-8_4",
+        "-8_5",
+        "-8_6"
+      ],
+      "file": "chunks/-9_5.json",
+      "roadCount": 72,
+      "buildingCount": 5,
+      "laneCount": 110,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "-9_6",
+      "regionId": "sudoeste",
+      "bounds": {
+        "minX": -7200,
+        "minY": 4800,
+        "maxX": -6400,
+        "maxY": 5600
+      },
+      "adjacent": [
+        "-10_5",
+        "-10_6",
+        "-10_7",
+        "-9_5",
+        "-9_7",
+        "-8_5",
+        "-8_6",
+        "-8_7"
+      ],
+      "file": "chunks/-9_6.json",
+      "roadCount": 13,
+      "buildingCount": 0,
+      "laneCount": 26,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "-8_-7",
+      "regionId": "noroeste",
+      "bounds": {
+        "minX": -6400,
+        "minY": -5600,
+        "maxX": -5600,
+        "maxY": -4800
+      },
+      "adjacent": [
+        "-9_-8",
+        "-9_-7",
+        "-9_-6",
+        "-8_-8",
+        "-8_-6",
+        "-7_-8",
+        "-7_-7",
+        "-7_-6"
+      ],
+      "file": "chunks/-8_-7.json",
+      "roadCount": 2,
+      "buildingCount": 1,
+      "laneCount": 4,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "-8_-6",
+      "regionId": "noroeste",
+      "bounds": {
+        "minX": -6400,
+        "minY": -4800,
+        "maxX": -5600,
+        "maxY": -4000
+      },
+      "adjacent": [
+        "-9_-7",
+        "-9_-6",
+        "-9_-5",
+        "-8_-7",
+        "-8_-5",
+        "-7_-7",
+        "-7_-6",
+        "-7_-5"
+      ],
+      "file": "chunks/-8_-6.json",
+      "roadCount": 15,
+      "buildingCount": 28,
+      "laneCount": 23,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "-8_-5",
+      "regionId": "cruzeiro",
+      "bounds": {
+        "minX": -6400,
+        "minY": -4000,
+        "maxX": -5600,
+        "maxY": -3200
+      },
+      "adjacent": [
+        "-9_-6",
+        "-9_-5",
+        "-9_-4",
+        "-8_-6",
+        "-8_-4",
+        "-7_-6",
+        "-7_-5",
+        "-7_-4"
+      ],
+      "file": "chunks/-8_-5.json",
+      "roadCount": 51,
+      "buildingCount": 180,
+      "laneCount": 67,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "-8_-4",
+      "regionId": "cruzeiro",
+      "bounds": {
+        "minX": -6400,
+        "minY": -3200,
+        "maxX": -5600,
+        "maxY": -2400
+      },
+      "adjacent": [
+        "-9_-5",
+        "-9_-4",
+        "-9_-3",
+        "-8_-5",
+        "-8_-3",
+        "-7_-5",
+        "-7_-4",
+        "-7_-3"
+      ],
+      "file": "chunks/-8_-4.json",
+      "roadCount": 61,
+      "buildingCount": 180,
+      "laneCount": 107,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "-8_-3",
+      "regionId": "cruzeiro",
+      "bounds": {
+        "minX": -6400,
+        "minY": -2400,
+        "maxX": -5600,
+        "maxY": -1600
+      },
+      "adjacent": [
+        "-9_-4",
+        "-9_-3",
+        "-9_-2",
+        "-8_-4",
+        "-8_-2",
+        "-7_-4",
+        "-7_-3",
+        "-7_-2"
+      ],
+      "file": "chunks/-8_-3.json",
+      "roadCount": 89,
+      "buildingCount": 84,
+      "laneCount": 189,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "-8_-2",
+      "regionId": "cruzeiro",
+      "bounds": {
+        "minX": -6400,
+        "minY": -1600,
+        "maxX": -5600,
+        "maxY": -800
+      },
+      "adjacent": [
+        "-9_-3",
+        "-9_-2",
+        "-9_-1",
+        "-8_-3",
+        "-8_-1",
+        "-7_-3",
+        "-7_-2",
+        "-7_-1"
+      ],
+      "file": "chunks/-8_-2.json",
+      "roadCount": 166,
+      "buildingCount": 180,
+      "laneCount": 328,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "-8_-1",
+      "regionId": "cruzeiro",
+      "bounds": {
+        "minX": -6400,
+        "minY": -800,
+        "maxX": -5600,
+        "maxY": 0
+      },
+      "adjacent": [
+        "-9_-2",
+        "-9_-1",
+        "-9_0",
+        "-8_-2",
+        "-8_0",
+        "-7_-2",
+        "-7_-1",
+        "-7_0"
+      ],
+      "file": "chunks/-8_-1.json",
+      "roadCount": 215,
+      "buildingCount": 180,
+      "laneCount": 388,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "-8_0",
+      "regionId": "cruzeiro",
+      "bounds": {
+        "minX": -6400,
+        "minY": 0,
+        "maxX": -5600,
+        "maxY": 800
+      },
+      "adjacent": [
+        "-9_-1",
+        "-9_0",
+        "-9_1",
+        "-8_-1",
+        "-8_1",
+        "-7_-1",
+        "-7_0",
+        "-7_1"
+      ],
+      "file": "chunks/-8_0.json",
+      "roadCount": 275,
+      "buildingCount": 180,
+      "laneCount": 515,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "-8_1",
+      "regionId": "cruzeiro",
+      "bounds": {
+        "minX": -6400,
+        "minY": 800,
+        "maxX": -5600,
+        "maxY": 1600
+      },
+      "adjacent": [
+        "-9_0",
+        "-9_1",
+        "-9_2",
+        "-8_0",
+        "-8_2",
+        "-7_0",
+        "-7_1",
+        "-7_2"
+      ],
+      "file": "chunks/-8_1.json",
+      "roadCount": 208,
+      "buildingCount": 41,
+      "laneCount": 323,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "-8_2",
+      "regionId": "sudoeste",
+      "bounds": {
+        "minX": -6400,
+        "minY": 1600,
+        "maxX": -5600,
+        "maxY": 2400
+      },
+      "adjacent": [
+        "-9_1",
+        "-9_2",
+        "-9_3",
+        "-8_1",
+        "-8_3",
+        "-7_1",
+        "-7_2",
+        "-7_3"
+      ],
+      "file": "chunks/-8_2.json",
+      "roadCount": 87,
+      "buildingCount": 4,
+      "laneCount": 181,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "-8_3",
+      "regionId": "sudoeste",
+      "bounds": {
+        "minX": -6400,
+        "minY": 2400,
+        "maxX": -5600,
+        "maxY": 3200
+      },
+      "adjacent": [
+        "-9_2",
+        "-9_3",
+        "-9_4",
+        "-8_2",
+        "-8_4",
+        "-7_2",
+        "-7_3",
+        "-7_4"
+      ],
+      "file": "chunks/-8_3.json",
+      "roadCount": 80,
+      "buildingCount": 2,
+      "laneCount": 138,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "-8_4",
+      "regionId": "sudoeste",
+      "bounds": {
+        "minX": -6400,
+        "minY": 3200,
+        "maxX": -5600,
+        "maxY": 4000
+      },
+      "adjacent": [
+        "-9_3",
+        "-9_4",
+        "-9_5",
+        "-8_3",
+        "-8_5",
+        "-7_3",
+        "-7_4",
+        "-7_5"
+      ],
+      "file": "chunks/-8_4.json",
+      "roadCount": 110,
+      "buildingCount": 2,
+      "laneCount": 206,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "-8_5",
+      "regionId": "sudoeste",
+      "bounds": {
+        "minX": -6400,
+        "minY": 4000,
+        "maxX": -5600,
+        "maxY": 4800
+      },
+      "adjacent": [
+        "-9_4",
+        "-9_5",
+        "-9_6",
+        "-8_4",
+        "-8_6",
+        "-7_4",
+        "-7_5",
+        "-7_6"
+      ],
+      "file": "chunks/-8_5.json",
+      "roadCount": 135,
+      "buildingCount": 3,
+      "laneCount": 239,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "-8_6",
+      "regionId": "asa-sul",
+      "bounds": {
+        "minX": -6400,
+        "minY": 4800,
+        "maxX": -5600,
+        "maxY": 5600
+      },
+      "adjacent": [
+        "-9_5",
+        "-9_6",
+        "-9_7",
+        "-8_5",
+        "-8_7",
+        "-7_5",
+        "-7_6",
+        "-7_7"
+      ],
+      "file": "chunks/-8_6.json",
+      "roadCount": 4,
+      "buildingCount": 0,
+      "laneCount": 6,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "-7_-9",
+      "regionId": "noroeste",
+      "bounds": {
+        "minX": -5600,
+        "minY": -7200,
+        "maxX": -4800,
+        "maxY": -6400
+      },
+      "adjacent": [
+        "-8_-10",
+        "-8_-9",
+        "-8_-8",
+        "-7_-10",
+        "-7_-8",
+        "-6_-10",
+        "-6_-9",
+        "-6_-8"
+      ],
+      "file": "chunks/-7_-9.json",
+      "roadCount": 10,
+      "buildingCount": 1,
+      "laneCount": 20,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "-7_-8",
+      "regionId": "noroeste",
+      "bounds": {
+        "minX": -5600,
+        "minY": -6400,
+        "maxX": -4800,
+        "maxY": -5600
+      },
+      "adjacent": [
+        "-8_-9",
+        "-8_-8",
+        "-8_-7",
+        "-7_-9",
+        "-7_-7",
+        "-6_-9",
+        "-6_-8",
+        "-6_-7"
+      ],
+      "file": "chunks/-7_-8.json",
+      "roadCount": 13,
+      "buildingCount": 27,
+      "laneCount": 26,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "-7_-7",
+      "regionId": "noroeste",
+      "bounds": {
+        "minX": -5600,
+        "minY": -5600,
+        "maxX": -4800,
+        "maxY": -4800
+      },
+      "adjacent": [
+        "-8_-8",
+        "-8_-7",
+        "-8_-6",
+        "-7_-8",
+        "-7_-6",
+        "-6_-8",
+        "-6_-7",
+        "-6_-6"
+      ],
+      "file": "chunks/-7_-7.json",
+      "roadCount": 26,
+      "buildingCount": 25,
+      "laneCount": 48,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "-7_-6",
+      "regionId": "noroeste",
+      "bounds": {
+        "minX": -5600,
+        "minY": -4800,
+        "maxX": -4800,
+        "maxY": -4000
+      },
+      "adjacent": [
+        "-8_-7",
+        "-8_-6",
+        "-8_-5",
+        "-7_-7",
+        "-7_-5",
+        "-6_-7",
+        "-6_-6",
+        "-6_-5"
+      ],
+      "file": "chunks/-7_-6.json",
+      "roadCount": 85,
+      "buildingCount": 50,
+      "laneCount": 149,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "-7_-5",
+      "regionId": "noroeste",
+      "bounds": {
+        "minX": -5600,
+        "minY": -4000,
+        "maxX": -4800,
+        "maxY": -3200
+      },
+      "adjacent": [
+        "-8_-6",
+        "-8_-5",
+        "-8_-4",
+        "-7_-6",
+        "-7_-4",
+        "-6_-6",
+        "-6_-5",
+        "-6_-4"
+      ],
+      "file": "chunks/-7_-5.json",
+      "roadCount": 112,
+      "buildingCount": 180,
+      "laneCount": 196,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "-7_-4",
+      "regionId": "cruzeiro",
+      "bounds": {
+        "minX": -5600,
+        "minY": -3200,
+        "maxX": -4800,
+        "maxY": -2400
+      },
+      "adjacent": [
+        "-8_-5",
+        "-8_-4",
+        "-8_-3",
+        "-7_-5",
+        "-7_-3",
+        "-6_-5",
+        "-6_-4",
+        "-6_-3"
+      ],
+      "file": "chunks/-7_-4.json",
+      "roadCount": 60,
+      "buildingCount": 180,
+      "laneCount": 124,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "-7_-3",
+      "regionId": "cruzeiro",
+      "bounds": {
+        "minX": -5600,
+        "minY": -2400,
+        "maxX": -4800,
+        "maxY": -1600
+      },
+      "adjacent": [
+        "-8_-4",
+        "-8_-3",
+        "-8_-2",
+        "-7_-4",
+        "-7_-2",
+        "-6_-4",
+        "-6_-3",
+        "-6_-2"
+      ],
+      "file": "chunks/-7_-3.json",
+      "roadCount": 77,
+      "buildingCount": 180,
+      "laneCount": 178,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "-7_-2",
+      "regionId": "cruzeiro",
+      "bounds": {
+        "minX": -5600,
+        "minY": -1600,
+        "maxX": -4800,
+        "maxY": -800
+      },
+      "adjacent": [
+        "-8_-3",
+        "-8_-2",
+        "-8_-1",
+        "-7_-3",
+        "-7_-1",
+        "-6_-3",
+        "-6_-2",
+        "-6_-1"
+      ],
+      "file": "chunks/-7_-2.json",
+      "roadCount": 161,
+      "buildingCount": 180,
+      "laneCount": 348,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "-7_-1",
+      "regionId": "cruzeiro",
+      "bounds": {
+        "minX": -5600,
+        "minY": -800,
+        "maxX": -4800,
+        "maxY": 0
+      },
+      "adjacent": [
+        "-8_-2",
+        "-8_-1",
+        "-8_0",
+        "-7_-2",
+        "-7_0",
+        "-6_-2",
+        "-6_-1",
+        "-6_0"
+      ],
+      "file": "chunks/-7_-1.json",
+      "roadCount": 173,
+      "buildingCount": 180,
+      "laneCount": 350,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "-7_0",
+      "regionId": "sudoeste",
+      "bounds": {
+        "minX": -5600,
+        "minY": 0,
+        "maxX": -4800,
+        "maxY": 800
+      },
+      "adjacent": [
+        "-8_-1",
+        "-8_0",
+        "-8_1",
+        "-7_-1",
+        "-7_1",
+        "-6_-1",
+        "-6_0",
+        "-6_1"
+      ],
+      "file": "chunks/-7_0.json",
+      "roadCount": 314,
+      "buildingCount": 95,
+      "laneCount": 573,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "-7_1",
+      "regionId": "sudoeste",
+      "bounds": {
+        "minX": -5600,
+        "minY": 800,
+        "maxX": -4800,
+        "maxY": 1600
+      },
+      "adjacent": [
+        "-8_0",
+        "-8_1",
+        "-8_2",
+        "-7_0",
+        "-7_2",
+        "-6_0",
+        "-6_1",
+        "-6_2"
+      ],
+      "file": "chunks/-7_1.json",
+      "roadCount": 206,
+      "buildingCount": 29,
+      "laneCount": 354,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "-7_2",
+      "regionId": "sudoeste",
+      "bounds": {
+        "minX": -5600,
+        "minY": 1600,
+        "maxX": -4800,
+        "maxY": 2400
+      },
+      "adjacent": [
+        "-8_1",
+        "-8_2",
+        "-8_3",
+        "-7_1",
+        "-7_3",
+        "-6_1",
+        "-6_2",
+        "-6_3"
+      ],
+      "file": "chunks/-7_2.json",
+      "roadCount": 98,
+      "buildingCount": 10,
+      "laneCount": 154,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "-7_3",
+      "regionId": "sudoeste",
+      "bounds": {
+        "minX": -5600,
+        "minY": 2400,
+        "maxX": -4800,
+        "maxY": 3200
+      },
+      "adjacent": [
+        "-8_2",
+        "-8_3",
+        "-8_4",
+        "-7_2",
+        "-7_4",
+        "-6_2",
+        "-6_3",
+        "-6_4"
+      ],
+      "file": "chunks/-7_3.json",
+      "roadCount": 37,
+      "buildingCount": 3,
+      "laneCount": 67,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "-7_4",
+      "regionId": "sudoeste",
+      "bounds": {
+        "minX": -5600,
+        "minY": 3200,
+        "maxX": -4800,
+        "maxY": 4000
+      },
+      "adjacent": [
+        "-8_3",
+        "-8_4",
+        "-8_5",
+        "-7_3",
+        "-7_5",
+        "-6_3",
+        "-6_4",
+        "-6_5"
+      ],
+      "file": "chunks/-7_4.json",
+      "roadCount": 275,
+      "buildingCount": 21,
+      "laneCount": 505,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "-7_5",
+      "regionId": "asa-sul",
+      "bounds": {
+        "minX": -5600,
+        "minY": 4000,
+        "maxX": -4800,
+        "maxY": 4800
+      },
+      "adjacent": [
+        "-8_4",
+        "-8_5",
+        "-8_6",
+        "-7_4",
+        "-7_6",
+        "-6_4",
+        "-6_5",
+        "-6_6"
+      ],
+      "file": "chunks/-7_5.json",
+      "roadCount": 135,
+      "buildingCount": 11,
+      "laneCount": 243,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "-7_6",
+      "regionId": "asa-sul",
+      "bounds": {
+        "minX": -5600,
+        "minY": 4800,
+        "maxX": -4800,
+        "maxY": 5600
+      },
+      "adjacent": [
+        "-8_5",
+        "-8_6",
+        "-8_7",
+        "-7_5",
+        "-7_7",
+        "-6_5",
+        "-6_6",
+        "-6_7"
+      ],
+      "file": "chunks/-7_6.json",
+      "roadCount": 10,
+      "buildingCount": 1,
+      "laneCount": 24,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "-6_-10",
+      "regionId": "noroeste",
+      "bounds": {
+        "minX": -4800,
+        "minY": -8000,
+        "maxX": -4000,
+        "maxY": -7200
+      },
+      "adjacent": [
+        "-7_-11",
+        "-7_-10",
+        "-7_-9",
+        "-6_-11",
+        "-6_-9",
+        "-5_-11",
+        "-5_-10",
+        "-5_-9"
+      ],
+      "file": "chunks/-6_-10.json",
+      "roadCount": 2,
+      "buildingCount": 0,
+      "laneCount": 4,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "-6_-9",
+      "regionId": "noroeste",
+      "bounds": {
+        "minX": -4800,
+        "minY": -7200,
+        "maxX": -4000,
+        "maxY": -6400
+      },
+      "adjacent": [
+        "-7_-10",
+        "-7_-9",
+        "-7_-8",
+        "-6_-10",
+        "-6_-8",
+        "-5_-10",
+        "-5_-9",
+        "-5_-8"
+      ],
+      "file": "chunks/-6_-9.json",
+      "roadCount": 14,
+      "buildingCount": 1,
+      "laneCount": 28,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "-6_-8",
+      "regionId": "noroeste",
+      "bounds": {
+        "minX": -4800,
+        "minY": -6400,
+        "maxX": -4000,
+        "maxY": -5600
+      },
+      "adjacent": [
+        "-7_-9",
+        "-7_-8",
+        "-7_-7",
+        "-6_-9",
+        "-6_-7",
+        "-5_-9",
+        "-5_-8",
+        "-5_-7"
+      ],
+      "file": "chunks/-6_-8.json",
+      "roadCount": 29,
+      "buildingCount": 16,
+      "laneCount": 49,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "-6_-7",
+      "regionId": "noroeste",
+      "bounds": {
+        "minX": -4800,
+        "minY": -5600,
+        "maxX": -4000,
+        "maxY": -4800
+      },
+      "adjacent": [
+        "-7_-8",
+        "-7_-7",
+        "-7_-6",
+        "-6_-8",
+        "-6_-6",
+        "-5_-8",
+        "-5_-7",
+        "-5_-6"
+      ],
+      "file": "chunks/-6_-7.json",
+      "roadCount": 89,
+      "buildingCount": 180,
+      "laneCount": 161,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "-6_-6",
+      "regionId": "noroeste",
+      "bounds": {
+        "minX": -4800,
+        "minY": -4800,
+        "maxX": -4000,
+        "maxY": -4000
+      },
+      "adjacent": [
+        "-7_-7",
+        "-7_-6",
+        "-7_-5",
+        "-6_-7",
+        "-6_-5",
+        "-5_-7",
+        "-5_-6",
+        "-5_-5"
+      ],
+      "file": "chunks/-6_-6.json",
+      "roadCount": 50,
+      "buildingCount": 12,
+      "laneCount": 92,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "-6_-5",
+      "regionId": "noroeste",
+      "bounds": {
+        "minX": -4800,
+        "minY": -4000,
+        "maxX": -4000,
+        "maxY": -3200
+      },
+      "adjacent": [
+        "-7_-6",
+        "-7_-5",
+        "-7_-4",
+        "-6_-6",
+        "-6_-4",
+        "-5_-6",
+        "-5_-5",
+        "-5_-4"
+      ],
+      "file": "chunks/-6_-5.json",
+      "roadCount": 58,
+      "buildingCount": 81,
+      "laneCount": 101,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "-6_-4",
+      "regionId": "noroeste",
+      "bounds": {
+        "minX": -4800,
+        "minY": -3200,
+        "maxX": -4000,
+        "maxY": -2400
+      },
+      "adjacent": [
+        "-7_-5",
+        "-7_-4",
+        "-7_-3",
+        "-6_-5",
+        "-6_-3",
+        "-5_-5",
+        "-5_-4",
+        "-5_-3"
+      ],
+      "file": "chunks/-6_-4.json",
+      "roadCount": 43,
+      "buildingCount": 64,
+      "laneCount": 83,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "-6_-3",
+      "regionId": "cruzeiro",
+      "bounds": {
+        "minX": -4800,
+        "minY": -2400,
+        "maxX": -4000,
+        "maxY": -1600
+      },
+      "adjacent": [
+        "-7_-4",
+        "-7_-3",
+        "-7_-2",
+        "-6_-4",
+        "-6_-2",
+        "-5_-4",
+        "-5_-3",
+        "-5_-2"
+      ],
+      "file": "chunks/-6_-3.json",
+      "roadCount": 41,
+      "buildingCount": 27,
+      "laneCount": 101,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "-6_-2",
+      "regionId": "sudoeste",
+      "bounds": {
+        "minX": -4800,
+        "minY": -1600,
+        "maxX": -4000,
+        "maxY": -800
+      },
+      "adjacent": [
+        "-7_-3",
+        "-7_-2",
+        "-7_-1",
+        "-6_-3",
+        "-6_-1",
+        "-5_-3",
+        "-5_-2",
+        "-5_-1"
+      ],
+      "file": "chunks/-6_-2.json",
+      "roadCount": 78,
+      "buildingCount": 27,
+      "laneCount": 211,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "-6_-1",
+      "regionId": "sudoeste",
+      "bounds": {
+        "minX": -4800,
+        "minY": -800,
+        "maxX": -4000,
+        "maxY": 0
+      },
+      "adjacent": [
+        "-7_-2",
+        "-7_-1",
+        "-7_0",
+        "-6_-2",
+        "-6_0",
+        "-5_-2",
+        "-5_-1",
+        "-5_0"
+      ],
+      "file": "chunks/-6_-1.json",
+      "roadCount": 71,
+      "buildingCount": 34,
+      "laneCount": 114,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "-6_0",
+      "regionId": "sudoeste",
+      "bounds": {
+        "minX": -4800,
+        "minY": 0,
+        "maxX": -4000,
+        "maxY": 800
+      },
+      "adjacent": [
+        "-7_-1",
+        "-7_0",
+        "-7_1",
+        "-6_-1",
+        "-6_1",
+        "-5_-1",
+        "-5_0",
+        "-5_1"
+      ],
+      "file": "chunks/-6_0.json",
+      "roadCount": 233,
+      "buildingCount": 75,
+      "laneCount": 402,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "-6_1",
+      "regionId": "sudoeste",
+      "bounds": {
+        "minX": -4800,
+        "minY": 800,
+        "maxX": -4000,
+        "maxY": 1600
+      },
+      "adjacent": [
+        "-7_0",
+        "-7_1",
+        "-7_2",
+        "-6_0",
+        "-6_2",
+        "-5_0",
+        "-5_1",
+        "-5_2"
+      ],
+      "file": "chunks/-6_1.json",
+      "roadCount": 89,
+      "buildingCount": 7,
+      "laneCount": 162,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "-6_2",
+      "regionId": "sudoeste",
+      "bounds": {
+        "minX": -4800,
+        "minY": 1600,
+        "maxX": -4000,
+        "maxY": 2400
+      },
+      "adjacent": [
+        "-7_1",
+        "-7_2",
+        "-7_3",
+        "-6_1",
+        "-6_3",
+        "-5_1",
+        "-5_2",
+        "-5_3"
+      ],
+      "file": "chunks/-6_2.json",
+      "roadCount": 44,
+      "buildingCount": 7,
+      "laneCount": 91,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "-6_3",
+      "regionId": "sudoeste",
+      "bounds": {
+        "minX": -4800,
+        "minY": 2400,
+        "maxX": -4000,
+        "maxY": 3200
+      },
+      "adjacent": [
+        "-7_2",
+        "-7_3",
+        "-7_4",
+        "-6_2",
+        "-6_4",
+        "-5_2",
+        "-5_3",
+        "-5_4"
+      ],
+      "file": "chunks/-6_3.json",
+      "roadCount": 160,
+      "buildingCount": 70,
+      "laneCount": 295,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "-6_4",
+      "regionId": "asa-sul",
+      "bounds": {
+        "minX": -4800,
+        "minY": 3200,
+        "maxX": -4000,
+        "maxY": 4000
+      },
+      "adjacent": [
+        "-7_3",
+        "-7_4",
+        "-7_5",
+        "-6_3",
+        "-6_5",
+        "-5_3",
+        "-5_4",
+        "-5_5"
+      ],
+      "file": "chunks/-6_4.json",
+      "roadCount": 197,
+      "buildingCount": 102,
+      "laneCount": 349,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "-6_5",
+      "regionId": "asa-sul",
+      "bounds": {
+        "minX": -4800,
+        "minY": 4000,
+        "maxX": -4000,
+        "maxY": 4800
+      },
+      "adjacent": [
+        "-7_4",
+        "-7_5",
+        "-7_6",
+        "-6_4",
+        "-6_6",
+        "-5_4",
+        "-5_5",
+        "-5_6"
+      ],
+      "file": "chunks/-6_5.json",
+      "roadCount": 166,
+      "buildingCount": 59,
+      "laneCount": 311,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "-6_6",
+      "regionId": "asa-sul",
+      "bounds": {
+        "minX": -4800,
+        "minY": 4800,
+        "maxX": -4000,
+        "maxY": 5600
+      },
+      "adjacent": [
+        "-7_5",
+        "-7_6",
+        "-7_7",
+        "-6_5",
+        "-6_7",
+        "-5_5",
+        "-5_6",
+        "-5_7"
+      ],
+      "file": "chunks/-6_6.json",
+      "roadCount": 34,
+      "buildingCount": 12,
+      "laneCount": 67,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "-5_-10",
+      "regionId": "noroeste",
+      "bounds": {
+        "minX": -4000,
+        "minY": -8000,
+        "maxX": -3200,
+        "maxY": -7200
+      },
+      "adjacent": [
+        "-6_-11",
+        "-6_-10",
+        "-6_-9",
+        "-5_-11",
+        "-5_-9",
+        "-4_-11",
+        "-4_-10",
+        "-4_-9"
+      ],
+      "file": "chunks/-5_-10.json",
+      "roadCount": 1,
+      "buildingCount": 0,
+      "laneCount": 2,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "-5_-9",
+      "regionId": "noroeste",
+      "bounds": {
+        "minX": -4000,
+        "minY": -7200,
+        "maxX": -3200,
+        "maxY": -6400
+      },
+      "adjacent": [
+        "-6_-10",
+        "-6_-9",
+        "-6_-8",
+        "-5_-10",
+        "-5_-8",
+        "-4_-10",
+        "-4_-9",
+        "-4_-8"
+      ],
+      "file": "chunks/-5_-9.json",
+      "roadCount": 15,
+      "buildingCount": 0,
+      "laneCount": 41,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "-5_-8",
+      "regionId": "noroeste",
+      "bounds": {
+        "minX": -4000,
+        "minY": -6400,
+        "maxX": -3200,
+        "maxY": -5600
+      },
+      "adjacent": [
+        "-6_-9",
+        "-6_-8",
+        "-6_-7",
+        "-5_-9",
+        "-5_-7",
+        "-4_-9",
+        "-4_-8",
+        "-4_-7"
+      ],
+      "file": "chunks/-5_-8.json",
+      "roadCount": 121,
+      "buildingCount": 26,
+      "laneCount": 249,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "-5_-7",
+      "regionId": "noroeste",
+      "bounds": {
+        "minX": -4000,
+        "minY": -5600,
+        "maxX": -3200,
+        "maxY": -4800
+      },
+      "adjacent": [
+        "-6_-8",
+        "-6_-7",
+        "-6_-6",
+        "-5_-8",
+        "-5_-6",
+        "-4_-8",
+        "-4_-7",
+        "-4_-6"
+      ],
+      "file": "chunks/-5_-7.json",
+      "roadCount": 55,
+      "buildingCount": 157,
+      "laneCount": 105,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "-5_-6",
+      "regionId": "noroeste",
+      "bounds": {
+        "minX": -4000,
+        "minY": -4800,
+        "maxX": -3200,
+        "maxY": -4000
+      },
+      "adjacent": [
+        "-6_-7",
+        "-6_-6",
+        "-6_-5",
+        "-5_-7",
+        "-5_-5",
+        "-4_-7",
+        "-4_-6",
+        "-4_-5"
+      ],
+      "file": "chunks/-5_-6.json",
+      "roadCount": 73,
+      "buildingCount": 61,
+      "laneCount": 143,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "-5_-5",
+      "regionId": "noroeste",
+      "bounds": {
+        "minX": -4000,
+        "minY": -4000,
+        "maxX": -3200,
+        "maxY": -3200
+      },
+      "adjacent": [
+        "-6_-6",
+        "-6_-5",
+        "-6_-4",
+        "-5_-6",
+        "-5_-4",
+        "-4_-6",
+        "-4_-5",
+        "-4_-4"
+      ],
+      "file": "chunks/-5_-5.json",
+      "roadCount": 118,
+      "buildingCount": 30,
+      "laneCount": 212,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "-5_-4",
+      "regionId": "noroeste",
+      "bounds": {
+        "minX": -4000,
+        "minY": -3200,
+        "maxX": -3200,
+        "maxY": -2400
+      },
+      "adjacent": [
+        "-6_-5",
+        "-6_-4",
+        "-6_-3",
+        "-5_-5",
+        "-5_-3",
+        "-4_-5",
+        "-4_-4",
+        "-4_-3"
+      ],
+      "file": "chunks/-5_-4.json",
+      "roadCount": 78,
+      "buildingCount": 7,
+      "laneCount": 142,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "-5_-3",
+      "regionId": "sudoeste",
+      "bounds": {
+        "minX": -4000,
+        "minY": -2400,
+        "maxX": -3200,
+        "maxY": -1600
+      },
+      "adjacent": [
+        "-6_-4",
+        "-6_-3",
+        "-6_-2",
+        "-5_-4",
+        "-5_-2",
+        "-4_-4",
+        "-4_-3",
+        "-4_-2"
+      ],
+      "file": "chunks/-5_-3.json",
+      "roadCount": 85,
+      "buildingCount": 44,
+      "laneCount": 162,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "-5_-2",
+      "regionId": "sudoeste",
+      "bounds": {
+        "minX": -4000,
+        "minY": -1600,
+        "maxX": -3200,
+        "maxY": -800
+      },
+      "adjacent": [
+        "-6_-3",
+        "-6_-2",
+        "-6_-1",
+        "-5_-3",
+        "-5_-1",
+        "-4_-3",
+        "-4_-2",
+        "-4_-1"
+      ],
+      "file": "chunks/-5_-2.json",
+      "roadCount": 72,
+      "buildingCount": 75,
+      "laneCount": 194,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "-5_-1",
+      "regionId": "sudoeste",
+      "bounds": {
+        "minX": -4000,
+        "minY": -800,
+        "maxX": -3200,
+        "maxY": 0
+      },
+      "adjacent": [
+        "-6_-2",
+        "-6_-1",
+        "-6_0",
+        "-5_-2",
+        "-5_0",
+        "-4_-2",
+        "-4_-1",
+        "-4_0"
+      ],
+      "file": "chunks/-5_-1.json",
+      "roadCount": 247,
+      "buildingCount": 162,
+      "laneCount": 420,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "-5_0",
+      "regionId": "sudoeste",
+      "bounds": {
+        "minX": -4000,
+        "minY": 0,
+        "maxX": -3200,
+        "maxY": 800
+      },
+      "adjacent": [
+        "-6_-1",
+        "-6_0",
+        "-6_1",
+        "-5_-1",
+        "-5_1",
+        "-4_-1",
+        "-4_0",
+        "-4_1"
+      ],
+      "file": "chunks/-5_0.json",
+      "roadCount": 168,
+      "buildingCount": 143,
+      "laneCount": 315,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "-5_1",
+      "regionId": "sudoeste",
+      "bounds": {
+        "minX": -4000,
+        "minY": 800,
+        "maxX": -3200,
+        "maxY": 1600
+      },
+      "adjacent": [
+        "-6_0",
+        "-6_1",
+        "-6_2",
+        "-5_0",
+        "-5_2",
+        "-4_0",
+        "-4_1",
+        "-4_2"
+      ],
+      "file": "chunks/-5_1.json",
+      "roadCount": 23,
+      "buildingCount": 1,
+      "laneCount": 58,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "-5_2",
+      "regionId": "asa-sul",
+      "bounds": {
+        "minX": -4000,
+        "minY": 1600,
+        "maxX": -3200,
+        "maxY": 2400
+      },
+      "adjacent": [
+        "-6_1",
+        "-6_2",
+        "-6_3",
+        "-5_1",
+        "-5_3",
+        "-4_1",
+        "-4_2",
+        "-4_3"
+      ],
+      "file": "chunks/-5_2.json",
+      "roadCount": 131,
+      "buildingCount": 161,
+      "laneCount": 233,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "-5_3",
+      "regionId": "asa-sul",
+      "bounds": {
+        "minX": -4000,
+        "minY": 2400,
+        "maxX": -3200,
+        "maxY": 3200
+      },
+      "adjacent": [
+        "-6_2",
+        "-6_3",
+        "-6_4",
+        "-5_2",
+        "-5_4",
+        "-4_2",
+        "-4_3",
+        "-4_4"
+      ],
+      "file": "chunks/-5_3.json",
+      "roadCount": 175,
+      "buildingCount": 180,
+      "laneCount": 322,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "-5_4",
+      "regionId": "asa-sul",
+      "bounds": {
+        "minX": -4000,
+        "minY": 3200,
+        "maxX": -3200,
+        "maxY": 4000
+      },
+      "adjacent": [
+        "-6_3",
+        "-6_4",
+        "-6_5",
+        "-5_3",
+        "-5_5",
+        "-4_3",
+        "-4_4",
+        "-4_5"
+      ],
+      "file": "chunks/-5_4.json",
+      "roadCount": 188,
+      "buildingCount": 125,
+      "laneCount": 324,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "-5_5",
+      "regionId": "asa-sul",
+      "bounds": {
+        "minX": -4000,
+        "minY": 4000,
+        "maxX": -3200,
+        "maxY": 4800
+      },
+      "adjacent": [
+        "-6_4",
+        "-6_5",
+        "-6_6",
+        "-5_4",
+        "-5_6",
+        "-4_4",
+        "-4_5",
+        "-4_6"
+      ],
+      "file": "chunks/-5_5.json",
+      "roadCount": 177,
+      "buildingCount": 93,
+      "laneCount": 319,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "-5_6",
+      "regionId": "asa-sul",
+      "bounds": {
+        "minX": -4000,
+        "minY": 4800,
+        "maxX": -3200,
+        "maxY": 5600
+      },
+      "adjacent": [
+        "-6_5",
+        "-6_6",
+        "-6_7",
+        "-5_5",
+        "-5_7",
+        "-4_5",
+        "-4_6",
+        "-4_7"
+      ],
+      "file": "chunks/-5_6.json",
+      "roadCount": 23,
+      "buildingCount": 1,
+      "laneCount": 50,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "-4_-10",
+      "regionId": "noroeste",
+      "bounds": {
+        "minX": -3200,
+        "minY": -8000,
+        "maxX": -2400,
+        "maxY": -7200
+      },
+      "adjacent": [
+        "-5_-11",
+        "-5_-10",
+        "-5_-9",
+        "-4_-11",
+        "-4_-9",
+        "-3_-11",
+        "-3_-10",
+        "-3_-9"
+      ],
+      "file": "chunks/-4_-10.json",
+      "roadCount": 1,
+      "buildingCount": 0,
+      "laneCount": 0,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "-4_-9",
+      "regionId": "noroeste",
+      "bounds": {
+        "minX": -3200,
+        "minY": -7200,
+        "maxX": -2400,
+        "maxY": -6400
+      },
+      "adjacent": [
+        "-5_-10",
+        "-5_-9",
+        "-5_-8",
+        "-4_-10",
+        "-4_-8",
+        "-3_-10",
+        "-3_-9",
+        "-3_-8"
+      ],
+      "file": "chunks/-4_-9.json",
+      "roadCount": 61,
+      "buildingCount": 35,
+      "laneCount": 119,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "-4_-8",
+      "regionId": "noroeste",
+      "bounds": {
+        "minX": -3200,
+        "minY": -6400,
+        "maxX": -2400,
+        "maxY": -5600
+      },
+      "adjacent": [
+        "-5_-9",
+        "-5_-8",
+        "-5_-7",
+        "-4_-9",
+        "-4_-7",
+        "-3_-9",
+        "-3_-8",
+        "-3_-7"
+      ],
+      "file": "chunks/-4_-8.json",
+      "roadCount": 87,
+      "buildingCount": 23,
+      "laneCount": 170,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "-4_-7",
+      "regionId": "noroeste",
+      "bounds": {
+        "minX": -3200,
+        "minY": -5600,
+        "maxX": -2400,
+        "maxY": -4800
+      },
+      "adjacent": [
+        "-5_-8",
+        "-5_-7",
+        "-5_-6",
+        "-4_-8",
+        "-4_-6",
+        "-3_-8",
+        "-3_-7",
+        "-3_-6"
+      ],
+      "file": "chunks/-4_-7.json",
+      "roadCount": 84,
+      "buildingCount": 59,
+      "laneCount": 151,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "-4_-6",
+      "regionId": "noroeste",
+      "bounds": {
+        "minX": -3200,
+        "minY": -4800,
+        "maxX": -2400,
+        "maxY": -4000
+      },
+      "adjacent": [
+        "-5_-7",
+        "-5_-6",
+        "-5_-5",
+        "-4_-7",
+        "-4_-5",
+        "-3_-7",
+        "-3_-6",
+        "-3_-5"
+      ],
+      "file": "chunks/-4_-6.json",
+      "roadCount": 68,
+      "buildingCount": 75,
+      "laneCount": 137,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "-4_-5",
+      "regionId": "noroeste",
+      "bounds": {
+        "minX": -3200,
+        "minY": -4000,
+        "maxX": -2400,
+        "maxY": -3200
+      },
+      "adjacent": [
+        "-5_-6",
+        "-5_-5",
+        "-5_-4",
+        "-4_-6",
+        "-4_-4",
+        "-3_-6",
+        "-3_-5",
+        "-3_-4"
+      ],
+      "file": "chunks/-4_-5.json",
+      "roadCount": 75,
+      "buildingCount": 65,
+      "laneCount": 160,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "-4_-4",
+      "regionId": "noroeste",
+      "bounds": {
+        "minX": -3200,
+        "minY": -3200,
+        "maxX": -2400,
+        "maxY": -2400
+      },
+      "adjacent": [
+        "-5_-5",
+        "-5_-4",
+        "-5_-3",
+        "-4_-5",
+        "-4_-3",
+        "-3_-5",
+        "-3_-4",
+        "-3_-3"
+      ],
+      "file": "chunks/-4_-4.json",
+      "roadCount": 80,
+      "buildingCount": 58,
+      "laneCount": 167,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "-4_-3",
+      "regionId": "sudoeste",
+      "bounds": {
+        "minX": -3200,
+        "minY": -2400,
+        "maxX": -2400,
+        "maxY": -1600
+      },
+      "adjacent": [
+        "-5_-4",
+        "-5_-3",
+        "-5_-2",
+        "-4_-4",
+        "-4_-2",
+        "-3_-4",
+        "-3_-3",
+        "-3_-2"
+      ],
+      "file": "chunks/-4_-3.json",
+      "roadCount": 103,
+      "buildingCount": 113,
+      "laneCount": 202,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "-4_-2",
+      "regionId": "sudoeste",
+      "bounds": {
+        "minX": -3200,
+        "minY": -1600,
+        "maxX": -2400,
+        "maxY": -800
+      },
+      "adjacent": [
+        "-5_-3",
+        "-5_-2",
+        "-5_-1",
+        "-4_-3",
+        "-4_-1",
+        "-3_-3",
+        "-3_-2",
+        "-3_-1"
+      ],
+      "file": "chunks/-4_-2.json",
+      "roadCount": 200,
+      "buildingCount": 55,
+      "laneCount": 399,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "-4_-1",
+      "regionId": "sudoeste",
+      "bounds": {
+        "minX": -3200,
+        "minY": -800,
+        "maxX": -2400,
+        "maxY": 0
+      },
+      "adjacent": [
+        "-5_-2",
+        "-5_-1",
+        "-5_0",
+        "-4_-2",
+        "-4_0",
+        "-3_-2",
+        "-3_-1",
+        "-3_0"
+      ],
+      "file": "chunks/-4_-1.json",
+      "roadCount": 145,
+      "buildingCount": 78,
+      "laneCount": 285,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "-4_0",
+      "regionId": "sudoeste",
+      "bounds": {
+        "minX": -3200,
+        "minY": 0,
+        "maxX": -2400,
+        "maxY": 800
+      },
+      "adjacent": [
+        "-5_-1",
+        "-5_0",
+        "-5_1",
+        "-4_-1",
+        "-4_1",
+        "-3_-1",
+        "-3_0",
+        "-3_1"
+      ],
+      "file": "chunks/-4_0.json",
+      "roadCount": 58,
+      "buildingCount": 43,
+      "laneCount": 108,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "-4_1",
+      "regionId": "asa-sul",
+      "bounds": {
+        "minX": -3200,
+        "minY": 800,
+        "maxX": -2400,
+        "maxY": 1600
+      },
+      "adjacent": [
+        "-5_0",
+        "-5_1",
+        "-5_2",
+        "-4_0",
+        "-4_2",
+        "-3_0",
+        "-3_1",
+        "-3_2"
+      ],
+      "file": "chunks/-4_1.json",
+      "roadCount": 109,
+      "buildingCount": 4,
+      "laneCount": 209,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "-4_2",
+      "regionId": "asa-sul",
+      "bounds": {
+        "minX": -3200,
+        "minY": 1600,
+        "maxX": -2400,
+        "maxY": 2400
+      },
+      "adjacent": [
+        "-5_1",
+        "-5_2",
+        "-5_3",
+        "-4_1",
+        "-4_3",
+        "-3_1",
+        "-3_2",
+        "-3_3"
+      ],
+      "file": "chunks/-4_2.json",
+      "roadCount": 149,
+      "buildingCount": 180,
+      "laneCount": 281,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "-4_3",
+      "regionId": "asa-sul",
+      "bounds": {
+        "minX": -3200,
+        "minY": 2400,
+        "maxX": -2400,
+        "maxY": 3200
+      },
+      "adjacent": [
+        "-5_2",
+        "-5_3",
+        "-5_4",
+        "-4_2",
+        "-4_4",
+        "-3_2",
+        "-3_3",
+        "-3_4"
+      ],
+      "file": "chunks/-4_3.json",
+      "roadCount": 190,
+      "buildingCount": 180,
+      "laneCount": 325,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "-4_4",
+      "regionId": "asa-sul",
+      "bounds": {
+        "minX": -3200,
+        "minY": 3200,
+        "maxX": -2400,
+        "maxY": 4000
+      },
+      "adjacent": [
+        "-5_3",
+        "-5_4",
+        "-5_5",
+        "-4_3",
+        "-4_5",
+        "-3_3",
+        "-3_4",
+        "-3_5"
+      ],
+      "file": "chunks/-4_4.json",
+      "roadCount": 181,
+      "buildingCount": 101,
+      "laneCount": 332,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "-4_5",
+      "regionId": "asa-sul",
+      "bounds": {
+        "minX": -3200,
+        "minY": 4000,
+        "maxX": -2400,
+        "maxY": 4800
+      },
+      "adjacent": [
+        "-5_4",
+        "-5_5",
+        "-5_6",
+        "-4_4",
+        "-4_6",
+        "-3_4",
+        "-3_5",
+        "-3_6"
+      ],
+      "file": "chunks/-4_5.json",
+      "roadCount": 155,
+      "buildingCount": 20,
+      "laneCount": 297,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "-4_6",
+      "regionId": "asa-sul",
+      "bounds": {
+        "minX": -3200,
+        "minY": 4800,
+        "maxX": -2400,
+        "maxY": 5600
+      },
+      "adjacent": [
+        "-5_5",
+        "-5_6",
+        "-5_7",
+        "-4_5",
+        "-4_7",
+        "-3_5",
+        "-3_6",
+        "-3_7"
+      ],
+      "file": "chunks/-4_6.json",
+      "roadCount": 26,
+      "buildingCount": 1,
+      "laneCount": 58,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "-3_-10",
+      "regionId": "noroeste",
+      "bounds": {
+        "minX": -2400,
+        "minY": -8000,
+        "maxX": -1600,
+        "maxY": -7200
+      },
+      "adjacent": [
+        "-4_-11",
+        "-4_-10",
+        "-4_-9",
+        "-3_-11",
+        "-3_-9",
+        "-2_-11",
+        "-2_-10",
+        "-2_-9"
+      ],
+      "file": "chunks/-3_-10.json",
+      "roadCount": 3,
+      "buildingCount": 0,
+      "laneCount": 5,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "-3_-9",
+      "regionId": "noroeste",
+      "bounds": {
+        "minX": -2400,
+        "minY": -7200,
+        "maxX": -1600,
+        "maxY": -6400
+      },
+      "adjacent": [
+        "-4_-10",
+        "-4_-9",
+        "-4_-8",
+        "-3_-10",
+        "-3_-8",
+        "-2_-10",
+        "-2_-9",
+        "-2_-8"
+      ],
+      "file": "chunks/-3_-9.json",
+      "roadCount": 203,
+      "buildingCount": 135,
+      "laneCount": 355,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "-3_-8",
+      "regionId": "noroeste",
+      "bounds": {
+        "minX": -2400,
+        "minY": -6400,
+        "maxX": -1600,
+        "maxY": -5600
+      },
+      "adjacent": [
+        "-4_-9",
+        "-4_-8",
+        "-4_-7",
+        "-3_-9",
+        "-3_-7",
+        "-2_-9",
+        "-2_-8",
+        "-2_-7"
+      ],
+      "file": "chunks/-3_-8.json",
+      "roadCount": 158,
+      "buildingCount": 180,
+      "laneCount": 302,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "-3_-7",
+      "regionId": "noroeste",
+      "bounds": {
+        "minX": -2400,
+        "minY": -5600,
+        "maxX": -1600,
+        "maxY": -4800
+      },
+      "adjacent": [
+        "-4_-8",
+        "-4_-7",
+        "-4_-6",
+        "-3_-8",
+        "-3_-6",
+        "-2_-8",
+        "-2_-7",
+        "-2_-6"
+      ],
+      "file": "chunks/-3_-7.json",
+      "roadCount": 109,
+      "buildingCount": 180,
+      "laneCount": 203,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "-3_-6",
+      "regionId": "noroeste",
+      "bounds": {
+        "minX": -2400,
+        "minY": -4800,
+        "maxX": -1600,
+        "maxY": -4000
+      },
+      "adjacent": [
+        "-4_-7",
+        "-4_-6",
+        "-4_-5",
+        "-3_-7",
+        "-3_-5",
+        "-2_-7",
+        "-2_-6",
+        "-2_-5"
+      ],
+      "file": "chunks/-3_-6.json",
+      "roadCount": 95,
+      "buildingCount": 110,
+      "laneCount": 157,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "-3_-5",
+      "regionId": "noroeste",
+      "bounds": {
+        "minX": -2400,
+        "minY": -4000,
+        "maxX": -1600,
+        "maxY": -3200
+      },
+      "adjacent": [
+        "-4_-6",
+        "-4_-5",
+        "-4_-4",
+        "-3_-6",
+        "-3_-4",
+        "-2_-6",
+        "-2_-5",
+        "-2_-4"
+      ],
+      "file": "chunks/-3_-5.json",
+      "roadCount": 40,
+      "buildingCount": 45,
+      "laneCount": 66,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "-3_-4",
+      "regionId": "asa-norte",
+      "bounds": {
+        "minX": -2400,
+        "minY": -3200,
+        "maxX": -1600,
+        "maxY": -2400
+      },
+      "adjacent": [
+        "-4_-5",
+        "-4_-4",
+        "-4_-3",
+        "-3_-5",
+        "-3_-3",
+        "-2_-5",
+        "-2_-4",
+        "-2_-3"
+      ],
+      "file": "chunks/-3_-4.json",
+      "roadCount": 71,
+      "buildingCount": 8,
+      "laneCount": 129,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "-3_-3",
+      "regionId": "centro",
+      "bounds": {
+        "minX": -2400,
+        "minY": -2400,
+        "maxX": -1600,
+        "maxY": -1600
+      },
+      "adjacent": [
+        "-4_-4",
+        "-4_-3",
+        "-4_-2",
+        "-3_-4",
+        "-3_-2",
+        "-2_-4",
+        "-2_-3",
+        "-2_-2"
+      ],
+      "file": "chunks/-3_-3.json",
+      "roadCount": 49,
+      "buildingCount": 18,
+      "laneCount": 90,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "-3_-2",
+      "regionId": "centro",
+      "bounds": {
+        "minX": -2400,
+        "minY": -1600,
+        "maxX": -1600,
+        "maxY": -800
+      },
+      "adjacent": [
+        "-4_-3",
+        "-4_-2",
+        "-4_-1",
+        "-3_-3",
+        "-3_-1",
+        "-2_-3",
+        "-2_-2",
+        "-2_-1"
+      ],
+      "file": "chunks/-3_-2.json",
+      "roadCount": 76,
+      "buildingCount": 22,
+      "laneCount": 141,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "-3_-1",
+      "regionId": "centro",
+      "bounds": {
+        "minX": -2400,
+        "minY": -800,
+        "maxX": -1600,
+        "maxY": 0
+      },
+      "adjacent": [
+        "-4_-2",
+        "-4_-1",
+        "-4_0",
+        "-3_-2",
+        "-3_0",
+        "-2_-2",
+        "-2_-1",
+        "-2_0"
+      ],
+      "file": "chunks/-3_-1.json",
+      "roadCount": 63,
+      "buildingCount": 37,
+      "laneCount": 133,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "-3_0",
+      "regionId": "asa-sul",
+      "bounds": {
+        "minX": -2400,
+        "minY": 0,
+        "maxX": -1600,
+        "maxY": 800
+      },
+      "adjacent": [
+        "-4_-1",
+        "-4_0",
+        "-4_1",
+        "-3_-1",
+        "-3_1",
+        "-2_-1",
+        "-2_0",
+        "-2_1"
+      ],
+      "file": "chunks/-3_0.json",
+      "roadCount": 63,
+      "buildingCount": 28,
+      "laneCount": 108,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "-3_1",
+      "regionId": "asa-sul",
+      "bounds": {
+        "minX": -2400,
+        "minY": 800,
+        "maxX": -1600,
+        "maxY": 1600
+      },
+      "adjacent": [
+        "-4_0",
+        "-4_1",
+        "-4_2",
+        "-3_0",
+        "-3_2",
+        "-2_0",
+        "-2_1",
+        "-2_2"
+      ],
+      "file": "chunks/-3_1.json",
+      "roadCount": 175,
+      "buildingCount": 19,
+      "laneCount": 347,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "-3_2",
+      "regionId": "asa-sul",
+      "bounds": {
+        "minX": -2400,
+        "minY": 1600,
+        "maxX": -1600,
+        "maxY": 2400
+      },
+      "adjacent": [
+        "-4_1",
+        "-4_2",
+        "-4_3",
+        "-3_1",
+        "-3_3",
+        "-2_1",
+        "-2_2",
+        "-2_3"
+      ],
+      "file": "chunks/-3_2.json",
+      "roadCount": 196,
+      "buildingCount": 116,
+      "laneCount": 340,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "-3_3",
+      "regionId": "asa-sul",
+      "bounds": {
+        "minX": -2400,
+        "minY": 2400,
+        "maxX": -1600,
+        "maxY": 3200
+      },
+      "adjacent": [
+        "-4_2",
+        "-4_3",
+        "-4_4",
+        "-3_2",
+        "-3_4",
+        "-2_2",
+        "-2_3",
+        "-2_4"
+      ],
+      "file": "chunks/-3_3.json",
+      "roadCount": 177,
+      "buildingCount": 127,
+      "laneCount": 326,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "-3_4",
+      "regionId": "asa-sul",
+      "bounds": {
+        "minX": -2400,
+        "minY": 3200,
+        "maxX": -1600,
+        "maxY": 4000
+      },
+      "adjacent": [
+        "-4_3",
+        "-4_4",
+        "-4_5",
+        "-3_3",
+        "-3_5",
+        "-2_3",
+        "-2_4",
+        "-2_5"
+      ],
+      "file": "chunks/-3_4.json",
+      "roadCount": 164,
+      "buildingCount": 60,
+      "laneCount": 312,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "-3_5",
+      "regionId": "asa-sul",
+      "bounds": {
+        "minX": -2400,
+        "minY": 4000,
+        "maxX": -1600,
+        "maxY": 4800
+      },
+      "adjacent": [
+        "-4_4",
+        "-4_5",
+        "-4_6",
+        "-3_4",
+        "-3_6",
+        "-2_4",
+        "-2_5",
+        "-2_6"
+      ],
+      "file": "chunks/-3_5.json",
+      "roadCount": 81,
+      "buildingCount": 0,
+      "laneCount": 156,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "-3_6",
+      "regionId": "asa-sul",
+      "bounds": {
+        "minX": -2400,
+        "minY": 4800,
+        "maxX": -1600,
+        "maxY": 5600
+      },
+      "adjacent": [
+        "-4_5",
+        "-4_6",
+        "-4_7",
+        "-3_5",
+        "-3_7",
+        "-2_5",
+        "-2_6",
+        "-2_7"
+      ],
+      "file": "chunks/-3_6.json",
+      "roadCount": 13,
+      "buildingCount": 0,
+      "laneCount": 27,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "-2_-10",
+      "regionId": "noroeste",
+      "bounds": {
+        "minX": -1600,
+        "minY": -8000,
+        "maxX": -800,
+        "maxY": -7200
+      },
+      "adjacent": [
+        "-3_-11",
+        "-3_-10",
+        "-3_-9",
+        "-2_-11",
+        "-2_-9",
+        "-1_-11",
+        "-1_-10",
+        "-1_-9"
+      ],
+      "file": "chunks/-2_-10.json",
+      "roadCount": 1,
+      "buildingCount": 0,
+      "laneCount": 4,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "-2_-9",
+      "regionId": "noroeste",
+      "bounds": {
+        "minX": -1600,
+        "minY": -7200,
+        "maxX": -800,
+        "maxY": -6400
+      },
+      "adjacent": [
+        "-3_-10",
+        "-3_-9",
+        "-3_-8",
+        "-2_-10",
+        "-2_-8",
+        "-1_-10",
+        "-1_-9",
+        "-1_-8"
+      ],
+      "file": "chunks/-2_-9.json",
+      "roadCount": 169,
+      "buildingCount": 21,
+      "laneCount": 353,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "-2_-8",
+      "regionId": "asa-norte",
+      "bounds": {
+        "minX": -1600,
+        "minY": -6400,
+        "maxX": -800,
+        "maxY": -5600
+      },
+      "adjacent": [
+        "-3_-9",
+        "-3_-8",
+        "-3_-7",
+        "-2_-9",
+        "-2_-7",
+        "-1_-9",
+        "-1_-8",
+        "-1_-7"
+      ],
+      "file": "chunks/-2_-8.json",
+      "roadCount": 227,
+      "buildingCount": 102,
+      "laneCount": 409,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "-2_-7",
+      "regionId": "asa-norte",
+      "bounds": {
+        "minX": -1600,
+        "minY": -5600,
+        "maxX": -800,
+        "maxY": -4800
+      },
+      "adjacent": [
+        "-3_-8",
+        "-3_-7",
+        "-3_-6",
+        "-2_-8",
+        "-2_-6",
+        "-1_-8",
+        "-1_-7",
+        "-1_-6"
+      ],
+      "file": "chunks/-2_-7.json",
+      "roadCount": 170,
+      "buildingCount": 180,
+      "laneCount": 317,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "-2_-6",
+      "regionId": "asa-norte",
+      "bounds": {
+        "minX": -1600,
+        "minY": -4800,
+        "maxX": -800,
+        "maxY": -4000
+      },
+      "adjacent": [
+        "-3_-7",
+        "-3_-6",
+        "-3_-5",
+        "-2_-7",
+        "-2_-5",
+        "-1_-7",
+        "-1_-6",
+        "-1_-5"
+      ],
+      "file": "chunks/-2_-6.json",
+      "roadCount": 181,
+      "buildingCount": 180,
+      "laneCount": 352,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "-2_-5",
+      "regionId": "asa-norte",
+      "bounds": {
+        "minX": -1600,
+        "minY": -4000,
+        "maxX": -800,
+        "maxY": -3200
+      },
+      "adjacent": [
+        "-3_-6",
+        "-3_-5",
+        "-3_-4",
+        "-2_-6",
+        "-2_-4",
+        "-1_-6",
+        "-1_-5",
+        "-1_-4"
+      ],
+      "file": "chunks/-2_-5.json",
+      "roadCount": 162,
+      "buildingCount": 180,
+      "laneCount": 319,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "-2_-4",
+      "regionId": "asa-norte",
+      "bounds": {
+        "minX": -1600,
+        "minY": -3200,
+        "maxX": -800,
+        "maxY": -2400
+      },
+      "adjacent": [
+        "-3_-5",
+        "-3_-4",
+        "-3_-3",
+        "-2_-5",
+        "-2_-3",
+        "-1_-5",
+        "-1_-4",
+        "-1_-3"
+      ],
+      "file": "chunks/-2_-4.json",
+      "roadCount": 208,
+      "buildingCount": 180,
+      "laneCount": 389,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "-2_-3",
+      "regionId": "centro",
+      "bounds": {
+        "minX": -1600,
+        "minY": -2400,
+        "maxX": -800,
+        "maxY": -1600
+      },
+      "adjacent": [
+        "-3_-4",
+        "-3_-3",
+        "-3_-2",
+        "-2_-4",
+        "-2_-2",
+        "-1_-4",
+        "-1_-3",
+        "-1_-2"
+      ],
+      "file": "chunks/-2_-3.json",
+      "roadCount": 62,
+      "buildingCount": 180,
+      "laneCount": 121,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "-2_-2",
+      "regionId": "centro",
+      "bounds": {
+        "minX": -1600,
+        "minY": -1600,
+        "maxX": -800,
+        "maxY": -800
+      },
+      "adjacent": [
+        "-3_-3",
+        "-3_-2",
+        "-3_-1",
+        "-2_-3",
+        "-2_-1",
+        "-1_-3",
+        "-1_-2",
+        "-1_-1"
+      ],
+      "file": "chunks/-2_-2.json",
+      "roadCount": 142,
+      "buildingCount": 40,
+      "laneCount": 241,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "-2_-1",
+      "regionId": "centro",
+      "bounds": {
+        "minX": -1600,
+        "minY": -800,
+        "maxX": -800,
+        "maxY": 0
+      },
+      "adjacent": [
+        "-3_-2",
+        "-3_-1",
+        "-3_0",
+        "-2_-2",
+        "-2_0",
+        "-1_-2",
+        "-1_-1",
+        "-1_0"
+      ],
+      "file": "chunks/-2_-1.json",
+      "roadCount": 195,
+      "buildingCount": 71,
+      "laneCount": 429,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "-2_0",
+      "regionId": "centro",
+      "bounds": {
+        "minX": -1600,
+        "minY": 0,
+        "maxX": -800,
+        "maxY": 800
+      },
+      "adjacent": [
+        "-3_-1",
+        "-3_0",
+        "-3_1",
+        "-2_-1",
+        "-2_1",
+        "-1_-1",
+        "-1_0",
+        "-1_1"
+      ],
+      "file": "chunks/-2_0.json",
+      "roadCount": 267,
+      "buildingCount": 78,
+      "laneCount": 529,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "-2_1",
+      "regionId": "asa-sul",
+      "bounds": {
+        "minX": -1600,
+        "minY": 800,
+        "maxX": -800,
+        "maxY": 1600
+      },
+      "adjacent": [
+        "-3_0",
+        "-3_1",
+        "-3_2",
+        "-2_0",
+        "-2_2",
+        "-1_0",
+        "-1_1",
+        "-1_2"
+      ],
+      "file": "chunks/-2_1.json",
+      "roadCount": 201,
+      "buildingCount": 72,
+      "laneCount": 360,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "-2_2",
+      "regionId": "asa-sul",
+      "bounds": {
+        "minX": -1600,
+        "minY": 1600,
+        "maxX": -800,
+        "maxY": 2400
+      },
+      "adjacent": [
+        "-3_1",
+        "-3_2",
+        "-3_3",
+        "-2_1",
+        "-2_3",
+        "-1_1",
+        "-1_2",
+        "-1_3"
+      ],
+      "file": "chunks/-2_2.json",
+      "roadCount": 191,
+      "buildingCount": 116,
+      "laneCount": 348,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "-2_3",
+      "regionId": "asa-sul",
+      "bounds": {
+        "minX": -1600,
+        "minY": 2400,
+        "maxX": -800,
+        "maxY": 3200
+      },
+      "adjacent": [
+        "-3_2",
+        "-3_3",
+        "-3_4",
+        "-2_2",
+        "-2_4",
+        "-1_2",
+        "-1_3",
+        "-1_4"
+      ],
+      "file": "chunks/-2_3.json",
+      "roadCount": 209,
+      "buildingCount": 99,
+      "laneCount": 395,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "-2_4",
+      "regionId": "asa-sul",
+      "bounds": {
+        "minX": -1600,
+        "minY": 3200,
+        "maxX": -800,
+        "maxY": 4000
+      },
+      "adjacent": [
+        "-3_3",
+        "-3_4",
+        "-3_5",
+        "-2_3",
+        "-2_5",
+        "-1_3",
+        "-1_4",
+        "-1_5"
+      ],
+      "file": "chunks/-2_4.json",
+      "roadCount": 109,
+      "buildingCount": 39,
+      "laneCount": 198,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "-2_5",
+      "regionId": "asa-sul",
+      "bounds": {
+        "minX": -1600,
+        "minY": 4000,
+        "maxX": -800,
+        "maxY": 4800
+      },
+      "adjacent": [
+        "-3_4",
+        "-3_5",
+        "-3_6",
+        "-2_4",
+        "-2_6",
+        "-1_4",
+        "-1_5",
+        "-1_6"
+      ],
+      "file": "chunks/-2_5.json",
+      "roadCount": 42,
+      "buildingCount": 7,
+      "laneCount": 86,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "-1_-9",
+      "regionId": "asa-norte",
+      "bounds": {
+        "minX": -800,
+        "minY": -7200,
+        "maxX": 0,
+        "maxY": -6400
+      },
+      "adjacent": [
+        "-2_-10",
+        "-2_-9",
+        "-2_-8",
+        "-1_-10",
+        "-1_-8",
+        "0_-10",
+        "0_-9",
+        "0_-8"
+      ],
+      "file": "chunks/-1_-9.json",
+      "roadCount": 42,
+      "buildingCount": 33,
+      "laneCount": 87,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "-1_-8",
+      "regionId": "asa-norte",
+      "bounds": {
+        "minX": -800,
+        "minY": -6400,
+        "maxX": 0,
+        "maxY": -5600
+      },
+      "adjacent": [
+        "-2_-9",
+        "-2_-8",
+        "-2_-7",
+        "-1_-9",
+        "-1_-7",
+        "0_-9",
+        "0_-8",
+        "0_-7"
+      ],
+      "file": "chunks/-1_-8.json",
+      "roadCount": 116,
+      "buildingCount": 73,
+      "laneCount": 205,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "-1_-7",
+      "regionId": "asa-norte",
+      "bounds": {
+        "minX": -800,
+        "minY": -5600,
+        "maxX": 0,
+        "maxY": -4800
+      },
+      "adjacent": [
+        "-2_-8",
+        "-2_-7",
+        "-2_-6",
+        "-1_-8",
+        "-1_-6",
+        "0_-8",
+        "0_-7",
+        "0_-6"
+      ],
+      "file": "chunks/-1_-7.json",
+      "roadCount": 139,
+      "buildingCount": 71,
+      "laneCount": 241,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "-1_-6",
+      "regionId": "asa-norte",
+      "bounds": {
+        "minX": -800,
+        "minY": -4800,
+        "maxX": 0,
+        "maxY": -4000
+      },
+      "adjacent": [
+        "-2_-7",
+        "-2_-6",
+        "-2_-5",
+        "-1_-7",
+        "-1_-5",
+        "0_-7",
+        "0_-6",
+        "0_-5"
+      ],
+      "file": "chunks/-1_-6.json",
+      "roadCount": 175,
+      "buildingCount": 108,
+      "laneCount": 305,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "-1_-5",
+      "regionId": "asa-norte",
+      "bounds": {
+        "minX": -800,
+        "minY": -4000,
+        "maxX": 0,
+        "maxY": -3200
+      },
+      "adjacent": [
+        "-2_-6",
+        "-2_-5",
+        "-2_-4",
+        "-1_-6",
+        "-1_-4",
+        "0_-6",
+        "0_-5",
+        "0_-4"
+      ],
+      "file": "chunks/-1_-5.json",
+      "roadCount": 185,
+      "buildingCount": 96,
+      "laneCount": 318,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "-1_-4",
+      "regionId": "asa-norte",
+      "bounds": {
+        "minX": -800,
+        "minY": -3200,
+        "maxX": 0,
+        "maxY": -2400
+      },
+      "adjacent": [
+        "-2_-5",
+        "-2_-4",
+        "-2_-3",
+        "-1_-5",
+        "-1_-3",
+        "0_-5",
+        "0_-4",
+        "0_-3"
+      ],
+      "file": "chunks/-1_-4.json",
+      "roadCount": 184,
+      "buildingCount": 175,
+      "laneCount": 344,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "-1_-3",
+      "regionId": "centro",
+      "bounds": {
+        "minX": -800,
+        "minY": -2400,
+        "maxX": 0,
+        "maxY": -1600
+      },
+      "adjacent": [
+        "-2_-4",
+        "-2_-3",
+        "-2_-2",
+        "-1_-4",
+        "-1_-2",
+        "0_-4",
+        "0_-3",
+        "0_-2"
+      ],
+      "file": "chunks/-1_-3.json",
+      "roadCount": 172,
+      "buildingCount": 180,
+      "laneCount": 337,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "-1_-2",
+      "regionId": "centro",
+      "bounds": {
+        "minX": -800,
+        "minY": -1600,
+        "maxX": 0,
+        "maxY": -800
+      },
+      "adjacent": [
+        "-2_-3",
+        "-2_-2",
+        "-2_-1",
+        "-1_-3",
+        "-1_-1",
+        "0_-3",
+        "0_-2",
+        "0_-1"
+      ],
+      "file": "chunks/-1_-2.json",
+      "roadCount": 261,
+      "buildingCount": 145,
+      "laneCount": 476,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "-1_-1",
+      "regionId": "centro",
+      "bounds": {
+        "minX": -800,
+        "minY": -800,
+        "maxX": 0,
+        "maxY": 0
+      },
+      "adjacent": [
+        "-2_-2",
+        "-2_-1",
+        "-2_0",
+        "-1_-2",
+        "-1_0",
+        "0_-2",
+        "0_-1",
+        "0_0"
+      ],
+      "file": "chunks/-1_-1.json",
+      "roadCount": 272,
+      "buildingCount": 79,
+      "laneCount": 566,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "-1_0",
+      "regionId": "centro",
+      "bounds": {
+        "minX": -800,
+        "minY": 0,
+        "maxX": 0,
+        "maxY": 800
+      },
+      "adjacent": [
+        "-2_-1",
+        "-2_0",
+        "-2_1",
+        "-1_-1",
+        "-1_1",
+        "0_-1",
+        "0_0",
+        "0_1"
+      ],
+      "file": "chunks/-1_0.json",
+      "roadCount": 351,
+      "buildingCount": 132,
+      "laneCount": 735,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "-1_1",
+      "regionId": "centro",
+      "bounds": {
+        "minX": -800,
+        "minY": 800,
+        "maxX": 0,
+        "maxY": 1600
+      },
+      "adjacent": [
+        "-2_0",
+        "-2_1",
+        "-2_2",
+        "-1_0",
+        "-1_2",
+        "0_0",
+        "0_1",
+        "0_2"
+      ],
+      "file": "chunks/-1_1.json",
+      "roadCount": 242,
+      "buildingCount": 57,
+      "laneCount": 465,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "-1_2",
+      "regionId": "asa-sul",
+      "bounds": {
+        "minX": -800,
+        "minY": 1600,
+        "maxX": 0,
+        "maxY": 2400
+      },
+      "adjacent": [
+        "-2_1",
+        "-2_2",
+        "-2_3",
+        "-1_1",
+        "-1_3",
+        "0_1",
+        "0_2",
+        "0_3"
+      ],
+      "file": "chunks/-1_2.json",
+      "roadCount": 185,
+      "buildingCount": 89,
+      "laneCount": 361,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "-1_3",
+      "regionId": "asa-sul",
+      "bounds": {
+        "minX": -800,
+        "minY": 2400,
+        "maxX": 0,
+        "maxY": 3200
+      },
+      "adjacent": [
+        "-2_2",
+        "-2_3",
+        "-2_4",
+        "-1_2",
+        "-1_4",
+        "0_2",
+        "0_3",
+        "0_4"
+      ],
+      "file": "chunks/-1_3.json",
+      "roadCount": 118,
+      "buildingCount": 74,
+      "laneCount": 220,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "-1_4",
+      "regionId": "asa-sul",
+      "bounds": {
+        "minX": -800,
+        "minY": 3200,
+        "maxX": 0,
+        "maxY": 4000
+      },
+      "adjacent": [
+        "-2_3",
+        "-2_4",
+        "-2_5",
+        "-1_3",
+        "-1_5",
+        "0_3",
+        "0_4",
+        "0_5"
+      ],
+      "file": "chunks/-1_4.json",
+      "roadCount": 75,
+      "buildingCount": 34,
+      "laneCount": 141,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "-1_5",
+      "regionId": "asa-sul",
+      "bounds": {
+        "minX": -800,
+        "minY": 4000,
+        "maxX": 0,
+        "maxY": 4800
+      },
+      "adjacent": [
+        "-2_4",
+        "-2_5",
+        "-2_6",
+        "-1_4",
+        "-1_6",
+        "0_4",
+        "0_5",
+        "0_6"
+      ],
+      "file": "chunks/-1_5.json",
+      "roadCount": 10,
+      "buildingCount": 1,
+      "laneCount": 23,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "-1_6",
+      "regionId": "asa-sul",
+      "bounds": {
+        "minX": -800,
+        "minY": 4800,
+        "maxX": 0,
+        "maxY": 5600
+      },
+      "adjacent": [
+        "-2_5",
+        "-2_6",
+        "-2_7",
+        "-1_5",
+        "-1_7",
+        "0_5",
+        "0_6",
+        "0_7"
+      ],
+      "file": "chunks/-1_6.json",
+      "roadCount": 22,
+      "buildingCount": 0,
+      "laneCount": 44,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "0_-10",
+      "regionId": "asa-norte",
+      "bounds": {
+        "minX": 0,
+        "minY": -8000,
+        "maxX": 800,
+        "maxY": -7200
+      },
+      "adjacent": [
+        "-1_-11",
+        "-1_-10",
+        "-1_-9",
+        "0_-11",
+        "0_-9",
+        "1_-11",
+        "1_-10",
+        "1_-9"
+      ],
+      "file": "chunks/0_-10.json",
+      "roadCount": 4,
+      "buildingCount": 0,
+      "laneCount": 8,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "0_-9",
+      "regionId": "asa-norte",
+      "bounds": {
+        "minX": 0,
+        "minY": -7200,
+        "maxX": 800,
+        "maxY": -6400
+      },
+      "adjacent": [
+        "-1_-10",
+        "-1_-9",
+        "-1_-8",
+        "0_-10",
+        "0_-8",
+        "1_-10",
+        "1_-9",
+        "1_-8"
+      ],
+      "file": "chunks/0_-9.json",
+      "roadCount": 11,
+      "buildingCount": 180,
+      "laneCount": 22,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "0_-8",
+      "regionId": "asa-norte",
+      "bounds": {
+        "minX": 0,
+        "minY": -6400,
+        "maxX": 800,
+        "maxY": -5600
+      },
+      "adjacent": [
+        "-1_-9",
+        "-1_-8",
+        "-1_-7",
+        "0_-9",
+        "0_-7",
+        "1_-9",
+        "1_-8",
+        "1_-7"
+      ],
+      "file": "chunks/0_-8.json",
+      "roadCount": 10,
+      "buildingCount": 25,
+      "laneCount": 22,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "0_-7",
+      "regionId": "asa-norte",
+      "bounds": {
+        "minX": 0,
+        "minY": -5600,
+        "maxX": 800,
+        "maxY": -4800
+      },
+      "adjacent": [
+        "-1_-8",
+        "-1_-7",
+        "-1_-6",
+        "0_-8",
+        "0_-6",
+        "1_-8",
+        "1_-7",
+        "1_-6"
+      ],
+      "file": "chunks/0_-7.json",
+      "roadCount": 47,
+      "buildingCount": 49,
+      "laneCount": 104,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "0_-6",
+      "regionId": "asa-norte",
+      "bounds": {
+        "minX": 0,
+        "minY": -4800,
+        "maxX": 800,
+        "maxY": -4000
+      },
+      "adjacent": [
+        "-1_-7",
+        "-1_-6",
+        "-1_-5",
+        "0_-7",
+        "0_-5",
+        "1_-7",
+        "1_-6",
+        "1_-5"
+      ],
+      "file": "chunks/0_-6.json",
+      "roadCount": 136,
+      "buildingCount": 95,
+      "laneCount": 271,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "0_-5",
+      "regionId": "unb",
+      "bounds": {
+        "minX": 0,
+        "minY": -4000,
+        "maxX": 800,
+        "maxY": -3200
+      },
+      "adjacent": [
+        "-1_-6",
+        "-1_-5",
+        "-1_-4",
+        "0_-6",
+        "0_-4",
+        "1_-6",
+        "1_-5",
+        "1_-4"
+      ],
+      "file": "chunks/0_-5.json",
+      "roadCount": 153,
+      "buildingCount": 97,
+      "laneCount": 306,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "0_-4",
+      "regionId": "unb",
+      "bounds": {
+        "minX": 0,
+        "minY": -3200,
+        "maxX": 800,
+        "maxY": -2400
+      },
+      "adjacent": [
+        "-1_-5",
+        "-1_-4",
+        "-1_-3",
+        "0_-5",
+        "0_-3",
+        "1_-5",
+        "1_-4",
+        "1_-3"
+      ],
+      "file": "chunks/0_-4.json",
+      "roadCount": 161,
+      "buildingCount": 100,
+      "laneCount": 285,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "0_-3",
+      "regionId": "unb",
+      "bounds": {
+        "minX": 0,
+        "minY": -2400,
+        "maxX": 800,
+        "maxY": -1600
+      },
+      "adjacent": [
+        "-1_-4",
+        "-1_-3",
+        "-1_-2",
+        "0_-4",
+        "0_-2",
+        "1_-4",
+        "1_-3",
+        "1_-2"
+      ],
+      "file": "chunks/0_-3.json",
+      "roadCount": 180,
+      "buildingCount": 113,
+      "laneCount": 308,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "0_-2",
+      "regionId": "centro",
+      "bounds": {
+        "minX": 0,
+        "minY": -1600,
+        "maxX": 800,
+        "maxY": -800
+      },
+      "adjacent": [
+        "-1_-3",
+        "-1_-2",
+        "-1_-1",
+        "0_-3",
+        "0_-1",
+        "1_-3",
+        "1_-2",
+        "1_-1"
+      ],
+      "file": "chunks/0_-2.json",
+      "roadCount": 169,
+      "buildingCount": 67,
+      "laneCount": 309,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "0_-1",
+      "regionId": "centro",
+      "bounds": {
+        "minX": 0,
+        "minY": -800,
+        "maxX": 800,
+        "maxY": 0
+      },
+      "adjacent": [
+        "-1_-2",
+        "-1_-1",
+        "-1_0",
+        "0_-2",
+        "0_0",
+        "1_-2",
+        "1_-1",
+        "1_0"
+      ],
+      "file": "chunks/0_-1.json",
+      "roadCount": 295,
+      "buildingCount": 34,
+      "laneCount": 620,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "0_0",
+      "regionId": "centro",
+      "bounds": {
+        "minX": 0,
+        "minY": 0,
+        "maxX": 800,
+        "maxY": 800
+      },
+      "adjacent": [
+        "-1_-1",
+        "-1_0",
+        "-1_1",
+        "0_-1",
+        "0_1",
+        "1_-1",
+        "1_0",
+        "1_1"
+      ],
+      "file": "chunks/0_0.json",
+      "roadCount": 173,
+      "buildingCount": 23,
+      "laneCount": 368,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "0_1",
+      "regionId": "centro",
+      "bounds": {
+        "minX": 0,
+        "minY": 800,
+        "maxX": 800,
+        "maxY": 1600
+      },
+      "adjacent": [
+        "-1_0",
+        "-1_1",
+        "-1_2",
+        "0_0",
+        "0_2",
+        "1_0",
+        "1_1",
+        "1_2"
+      ],
+      "file": "chunks/0_1.json",
+      "roadCount": 210,
+      "buildingCount": 33,
+      "laneCount": 393,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "0_2",
+      "regionId": "centro",
+      "bounds": {
+        "minX": 0,
+        "minY": 1600,
+        "maxX": 800,
+        "maxY": 2400
+      },
+      "adjacent": [
+        "-1_1",
+        "-1_2",
+        "-1_3",
+        "0_1",
+        "0_3",
+        "1_1",
+        "1_2",
+        "1_3"
+      ],
+      "file": "chunks/0_2.json",
+      "roadCount": 86,
+      "buildingCount": 33,
+      "laneCount": 157,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "0_3",
+      "regionId": "asa-sul",
+      "bounds": {
+        "minX": 0,
+        "minY": 2400,
+        "maxX": 800,
+        "maxY": 3200
+      },
+      "adjacent": [
+        "-1_2",
+        "-1_3",
+        "-1_4",
+        "0_2",
+        "0_4",
+        "1_2",
+        "1_3",
+        "1_4"
+      ],
+      "file": "chunks/0_3.json",
+      "roadCount": 87,
+      "buildingCount": 27,
+      "laneCount": 166,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "0_4",
+      "regionId": "asa-sul",
+      "bounds": {
+        "minX": 0,
+        "minY": 3200,
+        "maxX": 800,
+        "maxY": 4000
+      },
+      "adjacent": [
+        "-1_3",
+        "-1_4",
+        "-1_5",
+        "0_3",
+        "0_5",
+        "1_3",
+        "1_4",
+        "1_5"
+      ],
+      "file": "chunks/0_4.json",
+      "roadCount": 40,
+      "buildingCount": 3,
+      "laneCount": 69,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "0_5",
+      "regionId": "asa-sul",
+      "bounds": {
+        "minX": 0,
+        "minY": 4000,
+        "maxX": 800,
+        "maxY": 4800
+      },
+      "adjacent": [
+        "-1_4",
+        "-1_5",
+        "-1_6",
+        "0_4",
+        "0_6",
+        "1_4",
+        "1_5",
+        "1_6"
+      ],
+      "file": "chunks/0_5.json",
+      "roadCount": 85,
+      "buildingCount": 5,
+      "laneCount": 158,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "0_6",
+      "regionId": "asa-sul",
+      "bounds": {
+        "minX": 0,
+        "minY": 4800,
+        "maxX": 800,
+        "maxY": 5600
+      },
+      "adjacent": [
+        "-1_5",
+        "-1_6",
+        "-1_7",
+        "0_5",
+        "0_7",
+        "1_5",
+        "1_6",
+        "1_7"
+      ],
+      "file": "chunks/0_6.json",
+      "roadCount": 16,
+      "buildingCount": 0,
+      "laneCount": 29,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "1_-10",
+      "regionId": "asa-norte",
+      "bounds": {
+        "minX": 800,
+        "minY": -8000,
+        "maxX": 1600,
+        "maxY": -7200
+      },
+      "adjacent": [
+        "0_-11",
+        "0_-10",
+        "0_-9",
+        "1_-11",
+        "1_-9",
+        "2_-11",
+        "2_-10",
+        "2_-9"
+      ],
+      "file": "chunks/1_-10.json",
+      "roadCount": 5,
+      "buildingCount": 0,
+      "laneCount": 10,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "1_-9",
+      "regionId": "asa-norte",
+      "bounds": {
+        "minX": 800,
+        "minY": -7200,
+        "maxX": 1600,
+        "maxY": -6400
+      },
+      "adjacent": [
+        "0_-10",
+        "0_-9",
+        "0_-8",
+        "1_-10",
+        "1_-8",
+        "2_-10",
+        "2_-9",
+        "2_-8"
+      ],
+      "file": "chunks/1_-9.json",
+      "roadCount": 40,
+      "buildingCount": 180,
+      "laneCount": 75,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "1_-8",
+      "regionId": "asa-norte",
+      "bounds": {
+        "minX": 800,
+        "minY": -6400,
+        "maxX": 1600,
+        "maxY": -5600
+      },
+      "adjacent": [
+        "0_-9",
+        "0_-8",
+        "0_-7",
+        "1_-9",
+        "1_-7",
+        "2_-9",
+        "2_-8",
+        "2_-7"
+      ],
+      "file": "chunks/1_-8.json",
+      "roadCount": 11,
+      "buildingCount": 180,
+      "laneCount": 22,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "1_-7",
+      "regionId": "asa-norte",
+      "bounds": {
+        "minX": 800,
+        "minY": -5600,
+        "maxX": 1600,
+        "maxY": -4800
+      },
+      "adjacent": [
+        "0_-8",
+        "0_-7",
+        "0_-6",
+        "1_-8",
+        "1_-6",
+        "2_-8",
+        "2_-7",
+        "2_-6"
+      ],
+      "file": "chunks/1_-7.json",
+      "roadCount": 20,
+      "buildingCount": 29,
+      "laneCount": 39,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "1_-6",
+      "regionId": "unb",
+      "bounds": {
+        "minX": 800,
+        "minY": -4800,
+        "maxX": 1600,
+        "maxY": -4000
+      },
+      "adjacent": [
+        "0_-7",
+        "0_-6",
+        "0_-5",
+        "1_-7",
+        "1_-5",
+        "2_-7",
+        "2_-6",
+        "2_-5"
+      ],
+      "file": "chunks/1_-6.json",
+      "roadCount": 104,
+      "buildingCount": 65,
+      "laneCount": 182,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "1_-5",
+      "regionId": "unb",
+      "bounds": {
+        "minX": 800,
+        "minY": -4000,
+        "maxX": 1600,
+        "maxY": -3200
+      },
+      "adjacent": [
+        "0_-6",
+        "0_-5",
+        "0_-4",
+        "1_-6",
+        "1_-4",
+        "2_-6",
+        "2_-5",
+        "2_-4"
+      ],
+      "file": "chunks/1_-5.json",
+      "roadCount": 174,
+      "buildingCount": 48,
+      "laneCount": 261,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "1_-4",
+      "regionId": "unb",
+      "bounds": {
+        "minX": 800,
+        "minY": -3200,
+        "maxX": 1600,
+        "maxY": -2400
+      },
+      "adjacent": [
+        "0_-5",
+        "0_-4",
+        "0_-3",
+        "1_-5",
+        "1_-3",
+        "2_-5",
+        "2_-4",
+        "2_-3"
+      ],
+      "file": "chunks/1_-4.json",
+      "roadCount": 138,
+      "buildingCount": 78,
+      "laneCount": 239,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "1_-3",
+      "regionId": "unb",
+      "bounds": {
+        "minX": 800,
+        "minY": -2400,
+        "maxX": 1600,
+        "maxY": -1600
+      },
+      "adjacent": [
+        "0_-4",
+        "0_-3",
+        "0_-2",
+        "1_-4",
+        "1_-2",
+        "2_-4",
+        "2_-3",
+        "2_-2"
+      ],
+      "file": "chunks/1_-3.json",
+      "roadCount": 116,
+      "buildingCount": 74,
+      "laneCount": 219,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "1_-2",
+      "regionId": "centro",
+      "bounds": {
+        "minX": 800,
+        "minY": -1600,
+        "maxX": 1600,
+        "maxY": -800
+      },
+      "adjacent": [
+        "0_-3",
+        "0_-2",
+        "0_-1",
+        "1_-3",
+        "1_-1",
+        "2_-3",
+        "2_-2",
+        "2_-1"
+      ],
+      "file": "chunks/1_-2.json",
+      "roadCount": 118,
+      "buildingCount": 122,
+      "laneCount": 230,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "1_-1",
+      "regionId": "centro",
+      "bounds": {
+        "minX": 800,
+        "minY": -800,
+        "maxX": 1600,
+        "maxY": 0
+      },
+      "adjacent": [
+        "0_-2",
+        "0_-1",
+        "0_0",
+        "1_-2",
+        "1_0",
+        "2_-2",
+        "2_-1",
+        "2_0"
+      ],
+      "file": "chunks/1_-1.json",
+      "roadCount": 181,
+      "buildingCount": 87,
+      "laneCount": 349,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "1_0",
+      "regionId": "centro",
+      "bounds": {
+        "minX": 800,
+        "minY": 0,
+        "maxX": 1600,
+        "maxY": 800
+      },
+      "adjacent": [
+        "0_-1",
+        "0_0",
+        "0_1",
+        "1_-1",
+        "1_1",
+        "2_-1",
+        "2_0",
+        "2_1"
+      ],
+      "file": "chunks/1_0.json",
+      "roadCount": 248,
+      "buildingCount": 22,
+      "laneCount": 456,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "1_1",
+      "regionId": "centro",
+      "bounds": {
+        "minX": 800,
+        "minY": 800,
+        "maxX": 1600,
+        "maxY": 1600
+      },
+      "adjacent": [
+        "0_0",
+        "0_1",
+        "0_2",
+        "1_0",
+        "1_2",
+        "2_0",
+        "2_1",
+        "2_2"
+      ],
+      "file": "chunks/1_1.json",
+      "roadCount": 144,
+      "buildingCount": 10,
+      "laneCount": 273,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "1_2",
+      "regionId": "centro",
+      "bounds": {
+        "minX": 800,
+        "minY": 1600,
+        "maxX": 1600,
+        "maxY": 2400
+      },
+      "adjacent": [
+        "0_1",
+        "0_2",
+        "0_3",
+        "1_1",
+        "1_3",
+        "2_1",
+        "2_2",
+        "2_3"
+      ],
+      "file": "chunks/1_2.json",
+      "roadCount": 93,
+      "buildingCount": 1,
+      "laneCount": 170,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "1_3",
+      "regionId": "centro",
+      "bounds": {
+        "minX": 800,
+        "minY": 2400,
+        "maxX": 1600,
+        "maxY": 3200
+      },
+      "adjacent": [
+        "0_2",
+        "0_3",
+        "0_4",
+        "1_2",
+        "1_4",
+        "2_2",
+        "2_3",
+        "2_4"
+      ],
+      "file": "chunks/1_3.json",
+      "roadCount": 98,
+      "buildingCount": 58,
+      "laneCount": 182,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "1_4",
+      "regionId": "asa-sul",
+      "bounds": {
+        "minX": 800,
+        "minY": 3200,
+        "maxX": 1600,
+        "maxY": 4000
+      },
+      "adjacent": [
+        "0_3",
+        "0_4",
+        "0_5",
+        "1_3",
+        "1_5",
+        "2_3",
+        "2_4",
+        "2_5"
+      ],
+      "file": "chunks/1_4.json",
+      "roadCount": 56,
+      "buildingCount": 16,
+      "laneCount": 97,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "1_5",
+      "regionId": "asa-sul",
+      "bounds": {
+        "minX": 800,
+        "minY": 4000,
+        "maxX": 1600,
+        "maxY": 4800
+      },
+      "adjacent": [
+        "0_4",
+        "0_5",
+        "0_6",
+        "1_4",
+        "1_6",
+        "2_4",
+        "2_5",
+        "2_6"
+      ],
+      "file": "chunks/1_5.json",
+      "roadCount": 70,
+      "buildingCount": 2,
+      "laneCount": 132,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "1_6",
+      "regionId": "asa-sul",
+      "bounds": {
+        "minX": 800,
+        "minY": 4800,
+        "maxX": 1600,
+        "maxY": 5600
+      },
+      "adjacent": [
+        "0_5",
+        "0_6",
+        "0_7",
+        "1_5",
+        "1_7",
+        "2_5",
+        "2_6",
+        "2_7"
+      ],
+      "file": "chunks/1_6.json",
+      "roadCount": 30,
+      "buildingCount": 4,
+      "laneCount": 55,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "2_-10",
+      "regionId": "asa-norte",
+      "bounds": {
+        "minX": 1600,
+        "minY": -8000,
+        "maxX": 2400,
+        "maxY": -7200
+      },
+      "adjacent": [
+        "1_-11",
+        "1_-10",
+        "1_-9",
+        "2_-11",
+        "2_-9",
+        "3_-11",
+        "3_-10",
+        "3_-9"
+      ],
+      "file": "chunks/2_-10.json",
+      "roadCount": 1,
+      "buildingCount": 0,
+      "laneCount": 2,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "2_-9",
+      "regionId": "asa-norte",
+      "bounds": {
+        "minX": 1600,
+        "minY": -7200,
+        "maxX": 2400,
+        "maxY": -6400
+      },
+      "adjacent": [
+        "1_-10",
+        "1_-9",
+        "1_-8",
+        "2_-10",
+        "2_-8",
+        "3_-10",
+        "3_-9",
+        "3_-8"
+      ],
+      "file": "chunks/2_-9.json",
+      "roadCount": 41,
+      "buildingCount": 180,
+      "laneCount": 75,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "2_-8",
+      "regionId": "asa-norte",
+      "bounds": {
+        "minX": 1600,
+        "minY": -6400,
+        "maxX": 2400,
+        "maxY": -5600
+      },
+      "adjacent": [
+        "1_-9",
+        "1_-8",
+        "1_-7",
+        "2_-9",
+        "2_-7",
+        "3_-9",
+        "3_-8",
+        "3_-7"
+      ],
+      "file": "chunks/2_-8.json",
+      "roadCount": 41,
+      "buildingCount": 180,
+      "laneCount": 74,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "2_-7",
+      "regionId": "unb",
+      "bounds": {
+        "minX": 1600,
+        "minY": -5600,
+        "maxX": 2400,
+        "maxY": -4800
+      },
+      "adjacent": [
+        "1_-8",
+        "1_-7",
+        "1_-6",
+        "2_-8",
+        "2_-6",
+        "3_-8",
+        "3_-7",
+        "3_-6"
+      ],
+      "file": "chunks/2_-7.json",
+      "roadCount": 8,
+      "buildingCount": 155,
+      "laneCount": 16,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "2_-6",
+      "regionId": "unb",
+      "bounds": {
+        "minX": 1600,
+        "minY": -4800,
+        "maxX": 2400,
+        "maxY": -4000
+      },
+      "adjacent": [
+        "1_-7",
+        "1_-6",
+        "1_-5",
+        "2_-7",
+        "2_-5",
+        "3_-7",
+        "3_-6",
+        "3_-5"
+      ],
+      "file": "chunks/2_-6.json",
+      "roadCount": 16,
+      "buildingCount": 10,
+      "laneCount": 28,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "2_-5",
+      "regionId": "unb",
+      "bounds": {
+        "minX": 1600,
+        "minY": -4000,
+        "maxX": 2400,
+        "maxY": -3200
+      },
+      "adjacent": [
+        "1_-6",
+        "1_-5",
+        "1_-4",
+        "2_-6",
+        "2_-4",
+        "3_-6",
+        "3_-5",
+        "3_-4"
+      ],
+      "file": "chunks/2_-5.json",
+      "roadCount": 107,
+      "buildingCount": 24,
+      "laneCount": 184,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "2_-4",
+      "regionId": "unb",
+      "bounds": {
+        "minX": 1600,
+        "minY": -3200,
+        "maxX": 2400,
+        "maxY": -2400
+      },
+      "adjacent": [
+        "1_-5",
+        "1_-4",
+        "1_-3",
+        "2_-5",
+        "2_-3",
+        "3_-5",
+        "3_-4",
+        "3_-3"
+      ],
+      "file": "chunks/2_-4.json",
+      "roadCount": 148,
+      "buildingCount": 98,
+      "laneCount": 231,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "2_-3",
+      "regionId": "unb",
+      "bounds": {
+        "minX": 1600,
+        "minY": -2400,
+        "maxX": 2400,
+        "maxY": -1600
+      },
+      "adjacent": [
+        "1_-4",
+        "1_-3",
+        "1_-2",
+        "2_-4",
+        "2_-2",
+        "3_-4",
+        "3_-3",
+        "3_-2"
+      ],
+      "file": "chunks/2_-3.json",
+      "roadCount": 77,
+      "buildingCount": 36,
+      "laneCount": 149,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "2_-2",
+      "regionId": "vila-planalto",
+      "bounds": {
+        "minX": 1600,
+        "minY": -1600,
+        "maxX": 2400,
+        "maxY": -800
+      },
+      "adjacent": [
+        "1_-3",
+        "1_-2",
+        "1_-1",
+        "2_-3",
+        "2_-1",
+        "3_-3",
+        "3_-2",
+        "3_-1"
+      ],
+      "file": "chunks/2_-2.json",
+      "roadCount": 75,
+      "buildingCount": 66,
+      "laneCount": 140,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "2_-1",
+      "regionId": "vila-planalto",
+      "bounds": {
+        "minX": 1600,
+        "minY": -800,
+        "maxX": 2400,
+        "maxY": 0
+      },
+      "adjacent": [
+        "1_-2",
+        "1_-1",
+        "1_0",
+        "2_-2",
+        "2_0",
+        "3_-2",
+        "3_-1",
+        "3_0"
+      ],
+      "file": "chunks/2_-1.json",
+      "roadCount": 72,
+      "buildingCount": 57,
+      "laneCount": 123,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "2_0",
+      "regionId": "vila-planalto",
+      "bounds": {
+        "minX": 1600,
+        "minY": 0,
+        "maxX": 2400,
+        "maxY": 800
+      },
+      "adjacent": [
+        "1_-1",
+        "1_0",
+        "1_1",
+        "2_-1",
+        "2_1",
+        "3_-1",
+        "3_0",
+        "3_1"
+      ],
+      "file": "chunks/2_0.json",
+      "roadCount": 241,
+      "buildingCount": 51,
+      "laneCount": 440,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "2_1",
+      "regionId": "vila-planalto",
+      "bounds": {
+        "minX": 1600,
+        "minY": 800,
+        "maxX": 2400,
+        "maxY": 1600
+      },
+      "adjacent": [
+        "1_0",
+        "1_1",
+        "1_2",
+        "2_0",
+        "2_2",
+        "3_0",
+        "3_1",
+        "3_2"
+      ],
+      "file": "chunks/2_1.json",
+      "roadCount": 183,
+      "buildingCount": 9,
+      "laneCount": 336,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "2_2",
+      "regionId": "centro",
+      "bounds": {
+        "minX": 1600,
+        "minY": 1600,
+        "maxX": 2400,
+        "maxY": 2400
+      },
+      "adjacent": [
+        "1_1",
+        "1_2",
+        "1_3",
+        "2_1",
+        "2_3",
+        "3_1",
+        "3_2",
+        "3_3"
+      ],
+      "file": "chunks/2_2.json",
+      "roadCount": 62,
+      "buildingCount": 13,
+      "laneCount": 144,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "2_3",
+      "regionId": "centro",
+      "bounds": {
+        "minX": 1600,
+        "minY": 2400,
+        "maxX": 2400,
+        "maxY": 3200
+      },
+      "adjacent": [
+        "1_2",
+        "1_3",
+        "1_4",
+        "2_2",
+        "2_4",
+        "3_2",
+        "3_3",
+        "3_4"
+      ],
+      "file": "chunks/2_3.json",
+      "roadCount": 63,
+      "buildingCount": 62,
+      "laneCount": 123,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "2_4",
+      "regionId": "asa-sul",
+      "bounds": {
+        "minX": 1600,
+        "minY": 3200,
+        "maxX": 2400,
+        "maxY": 4000
+      },
+      "adjacent": [
+        "1_3",
+        "1_4",
+        "1_5",
+        "2_3",
+        "2_5",
+        "3_3",
+        "3_4",
+        "3_5"
+      ],
+      "file": "chunks/2_4.json",
+      "roadCount": 8,
+      "buildingCount": 1,
+      "laneCount": 16,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "2_5",
+      "regionId": "asa-sul",
+      "bounds": {
+        "minX": 1600,
+        "minY": 4000,
+        "maxX": 2400,
+        "maxY": 4800
+      },
+      "adjacent": [
+        "1_4",
+        "1_5",
+        "1_6",
+        "2_4",
+        "2_6",
+        "3_4",
+        "3_5",
+        "3_6"
+      ],
+      "file": "chunks/2_5.json",
+      "roadCount": 47,
+      "buildingCount": 1,
+      "laneCount": 88,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "2_6",
+      "regionId": "asa-sul",
+      "bounds": {
+        "minX": 1600,
+        "minY": 4800,
+        "maxX": 2400,
+        "maxY": 5600
+      },
+      "adjacent": [
+        "1_5",
+        "1_6",
+        "1_7",
+        "2_5",
+        "2_7",
+        "3_5",
+        "3_6",
+        "3_7"
+      ],
+      "file": "chunks/2_6.json",
+      "roadCount": 9,
+      "buildingCount": 0,
+      "laneCount": 17,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "3_-10",
+      "regionId": "asa-norte",
+      "bounds": {
+        "minX": 2400,
+        "minY": -8000,
+        "maxX": 3200,
+        "maxY": -7200
+      },
+      "adjacent": [
+        "2_-11",
+        "2_-10",
+        "2_-9",
+        "3_-11",
+        "3_-9",
+        "4_-11",
+        "4_-10",
+        "4_-9"
+      ],
+      "file": "chunks/3_-10.json",
+      "roadCount": 1,
+      "buildingCount": 0,
+      "laneCount": 2,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "3_-9",
+      "regionId": "unb",
+      "bounds": {
+        "minX": 2400,
+        "minY": -7200,
+        "maxX": 3200,
+        "maxY": -6400
+      },
+      "adjacent": [
+        "2_-10",
+        "2_-9",
+        "2_-8",
+        "3_-10",
+        "3_-8",
+        "4_-10",
+        "4_-9",
+        "4_-8"
+      ],
+      "file": "chunks/3_-9.json",
+      "roadCount": 21,
+      "buildingCount": 180,
+      "laneCount": 42,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "3_-8",
+      "regionId": "unb",
+      "bounds": {
+        "minX": 2400,
+        "minY": -6400,
+        "maxX": 3200,
+        "maxY": -5600
+      },
+      "adjacent": [
+        "2_-9",
+        "2_-8",
+        "2_-7",
+        "3_-9",
+        "3_-7",
+        "4_-9",
+        "4_-8",
+        "4_-7"
+      ],
+      "file": "chunks/3_-8.json",
+      "roadCount": 41,
+      "buildingCount": 180,
+      "laneCount": 74,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "3_-7",
+      "regionId": "unb",
+      "bounds": {
+        "minX": 2400,
+        "minY": -5600,
+        "maxX": 3200,
+        "maxY": -4800
+      },
+      "adjacent": [
+        "2_-8",
+        "2_-7",
+        "2_-6",
+        "3_-8",
+        "3_-6",
+        "4_-8",
+        "4_-7",
+        "4_-6"
+      ],
+      "file": "chunks/3_-7.json",
+      "roadCount": 27,
+      "buildingCount": 180,
+      "laneCount": 47,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "3_-5",
+      "regionId": "unb",
+      "bounds": {
+        "minX": 2400,
+        "minY": -4000,
+        "maxX": 3200,
+        "maxY": -3200
+      },
+      "adjacent": [
+        "2_-6",
+        "2_-5",
+        "2_-4",
+        "3_-6",
+        "3_-4",
+        "4_-6",
+        "4_-5",
+        "4_-4"
+      ],
+      "file": "chunks/3_-5.json",
+      "roadCount": 15,
+      "buildingCount": 8,
+      "laneCount": 32,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "3_-4",
+      "regionId": "unb",
+      "bounds": {
+        "minX": 2400,
+        "minY": -3200,
+        "maxX": 3200,
+        "maxY": -2400
+      },
+      "adjacent": [
+        "2_-5",
+        "2_-4",
+        "2_-3",
+        "3_-5",
+        "3_-3",
+        "4_-5",
+        "4_-4",
+        "4_-3"
+      ],
+      "file": "chunks/3_-4.json",
+      "roadCount": 30,
+      "buildingCount": 53,
+      "laneCount": 51,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "3_-3",
+      "regionId": "vila-planalto",
+      "bounds": {
+        "minX": 2400,
+        "minY": -2400,
+        "maxX": 3200,
+        "maxY": -1600
+      },
+      "adjacent": [
+        "2_-4",
+        "2_-3",
+        "2_-2",
+        "3_-4",
+        "3_-2",
+        "4_-4",
+        "4_-3",
+        "4_-2"
+      ],
+      "file": "chunks/3_-3.json",
+      "roadCount": 12,
+      "buildingCount": 60,
+      "laneCount": 24,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "3_-2",
+      "regionId": "vila-planalto",
+      "bounds": {
+        "minX": 2400,
+        "minY": -1600,
+        "maxX": 3200,
+        "maxY": -800
+      },
+      "adjacent": [
+        "2_-3",
+        "2_-2",
+        "2_-1",
+        "3_-3",
+        "3_-1",
+        "4_-3",
+        "4_-2",
+        "4_-1"
+      ],
+      "file": "chunks/3_-2.json",
+      "roadCount": 37,
+      "buildingCount": 53,
+      "laneCount": 78,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "3_-1",
+      "regionId": "vila-planalto",
+      "bounds": {
+        "minX": 2400,
+        "minY": -800,
+        "maxX": 3200,
+        "maxY": 0
+      },
+      "adjacent": [
+        "2_-2",
+        "2_-1",
+        "2_0",
+        "3_-2",
+        "3_0",
+        "4_-2",
+        "4_-1",
+        "4_0"
+      ],
+      "file": "chunks/3_-1.json",
+      "roadCount": 111,
+      "buildingCount": 180,
+      "laneCount": 230,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "3_0",
+      "regionId": "vila-planalto",
+      "bounds": {
+        "minX": 2400,
+        "minY": 0,
+        "maxX": 3200,
+        "maxY": 800
+      },
+      "adjacent": [
+        "2_-1",
+        "2_0",
+        "2_1",
+        "3_-1",
+        "3_1",
+        "4_-1",
+        "4_0",
+        "4_1"
+      ],
+      "file": "chunks/3_0.json",
+      "roadCount": 100,
+      "buildingCount": 131,
+      "laneCount": 188,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "3_1",
+      "regionId": "vila-planalto",
+      "bounds": {
+        "minX": 2400,
+        "minY": 800,
+        "maxX": 3200,
+        "maxY": 1600
+      },
+      "adjacent": [
+        "2_0",
+        "2_1",
+        "2_2",
+        "3_0",
+        "3_2",
+        "4_0",
+        "4_1",
+        "4_2"
+      ],
+      "file": "chunks/3_1.json",
+      "roadCount": 57,
+      "buildingCount": 2,
+      "laneCount": 143,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "3_2",
+      "regionId": "vila-planalto",
+      "bounds": {
+        "minX": 2400,
+        "minY": 1600,
+        "maxX": 3200,
+        "maxY": 2400
+      },
+      "adjacent": [
+        "2_1",
+        "2_2",
+        "2_3",
+        "3_1",
+        "3_3",
+        "4_1",
+        "4_2",
+        "4_3"
+      ],
+      "file": "chunks/3_2.json",
+      "roadCount": 63,
+      "buildingCount": 11,
+      "laneCount": 112,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "3_3",
+      "regionId": "vila-planalto",
+      "bounds": {
+        "minX": 2400,
+        "minY": 2400,
+        "maxX": 3200,
+        "maxY": 3200
+      },
+      "adjacent": [
+        "2_2",
+        "2_3",
+        "2_4",
+        "3_2",
+        "3_4",
+        "4_2",
+        "4_3",
+        "4_4"
+      ],
+      "file": "chunks/3_3.json",
+      "roadCount": 55,
+      "buildingCount": 32,
+      "laneCount": 91,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "3_4",
+      "regionId": "vila-planalto",
+      "bounds": {
+        "minX": 2400,
+        "minY": 3200,
+        "maxX": 3200,
+        "maxY": 4000
+      },
+      "adjacent": [
+        "2_3",
+        "2_4",
+        "2_5",
+        "3_3",
+        "3_5",
+        "4_3",
+        "4_4",
+        "4_5"
+      ],
+      "file": "chunks/3_4.json",
+      "roadCount": 10,
+      "buildingCount": 0,
+      "laneCount": 20,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "3_5",
+      "regionId": "vila-planalto",
+      "bounds": {
+        "minX": 2400,
+        "minY": 4000,
+        "maxX": 3200,
+        "maxY": 4800
+      },
+      "adjacent": [
+        "2_4",
+        "2_5",
+        "2_6",
+        "3_4",
+        "3_6",
+        "4_4",
+        "4_5",
+        "4_6"
+      ],
+      "file": "chunks/3_5.json",
+      "roadCount": 10,
+      "buildingCount": 0,
+      "laneCount": 20,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "4_-10",
+      "regionId": "unb",
+      "bounds": {
+        "minX": 3200,
+        "minY": -8000,
+        "maxX": 4000,
+        "maxY": -7200
+      },
+      "adjacent": [
+        "3_-11",
+        "3_-10",
+        "3_-9",
+        "4_-11",
+        "4_-9",
+        "5_-11",
+        "5_-10",
+        "5_-9"
+      ],
+      "file": "chunks/4_-10.json",
+      "roadCount": 1,
+      "buildingCount": 0,
+      "laneCount": 2,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "4_-9",
+      "regionId": "unb",
+      "bounds": {
+        "minX": 3200,
+        "minY": -7200,
+        "maxX": 4000,
+        "maxY": -6400
+      },
+      "adjacent": [
+        "3_-10",
+        "3_-9",
+        "3_-8",
+        "4_-10",
+        "4_-8",
+        "5_-10",
+        "5_-9",
+        "5_-8"
+      ],
+      "file": "chunks/4_-9.json",
+      "roadCount": 9,
+      "buildingCount": 56,
+      "laneCount": 19,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "4_-8",
+      "regionId": "unb",
+      "bounds": {
+        "minX": 3200,
+        "minY": -6400,
+        "maxX": 4000,
+        "maxY": -5600
+      },
+      "adjacent": [
+        "3_-9",
+        "3_-8",
+        "3_-7",
+        "4_-9",
+        "4_-7",
+        "5_-9",
+        "5_-8",
+        "5_-7"
+      ],
+      "file": "chunks/4_-8.json",
+      "roadCount": 47,
+      "buildingCount": 180,
+      "laneCount": 80,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "4_-7",
+      "regionId": "unb",
+      "bounds": {
+        "minX": 3200,
+        "minY": -5600,
+        "maxX": 4000,
+        "maxY": -4800
+      },
+      "adjacent": [
+        "3_-8",
+        "3_-7",
+        "3_-6",
+        "4_-8",
+        "4_-6",
+        "5_-8",
+        "5_-7",
+        "5_-6"
+      ],
+      "file": "chunks/4_-7.json",
+      "roadCount": 52,
+      "buildingCount": 180,
+      "laneCount": 92,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "4_-6",
+      "regionId": "unb",
+      "bounds": {
+        "minX": 3200,
+        "minY": -4800,
+        "maxX": 4000,
+        "maxY": -4000
+      },
+      "adjacent": [
+        "3_-7",
+        "3_-6",
+        "3_-5",
+        "4_-7",
+        "4_-5",
+        "5_-7",
+        "5_-6",
+        "5_-5"
+      ],
+      "file": "chunks/4_-6.json",
+      "roadCount": 10,
+      "buildingCount": 180,
+      "laneCount": 20,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "4_-2",
+      "regionId": "vila-planalto",
+      "bounds": {
+        "minX": 3200,
+        "minY": -1600,
+        "maxX": 4000,
+        "maxY": -800
+      },
+      "adjacent": [
+        "3_-3",
+        "3_-2",
+        "3_-1",
+        "4_-3",
+        "4_-1",
+        "5_-3",
+        "5_-2",
+        "5_-1"
+      ],
+      "file": "chunks/4_-2.json",
+      "roadCount": 35,
+      "buildingCount": 44,
+      "laneCount": 65,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "4_-1",
+      "regionId": "vila-planalto",
+      "bounds": {
+        "minX": 3200,
+        "minY": -800,
+        "maxX": 4000,
+        "maxY": 0
+      },
+      "adjacent": [
+        "3_-2",
+        "3_-1",
+        "3_0",
+        "4_-2",
+        "4_0",
+        "5_-2",
+        "5_-1",
+        "5_0"
+      ],
+      "file": "chunks/4_-1.json",
+      "roadCount": 111,
+      "buildingCount": 180,
+      "laneCount": 217,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "4_0",
+      "regionId": "vila-planalto",
+      "bounds": {
+        "minX": 3200,
+        "minY": 0,
+        "maxX": 4000,
+        "maxY": 800
+      },
+      "adjacent": [
+        "3_-1",
+        "3_0",
+        "3_1",
+        "4_-1",
+        "4_1",
+        "5_-1",
+        "5_0",
+        "5_1"
+      ],
+      "file": "chunks/4_0.json",
+      "roadCount": 54,
+      "buildingCount": 180,
+      "laneCount": 113,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "4_1",
+      "regionId": "vila-planalto",
+      "bounds": {
+        "minX": 3200,
+        "minY": 800,
+        "maxX": 4000,
+        "maxY": 1600
+      },
+      "adjacent": [
+        "3_0",
+        "3_1",
+        "3_2",
+        "4_0",
+        "4_2",
+        "5_0",
+        "5_1",
+        "5_2"
+      ],
+      "file": "chunks/4_1.json",
+      "roadCount": 37,
+      "buildingCount": 0,
+      "laneCount": 76,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "4_2",
+      "regionId": "vila-planalto",
+      "bounds": {
+        "minX": 3200,
+        "minY": 1600,
+        "maxX": 4000,
+        "maxY": 2400
+      },
+      "adjacent": [
+        "3_1",
+        "3_2",
+        "3_3",
+        "4_1",
+        "4_3",
+        "5_1",
+        "5_2",
+        "5_3"
+      ],
+      "file": "chunks/4_2.json",
+      "roadCount": 68,
+      "buildingCount": 23,
+      "laneCount": 132,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "4_3",
+      "regionId": "vila-planalto",
+      "bounds": {
+        "minX": 3200,
+        "minY": 2400,
+        "maxX": 4000,
+        "maxY": 3200
+      },
+      "adjacent": [
+        "3_2",
+        "3_3",
+        "3_4",
+        "4_2",
+        "4_4",
+        "5_2",
+        "5_3",
+        "5_4"
+      ],
+      "file": "chunks/4_3.json",
+      "roadCount": 53,
+      "buildingCount": 58,
+      "laneCount": 98,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "4_6",
+      "regionId": "vila-planalto",
+      "bounds": {
+        "minX": 3200,
+        "minY": 4800,
+        "maxX": 4000,
+        "maxY": 5600
+      },
+      "adjacent": [
+        "3_5",
+        "3_6",
+        "3_7",
+        "4_5",
+        "4_7",
+        "5_5",
+        "5_6",
+        "5_7"
+      ],
+      "file": "chunks/4_6.json",
+      "roadCount": 1,
+      "buildingCount": 0,
+      "laneCount": 2,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "5_-10",
+      "regionId": "unb",
+      "bounds": {
+        "minX": 4000,
+        "minY": -8000,
+        "maxX": 4800,
+        "maxY": -7200
+      },
+      "adjacent": [
+        "4_-11",
+        "4_-10",
+        "4_-9",
+        "5_-11",
+        "5_-9",
+        "6_-11",
+        "6_-10",
+        "6_-9"
+      ],
+      "file": "chunks/5_-10.json",
+      "roadCount": 4,
+      "buildingCount": 0,
+      "laneCount": 9,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "5_-9",
+      "regionId": "unb",
+      "bounds": {
+        "minX": 4000,
+        "minY": -7200,
+        "maxX": 4800,
+        "maxY": -6400
+      },
+      "adjacent": [
+        "4_-10",
+        "4_-9",
+        "4_-8",
+        "5_-10",
+        "5_-8",
+        "6_-10",
+        "6_-9",
+        "6_-8"
+      ],
+      "file": "chunks/5_-9.json",
+      "roadCount": 38,
+      "buildingCount": 117,
+      "laneCount": 76,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "5_-8",
+      "regionId": "unb",
+      "bounds": {
+        "minX": 4000,
+        "minY": -6400,
+        "maxX": 4800,
+        "maxY": -5600
+      },
+      "adjacent": [
+        "4_-9",
+        "4_-8",
+        "4_-7",
+        "5_-9",
+        "5_-7",
+        "6_-9",
+        "6_-8",
+        "6_-7"
+      ],
+      "file": "chunks/5_-8.json",
+      "roadCount": 7,
+      "buildingCount": 99,
+      "laneCount": 14,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "5_-7",
+      "regionId": "unb",
+      "bounds": {
+        "minX": 4000,
+        "minY": -5600,
+        "maxX": 4800,
+        "maxY": -4800
+      },
+      "adjacent": [
+        "4_-8",
+        "4_-7",
+        "4_-6",
+        "5_-8",
+        "5_-6",
+        "6_-8",
+        "6_-7",
+        "6_-6"
+      ],
+      "file": "chunks/5_-7.json",
+      "roadCount": 43,
+      "buildingCount": 180,
+      "laneCount": 76,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "5_-6",
+      "regionId": "unb",
+      "bounds": {
+        "minX": 4000,
+        "minY": -4800,
+        "maxX": 4800,
+        "maxY": -4000
+      },
+      "adjacent": [
+        "4_-7",
+        "4_-6",
+        "4_-5",
+        "5_-7",
+        "5_-5",
+        "6_-7",
+        "6_-6",
+        "6_-5"
+      ],
+      "file": "chunks/5_-6.json",
+      "roadCount": 43,
+      "buildingCount": 180,
+      "laneCount": 84,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "5_-5",
+      "regionId": "unb",
+      "bounds": {
+        "minX": 4000,
+        "minY": -4000,
+        "maxX": 4800,
+        "maxY": -3200
+      },
+      "adjacent": [
+        "4_-6",
+        "4_-5",
+        "4_-4",
+        "5_-6",
+        "5_-4",
+        "6_-6",
+        "6_-5",
+        "6_-4"
+      ],
+      "file": "chunks/5_-5.json",
+      "roadCount": 12,
+      "buildingCount": 180,
+      "laneCount": 24,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "5_-2",
+      "regionId": "vila-planalto",
+      "bounds": {
+        "minX": 4000,
+        "minY": -1600,
+        "maxX": 4800,
+        "maxY": -800
+      },
+      "adjacent": [
+        "4_-3",
+        "4_-2",
+        "4_-1",
+        "5_-3",
+        "5_-1",
+        "6_-3",
+        "6_-2",
+        "6_-1"
+      ],
+      "file": "chunks/5_-2.json",
+      "roadCount": 10,
+      "buildingCount": 3,
+      "laneCount": 17,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "5_-1",
+      "regionId": "vila-planalto",
+      "bounds": {
+        "minX": 4000,
+        "minY": -800,
+        "maxX": 4800,
+        "maxY": 0
+      },
+      "adjacent": [
+        "4_-2",
+        "4_-1",
+        "4_0",
+        "5_-2",
+        "5_0",
+        "6_-2",
+        "6_-1",
+        "6_0"
+      ],
+      "file": "chunks/5_-1.json",
+      "roadCount": 84,
+      "buildingCount": 180,
+      "laneCount": 163,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "5_0",
+      "regionId": "vila-planalto",
+      "bounds": {
+        "minX": 4000,
+        "minY": 0,
+        "maxX": 4800,
+        "maxY": 800
+      },
+      "adjacent": [
+        "4_-1",
+        "4_0",
+        "4_1",
+        "5_-1",
+        "5_1",
+        "6_-1",
+        "6_0",
+        "6_1"
+      ],
+      "file": "chunks/5_0.json",
+      "roadCount": 17,
+      "buildingCount": 69,
+      "laneCount": 34,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "5_1",
+      "regionId": "vila-planalto",
+      "bounds": {
+        "minX": 4000,
+        "minY": 800,
+        "maxX": 4800,
+        "maxY": 1600
+      },
+      "adjacent": [
+        "4_0",
+        "4_1",
+        "4_2",
+        "5_0",
+        "5_2",
+        "6_0",
+        "6_1",
+        "6_2"
+      ],
+      "file": "chunks/5_1.json",
+      "roadCount": 43,
+      "buildingCount": 14,
+      "laneCount": 70,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "5_2",
+      "regionId": "vila-planalto",
+      "bounds": {
+        "minX": 4000,
+        "minY": 1600,
+        "maxX": 4800,
+        "maxY": 2400
+      },
+      "adjacent": [
+        "4_1",
+        "4_2",
+        "4_3",
+        "5_1",
+        "5_3",
+        "6_1",
+        "6_2",
+        "6_3"
+      ],
+      "file": "chunks/5_2.json",
+      "roadCount": 88,
+      "buildingCount": 77,
+      "laneCount": 146,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "5_3",
+      "regionId": "vila-planalto",
+      "bounds": {
+        "minX": 4000,
+        "minY": 2400,
+        "maxX": 4800,
+        "maxY": 3200
+      },
+      "adjacent": [
+        "4_2",
+        "4_3",
+        "4_4",
+        "5_2",
+        "5_4",
+        "6_2",
+        "6_3",
+        "6_4"
+      ],
+      "file": "chunks/5_3.json",
+      "roadCount": 92,
+      "buildingCount": 105,
+      "laneCount": 151,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "5_5",
+      "regionId": "vila-planalto",
+      "bounds": {
+        "minX": 4000,
+        "minY": 4000,
+        "maxX": 4800,
+        "maxY": 4800
+      },
+      "adjacent": [
+        "4_4",
+        "4_5",
+        "4_6",
+        "5_4",
+        "5_6",
+        "6_4",
+        "6_5",
+        "6_6"
+      ],
+      "file": "chunks/5_5.json",
+      "roadCount": 2,
+      "buildingCount": 0,
+      "laneCount": 4,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "5_6",
+      "regionId": "vila-planalto",
+      "bounds": {
+        "minX": 4000,
+        "minY": 4800,
+        "maxX": 4800,
+        "maxY": 5600
+      },
+      "adjacent": [
+        "4_5",
+        "4_6",
+        "4_7",
+        "5_5",
+        "5_7",
+        "6_5",
+        "6_6",
+        "6_7"
+      ],
+      "file": "chunks/5_6.json",
+      "roadCount": 12,
+      "buildingCount": 1,
+      "laneCount": 22,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "6_-10",
+      "regionId": "unb",
+      "bounds": {
+        "minX": 4800,
+        "minY": -8000,
+        "maxX": 5600,
+        "maxY": -7200
+      },
+      "adjacent": [
+        "5_-11",
+        "5_-10",
+        "5_-9",
+        "6_-11",
+        "6_-9",
+        "7_-11",
+        "7_-10",
+        "7_-9"
+      ],
+      "file": "chunks/6_-10.json",
+      "roadCount": 2,
+      "buildingCount": 0,
+      "laneCount": 4,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "6_-9",
+      "regionId": "unb",
+      "bounds": {
+        "minX": 4800,
+        "minY": -7200,
+        "maxX": 5600,
+        "maxY": -6400
+      },
+      "adjacent": [
+        "5_-10",
+        "5_-9",
+        "5_-8",
+        "6_-10",
+        "6_-8",
+        "7_-10",
+        "7_-9",
+        "7_-8"
+      ],
+      "file": "chunks/6_-9.json",
+      "roadCount": 18,
+      "buildingCount": 180,
+      "laneCount": 34,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "6_-8",
+      "regionId": "unb",
+      "bounds": {
+        "minX": 4800,
+        "minY": -6400,
+        "maxX": 5600,
+        "maxY": -5600
+      },
+      "adjacent": [
+        "5_-9",
+        "5_-8",
+        "5_-7",
+        "6_-9",
+        "6_-7",
+        "7_-9",
+        "7_-8",
+        "7_-7"
+      ],
+      "file": "chunks/6_-8.json",
+      "roadCount": 34,
+      "buildingCount": 70,
+      "laneCount": 68,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "6_-7",
+      "regionId": "unb",
+      "bounds": {
+        "minX": 4800,
+        "minY": -5600,
+        "maxX": 5600,
+        "maxY": -4800
+      },
+      "adjacent": [
+        "5_-8",
+        "5_-7",
+        "5_-6",
+        "6_-8",
+        "6_-6",
+        "7_-8",
+        "7_-7",
+        "7_-6"
+      ],
+      "file": "chunks/6_-7.json",
+      "roadCount": 13,
+      "buildingCount": 180,
+      "laneCount": 27,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "6_-6",
+      "regionId": "unb",
+      "bounds": {
+        "minX": 4800,
+        "minY": -4800,
+        "maxX": 5600,
+        "maxY": -4000
+      },
+      "adjacent": [
+        "5_-7",
+        "5_-6",
+        "5_-5",
+        "6_-7",
+        "6_-5",
+        "7_-7",
+        "7_-6",
+        "7_-5"
+      ],
+      "file": "chunks/6_-6.json",
+      "roadCount": 52,
+      "buildingCount": 180,
+      "laneCount": 90,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "6_-5",
+      "regionId": "vila-planalto",
+      "bounds": {
+        "minX": 4800,
+        "minY": -4000,
+        "maxX": 5600,
+        "maxY": -3200
+      },
+      "adjacent": [
+        "5_-6",
+        "5_-5",
+        "5_-4",
+        "6_-6",
+        "6_-4",
+        "7_-6",
+        "7_-5",
+        "7_-4"
+      ],
+      "file": "chunks/6_-5.json",
+      "roadCount": 51,
+      "buildingCount": 180,
+      "laneCount": 99,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "6_-4",
+      "regionId": "vila-planalto",
+      "bounds": {
+        "minX": 4800,
+        "minY": -3200,
+        "maxX": 5600,
+        "maxY": -2400
+      },
+      "adjacent": [
+        "5_-5",
+        "5_-4",
+        "5_-3",
+        "6_-5",
+        "6_-3",
+        "7_-5",
+        "7_-4",
+        "7_-3"
+      ],
+      "file": "chunks/6_-4.json",
+      "roadCount": 32,
+      "buildingCount": 180,
+      "laneCount": 54,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "6_-3",
+      "regionId": "vila-planalto",
+      "bounds": {
+        "minX": 4800,
+        "minY": -2400,
+        "maxX": 5600,
+        "maxY": -1600
+      },
+      "adjacent": [
+        "5_-4",
+        "5_-3",
+        "5_-2",
+        "6_-4",
+        "6_-2",
+        "7_-4",
+        "7_-3",
+        "7_-2"
+      ],
+      "file": "chunks/6_-3.json",
+      "roadCount": 0,
+      "buildingCount": 4,
+      "laneCount": 0,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "6_-2",
+      "regionId": "vila-planalto",
+      "bounds": {
+        "minX": 4800,
+        "minY": -1600,
+        "maxX": 5600,
+        "maxY": -800
+      },
+      "adjacent": [
+        "5_-3",
+        "5_-2",
+        "5_-1",
+        "6_-3",
+        "6_-1",
+        "7_-3",
+        "7_-2",
+        "7_-1"
+      ],
+      "file": "chunks/6_-2.json",
+      "roadCount": 19,
+      "buildingCount": 12,
+      "laneCount": 36,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "6_-1",
+      "regionId": "vila-planalto",
+      "bounds": {
+        "minX": 4800,
+        "minY": -800,
+        "maxX": 5600,
+        "maxY": 0
+      },
+      "adjacent": [
+        "5_-2",
+        "5_-1",
+        "5_0",
+        "6_-2",
+        "6_0",
+        "7_-2",
+        "7_-1",
+        "7_0"
+      ],
+      "file": "chunks/6_-1.json",
+      "roadCount": 82,
+      "buildingCount": 21,
+      "laneCount": 153,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "6_0",
+      "regionId": "vila-planalto",
+      "bounds": {
+        "minX": 4800,
+        "minY": 0,
+        "maxX": 5600,
+        "maxY": 800
+      },
+      "adjacent": [
+        "5_-1",
+        "5_0",
+        "5_1",
+        "6_-1",
+        "6_1",
+        "7_-1",
+        "7_0",
+        "7_1"
+      ],
+      "file": "chunks/6_0.json",
+      "roadCount": 9,
+      "buildingCount": 11,
+      "laneCount": 16,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "6_1",
+      "regionId": "vila-planalto",
+      "bounds": {
+        "minX": 4800,
+        "minY": 800,
+        "maxX": 5600,
+        "maxY": 1600
+      },
+      "adjacent": [
+        "5_0",
+        "5_1",
+        "5_2",
+        "6_0",
+        "6_2",
+        "7_0",
+        "7_1",
+        "7_2"
+      ],
+      "file": "chunks/6_1.json",
+      "roadCount": 64,
+      "buildingCount": 86,
+      "laneCount": 120,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "6_2",
+      "regionId": "vila-planalto",
+      "bounds": {
+        "minX": 4800,
+        "minY": 1600,
+        "maxX": 5600,
+        "maxY": 2400
+      },
+      "adjacent": [
+        "5_1",
+        "5_2",
+        "5_3",
+        "6_1",
+        "6_3",
+        "7_1",
+        "7_2",
+        "7_3"
+      ],
+      "file": "chunks/6_2.json",
+      "roadCount": 24,
+      "buildingCount": 20,
+      "laneCount": 40,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "6_3",
+      "regionId": "vila-planalto",
+      "bounds": {
+        "minX": 4800,
+        "minY": 2400,
+        "maxX": 5600,
+        "maxY": 3200
+      },
+      "adjacent": [
+        "5_2",
+        "5_3",
+        "5_4",
+        "6_2",
+        "6_4",
+        "7_2",
+        "7_3",
+        "7_4"
+      ],
+      "file": "chunks/6_3.json",
+      "roadCount": 49,
+      "buildingCount": 19,
+      "laneCount": 85,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "6_4",
+      "regionId": "vila-planalto",
+      "bounds": {
+        "minX": 4800,
+        "minY": 3200,
+        "maxX": 5600,
+        "maxY": 4000
+      },
+      "adjacent": [
+        "5_3",
+        "5_4",
+        "5_5",
+        "6_3",
+        "6_5",
+        "7_3",
+        "7_4",
+        "7_5"
+      ],
+      "file": "chunks/6_4.json",
+      "roadCount": 1,
+      "buildingCount": 0,
+      "laneCount": 3,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "6_5",
+      "regionId": "vila-planalto",
+      "bounds": {
+        "minX": 4800,
+        "minY": 4000,
+        "maxX": 5600,
+        "maxY": 4800
+      },
+      "adjacent": [
+        "5_4",
+        "5_5",
+        "5_6",
+        "6_4",
+        "6_6",
+        "7_4",
+        "7_5",
+        "7_6"
+      ],
+      "file": "chunks/6_5.json",
+      "roadCount": 45,
+      "buildingCount": 0,
+      "laneCount": 85,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "6_6",
+      "regionId": "vila-planalto",
+      "bounds": {
+        "minX": 4800,
+        "minY": 4800,
+        "maxX": 5600,
+        "maxY": 5600
+      },
+      "adjacent": [
+        "5_5",
+        "5_6",
+        "5_7",
+        "6_5",
+        "6_7",
+        "7_5",
+        "7_6",
+        "7_7"
+      ],
+      "file": "chunks/6_6.json",
+      "roadCount": 23,
+      "buildingCount": 0,
+      "laneCount": 45,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "7_-10",
+      "regionId": "unb",
+      "bounds": {
+        "minX": 5600,
+        "minY": -8000,
+        "maxX": 6400,
+        "maxY": -7200
+      },
+      "adjacent": [
+        "6_-11",
+        "6_-10",
+        "6_-9",
+        "7_-11",
+        "7_-9",
+        "8_-11",
+        "8_-10",
+        "8_-9"
+      ],
+      "file": "chunks/7_-10.json",
+      "roadCount": 1,
+      "buildingCount": 0,
+      "laneCount": 2,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "7_-8",
+      "regionId": "unb",
+      "bounds": {
+        "minX": 5600,
+        "minY": -6400,
+        "maxX": 6400,
+        "maxY": -5600
+      },
+      "adjacent": [
+        "6_-9",
+        "6_-8",
+        "6_-7",
+        "7_-9",
+        "7_-7",
+        "8_-9",
+        "8_-8",
+        "8_-7"
+      ],
+      "file": "chunks/7_-8.json",
+      "roadCount": 4,
+      "buildingCount": 0,
+      "laneCount": 8,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "7_-6",
+      "regionId": "vila-planalto",
+      "bounds": {
+        "minX": 5600,
+        "minY": -4800,
+        "maxX": 6400,
+        "maxY": -4000
+      },
+      "adjacent": [
+        "6_-7",
+        "6_-6",
+        "6_-5",
+        "7_-7",
+        "7_-5",
+        "8_-7",
+        "8_-6",
+        "8_-5"
+      ],
+      "file": "chunks/7_-6.json",
+      "roadCount": 7,
+      "buildingCount": 2,
+      "laneCount": 14,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "7_-5",
+      "regionId": "vila-planalto",
+      "bounds": {
+        "minX": 5600,
+        "minY": -4000,
+        "maxX": 6400,
+        "maxY": -3200
+      },
+      "adjacent": [
+        "6_-6",
+        "6_-5",
+        "6_-4",
+        "7_-6",
+        "7_-4",
+        "8_-6",
+        "8_-5",
+        "8_-4"
+      ],
+      "file": "chunks/7_-5.json",
+      "roadCount": 6,
+      "buildingCount": 0,
+      "laneCount": 12,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "7_-4",
+      "regionId": "vila-planalto",
+      "bounds": {
+        "minX": 5600,
+        "minY": -3200,
+        "maxX": 6400,
+        "maxY": -2400
+      },
+      "adjacent": [
+        "6_-5",
+        "6_-4",
+        "6_-3",
+        "7_-5",
+        "7_-3",
+        "8_-5",
+        "8_-4",
+        "8_-3"
+      ],
+      "file": "chunks/7_-4.json",
+      "roadCount": 2,
+      "buildingCount": 0,
+      "laneCount": 4,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "7_-1",
+      "regionId": "vila-planalto",
+      "bounds": {
+        "minX": 5600,
+        "minY": -800,
+        "maxX": 6400,
+        "maxY": 0
+      },
+      "adjacent": [
+        "6_-2",
+        "6_-1",
+        "6_0",
+        "7_-2",
+        "7_0",
+        "8_-2",
+        "8_-1",
+        "8_0"
+      ],
+      "file": "chunks/7_-1.json",
+      "roadCount": 3,
+      "buildingCount": 0,
+      "laneCount": 7,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "7_0",
+      "regionId": "vila-planalto",
+      "bounds": {
+        "minX": 5600,
+        "minY": 0,
+        "maxX": 6400,
+        "maxY": 800
+      },
+      "adjacent": [
+        "6_-1",
+        "6_0",
+        "6_1",
+        "7_-1",
+        "7_1",
+        "8_-1",
+        "8_0",
+        "8_1"
+      ],
+      "file": "chunks/7_0.json",
+      "roadCount": 1,
+      "buildingCount": 0,
+      "laneCount": 2,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "7_4",
+      "regionId": "vila-planalto",
+      "bounds": {
+        "minX": 5600,
+        "minY": 3200,
+        "maxX": 6400,
+        "maxY": 4000
+      },
+      "adjacent": [
+        "6_3",
+        "6_4",
+        "6_5",
+        "7_3",
+        "7_5",
+        "8_3",
+        "8_4",
+        "8_5"
+      ],
+      "file": "chunks/7_4.json",
+      "roadCount": 2,
+      "buildingCount": 0,
+      "laneCount": 6,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "7_5",
+      "regionId": "vila-planalto",
+      "bounds": {
+        "minX": 5600,
+        "minY": 4000,
+        "maxX": 6400,
+        "maxY": 4800
+      },
+      "adjacent": [
+        "6_4",
+        "6_5",
+        "6_6",
+        "7_4",
+        "7_6",
+        "8_4",
+        "8_5",
+        "8_6"
+      ],
+      "file": "chunks/7_5.json",
+      "roadCount": 1,
+      "buildingCount": 0,
+      "laneCount": 2,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    },
+    {
+      "id": "7_6",
+      "regionId": "vila-planalto",
+      "bounds": {
+        "minX": 5600,
+        "minY": 4800,
+        "maxX": 6400,
+        "maxY": 5600
+      },
+      "adjacent": [
+        "6_5",
+        "6_6",
+        "6_7",
+        "7_5",
+        "7_7",
+        "8_5",
+        "8_6",
+        "8_7"
+      ],
+      "file": "chunks/7_6.json",
+      "roadCount": 1,
+      "buildingCount": 0,
+      "laneCount": 2,
+      "capacity": 96,
+      "spawnBudget": 72,
+      "playerBudget": 8,
+      "fleetBudget": 16,
+      "npcBudget": 72
+    }
+  ]
+}

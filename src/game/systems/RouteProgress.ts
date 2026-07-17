@@ -40,7 +40,7 @@ export function advanceActiveRoute(route: Point[], position: Point, maximumDevia
   if (bestDistance <= maximumDeviationMeters) {
     const remaining = route.slice(bestIndex + 1);
     while (remaining.length && distance(remaining[0], bestPoint) < 0.1) remaining.shift();
-    advanced = remaining.length ? [bestPoint, ...remaining] : [bestPoint, { ...route[route.length - 1] }];
+    advanced = [bestPoint, ...remaining];
   }
 
   return {

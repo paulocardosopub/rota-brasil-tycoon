@@ -16,4 +16,10 @@ describe('progresso compartilhado de rota', () => {
     expect(pointAlongRoute([{ x: 0, y: 0 }, { x: 10, y: 0 }, { x: 10, y: 20 }], 15))
       .toEqual({ x: 10, y: 5 });
   });
+
+  it('encerra o trecho final sem manter um segmento duplicado no GPS do jogador', () => {
+    const progress = advanceActiveRoute([{ x: 0, y: 0 }, { x: 10, y: 0 }], { x: 10, y: 0 });
+    expect(progress.route).toEqual([{ x: 10, y: 0 }]);
+    expect(progress.remainingMeters).toBe(0);
+  });
 });

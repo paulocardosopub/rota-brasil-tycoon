@@ -34,21 +34,107 @@ export interface RoadData {
   lanes: number;
   width: number;
   points: RoadPoint[];
+  osmWayId?: string;
+  corridorId?: string;
+  ref?: string;
+  lanesForward?: number;
+  lanesBackward?: number;
+  speedLimitKmh?: number;
+  layer?: number;
+  bridge?: boolean;
+  tunnel?: boolean;
+  surface?: string;
+  access?: string;
+  junction?: string;
+  chunkIds?: string[];
 }
 
 export interface GraphEdge {
   to: string;
   distance: number;
   roadId: string;
+  laneId?: string;
+  highway?: string;
+  connector?: boolean;
 }
 
 export interface GraphNode extends Point {
   id: string;
   edges: GraphEdge[];
+  laneId?: string;
+  roadSegmentId?: string;
+  chunkId?: string;
+  sourceNodeId?: string;
 }
 
 export interface NavigationGraph {
   nodes: GraphNode[];
+  kind?: 'road' | 'lane';
+  version?: string;
+}
+
+export interface LaneData {
+  id: string;
+  roadSegmentId: string;
+  corridorId: string;
+  direction: 'forward' | 'backward';
+  index: number;
+  width: number;
+  speedLimitKmh: number;
+  points: Array<Point & { sourceNodeId: string }>;
+  startNodeId: string;
+  endNodeId: string;
+  nextLaneIds: string[];
+  neighborLaneIds: string[];
+  movements: Array<'straight' | 'left' | 'right'>;
+  layer: number;
+  chunkIds: string[];
+}
+
+export interface MapChunkManifestEntry {
+  id: string;
+  regionId: string;
+  bounds: { minX: number; minY: number; maxX: number; maxY: number };
+  adjacent: string[];
+  file: string;
+  roadCount: number;
+  buildingCount: number;
+  laneCount: number;
+  capacity: number;
+  spawnBudget: number;
+  playerBudget: number;
+  fleetBudget: number;
+  npcBudget: number;
+}
+
+export interface MapRegion {
+  id: string;
+  name: string;
+  center: Point;
+  bounds: { minX: number; minY: number; maxX: number; maxY: number };
+}
+
+export interface CityMapManifest {
+  mapVersion: string;
+  city: string;
+  origin: { lat: number; lon: number };
+  bbox: { south: number; west: number; north: number; east: number };
+  chunkSizeMeters: number;
+  graphFile: string;
+  signalFile: string;
+  serviceBase: string;
+  regions: MapRegion[];
+  chunks: MapChunkManifestEntry[];
+}
+
+export interface CityMapChunk {
+  id: string;
+  regionId: string;
+  roads: RoadData[];
+  lanes: LaneData[];
+  signals: MapSignal[];
+  busStops: BusStop[];
+  buildings: MapBuilding[];
 }
 
 export interface MapBuilding {
@@ -90,6 +176,9 @@ export interface CityMapData {
   buildings: MapBuilding[];
   services: MapServiceLocation[];
   taxiPoints: TaxiPoint[];
+  manifest?: CityMapManifest;
+  lanes?: LaneData[];
+  loadedChunkIds?: string[];
 }
 
 export interface TaxiPoint {
@@ -178,6 +267,7 @@ export interface MissionSnapshot {
   rideMode?: RideMode;
   taxiRequestType?: TaxiRequestType;
   taxiPointId?: string;
+  distanceBand?: 'short' | 'medium' | 'long' | 'inter-region';
 }
 
 export interface Receipt {
@@ -435,6 +525,15 @@ export interface PlayerSave {
   activeVehicleId: string;
   fleet: PlayerFleet;
   clockGuard: ClockGuard;
+  mapVersion: string;
+  currentChunk: string;
+  currentRegion: string;
+  laneId: string | null;
+  roadSegmentId: string | null;
+  geographicPosition: { lat: number; lon: number } | null;
+  localPosition: Point;
+  lastSafePosition: Point;
+  mapMigrationNotice: boolean;
 }
 
 export type Quality = 'automatic' | 'low' | 'medium' | 'high';
@@ -530,4 +629,9 @@ export interface HudSnapshot {
   fleetLastRecoveryReason: string | null;
   fleetDriverIdentification: string | null;
   totalTerrestrialEntities: number;
+  mapVersion: string;
+  currentRegion: string;
+  currentChunk: string;
+  loadedMapChunks: number;
+  mapRegions: string[];
 }

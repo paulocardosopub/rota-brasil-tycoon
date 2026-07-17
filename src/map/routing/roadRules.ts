@@ -7,7 +7,7 @@ export function isDrivableRoad(road: Pick<RoadData, 'highway'>) {
 }
 
 export function visibleRoadWidth(road: Pick<RoadData, 'width'>) {
-  return Math.max(4.5, Math.min(18, road.width));
+  return Math.max(4.5, Math.min(36, road.width));
 }
 
 export function directionalLaneCount(road: Pick<RoadData, 'lanes' | 'oneway'> | undefined) {

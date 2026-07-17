@@ -16,6 +16,9 @@ try {
     const hud = page.locator('[data-game-ready="true"]');
     await hud.waitFor({ state: 'visible', timeout: 25_000 });
     if (preset.autopilot) await page.getByTestId('autopilot-button').click();
+    // Descarta a compilação inicial dos gráficos/chunks pela GPU. A medição
+    // representa a partida estabilizada, não a tela de carregamento.
+    await page.waitForTimeout(2_500);
     const fps = await collectFps(page, hud);
     results.push({
       preset: preset.name,

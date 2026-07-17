@@ -36,6 +36,7 @@ export class FleetVehicleSystem {
   private lastRecoveryReason: string | null = null;
   private identification: string | null = null;
   private stuckSeconds = 0;
+  private trafficStuckSeconds = 0;
   private followEnabled = false;
   private playerContact = false;
   private readonly parkedVisuals = new Map<string, Phaser.GameObjects.Container>();
@@ -195,6 +196,18 @@ export class FleetVehicleSystem {
     this.stuckSeconds = targetSpeed > 1.5 && travelled < 0.01 && Math.abs(this.controller.speed) < 0.8
       ? this.stuckSeconds + deltaSeconds
       : 0;
+    this.trafficStuckSeconds = trafficAdvice.reason === 'traffic'
+      && targetSpeed < 0.6
+      && Math.abs(this.controller.speed) < 0.8
+      && distance > 12
+      ? this.trafficStuckSeconds + deltaSeconds
+      : 0;
+    if (this.trafficStuckSeconds >= GAME_CONFIG.traffic.autopilotFollowingDeadlockSeconds) {
+      if (this.traffic.releaseBlockingVehicle(this.controller.position, this.controller.rotation)) {
+        this.recoverRoute(target, { reason: 'no-progress', repositionAhead: false });
+      }
+      this.trafficStuckSeconds = 0;
+    }
     if (this.stuckSeconds > 2.5) {
       this.recoverRoute(target, { reason: 'no-progress', repositionAhead: false });
       this.stuckSeconds = 0;
@@ -321,6 +334,8 @@ export class FleetVehicleSystem {
     this.completedStops += 1;
     this.routeRemaining = 0;
     this.routeHealth.reset();
+    this.stuckSeconds = 0;
+    this.trafficStuckSeconds = 0;
     employee.state = nextStage === 'to-destination' ? 'with-passenger' : 'seeking-trip';
     vehicle.state = nextStage === 'to-destination' ? 'on-trip' : 'employee-driving';
   }

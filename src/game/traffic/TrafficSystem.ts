@@ -63,12 +63,16 @@ export class TrafficSystem {
   private readonly roads = new Map<string, RoadData>();
   private readonly signalByNode = new Map<string, MapSignal>();
   private readonly signalIndex = new Map<string, number>();
+  private readonly nodesBySource = new Map<string, GraphNode[]>();
+  private readonly laneGraph: boolean;
+  private signals: MapSignal[] = [];
   private readonly vehicles: TrafficVehicle[] = [];
   private lastViolationCycle = -1;
   private collisionActive = false;
   private collisionCooldownUntil = 0;
   private playerBrakeReason: AutoBrakeReason = 'clear';
   private deadlockRecoveries = 0;
+  private autopilotTrafficStopSeconds = 0;
   private activeVehicleLimit = Number.POSITIVE_INFINITY;
   private requestedVehicleLimit = Number.POSITIVE_INFINITY;
   private reservedSlots = 0;
@@ -83,17 +87,22 @@ export class TrafficSystem {
     scene: Phaser.Scene,
     graph: NavigationGraph,
     roads: RoadData[],
-    private readonly signals: MapSignal[],
+    signals: MapSignal[],
     private readonly project: Project,
     spawn: Point
   ) {
+    this.laneGraph = graph.kind === 'lane';
     this.crowdGraphics = scene.add.graphics().setDepth(23);
-    for (const node of graph.nodes) this.nodes.set(node.id, node);
+    for (const node of graph.nodes) {
+      this.nodes.set(node.id, node);
+      if (node.sourceNodeId) {
+        const sourceNodes = this.nodesBySource.get(node.sourceNodeId) ?? [];
+        sourceNodes.push(node);
+        this.nodesBySource.set(node.sourceNodeId, sourceNodes);
+      }
+    }
     for (const road of roads) this.roads.set(road.id, road);
-    signals.forEach((signal, index) => {
-      this.signalByNode.set(signal.nodeId, signal);
-      this.signalIndex.set(signal.id, index);
-    });
+    this.setSignals(signals);
 
     const candidates = graph.nodes.filter((node) => {
       const distance = Math.hypot(node.x - spawn.x, node.y - spawn.y);
@@ -124,13 +133,15 @@ export class TrafficSystem {
       if (!target) continue;
       const road = this.roads.get(edge.roadId);
       const laneIndex = kind === 'bus' ? 0 : index % Math.max(1, Math.ceil((road?.lanes ?? 1) / (road?.oneway ? 1 : 2)));
-      const position = pointInTrafficLane(current, current, target, road, laneIndex);
-      const targetPosition = pointInTrafficLane(target, current, target, road, laneIndex);
+      const position = this.laneGraph ? { x: current.x, y: current.y } : pointInTrafficLane(current, current, target, road, laneIndex);
+      const targetPosition = this.laneGraph ? { x: target.x, y: target.y } : pointInTrafficLane(target, current, target, road, laneIndex);
       const spec = vehicleSpec(kind, index);
       const color = kind === 'bus' ? (index % 2 ? 0x2b7a78 : 0xc44d36)
         : kind === 'utility' ? (index % 2 ? 0xe8ecef : 0x7c8f9e)
           : kind === 'taxi' ? 0xf2c744 : colors[index % colors.length];
-      const detailed = index < 48 || (kind === 'bus' && index < carCount + 8) || (kind === 'utility' && index < carCount + busCount + 6);
+      // Mantém todos os 72 veículos simulados e visíveis. Os mais próximos
+      // usam containers detalhados; os demais entram no lote gráfico único.
+      const detailed = index < 28 || (kind === 'bus' && index < carCount + 6) || (kind === 'utility' && index < carCount + busCount + 4);
       const visual = detailed
         ? kind === 'bus'
           ? createBusVisual(scene, color).setScale(0.64)
@@ -165,6 +176,33 @@ export class TrafficSystem {
     }
   }
 
+  updateMap(roads: RoadData[], signals: MapSignal[], playerPosition: Point) {
+    this.roads.clear();
+    for (const road of roads) this.roads.set(road.id, road);
+    this.setSignals(signals);
+    const candidates = [...this.nodes.values()].filter((node) => {
+      const distance = Math.hypot(node.x - playerPosition.x, node.y - playerPosition.y);
+      return distance > 60 && distance < 720 && this.validEdges(node).length > 0;
+    });
+    if (!candidates.length) return;
+    for (const vehicle of this.vehicles) {
+      if (Math.hypot(vehicle.position.x - playerPosition.x, vehicle.position.y - playerPosition.y) < 850) continue;
+      const current = candidates[(vehicle.index * 197 + Math.floor(this.elapsed)) % candidates.length];
+      const choices = this.validEdges(current, vehicle.kind === 'bus');
+      const edge = choices[(vehicle.index * 13 + 3) % choices.length];
+      const target = this.nodes.get(edge.to);
+      if (!target) continue;
+      vehicle.current = current;
+      vehicle.target = target;
+      vehicle.edge = edge;
+      vehicle.previousId = current.id;
+      vehicle.position = this.laneGraph ? { x: current.x, y: current.y } : pointInTrafficLane(current, current, target, this.roads.get(edge.roadId), vehicle.laneIndex);
+      vehicle.targetPosition = this.laneGraph ? { x: target.x, y: target.y } : pointInTrafficLane(target, current, target, this.roads.get(edge.roadId), vehicle.laneIndex);
+      vehicle.heading = Math.atan2(vehicle.targetPosition.y - vehicle.position.y, vehicle.targetPosition.x - vehicle.position.x);
+      vehicle.speed = 0;
+    }
+  }
+
   update(deltaSeconds: number, playerPosition: Point, playerSpeed = 0, playerHeading = 0, autopilotEnabled = false): TrafficUpdateResult {
     let autopilotDeadlockRecovery = false;
     if (!this.enabled) {
@@ -179,6 +217,19 @@ export class TrafficSystem {
     this.elapsed += deltaSeconds * this.timeScale;
     this.crowdGraphics.clear();
     this.rebuildSpatialIndex();
+    const waitingBehindTraffic = autopilotEnabled
+      && Math.abs(playerSpeed) < 0.45
+      && this.playerBrakeReason === 'traffic';
+    this.autopilotTrafficStopSeconds = waitingBehindTraffic
+      ? this.autopilotTrafficStopSeconds + deltaSeconds
+      : 0;
+    if (this.autopilotTrafficStopSeconds >= GAME_CONFIG.traffic.autopilotFollowingDeadlockSeconds) {
+      if (this.releaseBlockingVehicle(playerPosition, playerHeading)) {
+        this.deadlockRecoveries += 1;
+        autopilotDeadlockRecovery = true;
+      }
+      this.autopilotTrafficStopSeconds = 0;
+    }
     for (const vehicle of this.vehicles) {
       if (vehicle.index >= this.activeVehicleLimit) {
         vehicle.visual?.setVisible(false);
@@ -314,6 +365,41 @@ export class TrafficSystem {
       else if (distanceFromPlayer < 520) this.drawCrowdVehicle(vehicle, projected);
     }
     return { autopilotDeadlockRecovery };
+  }
+
+  releaseBlockingVehicle(position: Point, heading: number) {
+    const blocker = this.findAutopilotBlocker(position, heading);
+    if (!blocker) return false;
+    blocker.position = { ...blocker.targetPosition };
+    this.advanceVehicle(blocker);
+    blocker.contactWithPlayer = false;
+    blocker.stunnedUntil = 0;
+    blocker.ghostWithPlayerUntil = this.elapsed + GAME_CONFIG.traffic.autopilotCollisionGhostSeconds;
+    blocker.speed = Math.max(blocker.speed, 2.8);
+    blocker.stopReason = 'clear';
+    return true;
+  }
+
+  private findAutopilotBlocker(playerPosition: Point, playerHeading: number) {
+    let best: TrafficVehicle | null = null;
+    let bestGap = Number.POSITIVE_INFINITY;
+    for (const vehicle of this.vehicles) {
+      if (vehicle.index >= this.activeVehicleLimit || this.elapsed < vehicle.ghostWithPlayerUntil) continue;
+      const gap = distanceAhead(playerPosition, playerHeading, vehicle.position, 4.2);
+      const crossing = yieldingPathsConflict(
+        { position: playerPosition, heading: playerHeading, speed: 0 },
+        { position: vehicle.position, heading: vehicle.heading, speed: vehicle.speed },
+        3,
+        4
+      );
+      const distance = Math.hypot(vehicle.position.x - playerPosition.x, vehicle.position.y - playerPosition.y);
+      const effectiveGap = gap ?? (crossing && distance < 15 ? distance : null);
+      if (effectiveGap !== null && effectiveGap < 24 && effectiveGap < bestGap) {
+        best = vehicle;
+        bestGap = effectiveGap;
+      }
+    }
+    return best;
   }
 
   signalState(signal: MapSignal): SignalState {
@@ -590,6 +676,7 @@ export class TrafficSystem {
   private validEdges(node: GraphNode, majorOnly = false): GraphEdge[] {
     const valid = node.edges.filter((edge) => {
       const road = this.roads.get(edge.roadId);
+      if (this.laneGraph) return this.nodes.has(edge.to) && (!majorOnly || MAJOR_ROADS.has(edge.highway ?? ''));
       return road && isDrivableRoad(road) && this.nodes.has(edge.to) && (!majorOnly || MAJOR_ROADS.has(road.highway));
     });
     return valid.length || !majorOnly ? valid : this.validEdges(node, false);
@@ -615,7 +702,21 @@ export class TrafficSystem {
     vehicle.previousId = previousId;
     vehicle.edge = edge;
     vehicle.target = target;
-    vehicle.targetPosition = pointInTrafficLane(target, vehicle.current, target, road, vehicle.laneIndex);
+    vehicle.targetPosition = this.laneGraph
+      ? { x: target.x, y: target.y }
+      : pointInTrafficLane(target, vehicle.current, target, road, vehicle.laneIndex);
+  }
+
+  private setSignals(signals: MapSignal[]) {
+    this.signals = [...signals];
+    this.signalByNode.clear();
+    this.signalIndex.clear();
+    signals.forEach((signal, index) => {
+      const laneNodes = this.nodesBySource.get(signal.nodeId);
+      if (this.laneGraph && laneNodes?.length) for (const node of laneNodes) this.signalByNode.set(node.id, signal);
+      else this.signalByNode.set(signal.nodeId, signal);
+      this.signalIndex.set(signal.id, index);
+    });
   }
 
   private isNarrowingMerge(vehicle: TrafficVehicle) {

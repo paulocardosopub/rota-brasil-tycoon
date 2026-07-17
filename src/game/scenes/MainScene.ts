@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { GAME_CONFIG } from '../../config/gameConfig';
-import { loadCityMap } from '../../map/loadCityMap';
+import { CityMapStream } from '../../map/loadCityMap';
+import { localMetersToLatLon } from '../../map/projection/localMeters';
 import { GraphRouter } from '../../map/routing/GraphRouter';
 import { visibleRoadWidth } from '../../map/routing/roadRules';
 import type { CollisionSeverity, CityMapData, FleetReport, HudSnapshot, MapServiceLocation, MapSignal, PlayerSave, Point } from '../../types/game';
@@ -33,9 +34,14 @@ import { FleetVehicleSystem } from '../fleet/FleetVehicleSystem';
 import { roundMoney } from '../economy/TransactionLedger';
 
 type SignalVisual = { signal: MapSignal; graphics: Phaser.GameObjects.Graphics };
+const DETAILED_ROAD_MARKINGS = new Set(['motorway', 'motorway_link', 'trunk', 'trunk_link', 'primary', 'primary_link', 'secondary', 'secondary_link', 'tertiary']);
 
 export class MainScene extends Phaser.Scene {
   private map?: CityMapData;
+  private mapStream?: CityMapStream;
+  private mapStreamLoading = false;
+  private mapVisuals: Phaser.GameObjects.GameObject[] = [];
+  private mapRenderCenter: Point | null = null;
   private router?: GraphRouter;
   private vehicle?: VehicleController;
   private vehicleVisual?: Phaser.GameObjects.Container;
@@ -124,15 +130,20 @@ export class MainScene extends Phaser.Scene {
   private async initialize() {
     try {
       this.offlineReport = simulateOfflineReturn(this.save);
-      this.map = await loadCityMap();
+      this.mapStream = await CityMapStream.create();
+      this.map = await this.mapStream.windowAt(this.save.position);
       this.router = new GraphRouter(this.map.graph, this.map.roads);
       const surface = new RoadSurfaceIndex(this.map.roads);
       this.roadSurface = surface;
-      let spawn = this.router.nearest({ x: 0, y: 0 });
-      if (surface.distanceFromRoad(this.save.position) > 3 || Math.hypot(this.save.position.x, this.save.position.y) > 1_600) {
+      let spawn = this.router.nearest(this.save.position);
+      const recoveryPosition = surface.distanceFromRoad(this.save.position) <= 12
+        ? this.save.position
+        : this.save.lastSafePosition;
+      if (surface.distanceFromRoad(recoveryPosition) > 12) {
         this.save.position = { x: spawn.x, y: spawn.y };
       } else {
-        spawn = this.router.nearest(this.save.position);
+        this.save.position = { ...recoveryPosition };
+        spawn = this.router.nearest(recoveryPosition);
       }
       this.renderMap(this.map);
       this.vehicle = new VehicleController(this.save.position, this.save.rotation, surface);
@@ -153,8 +164,12 @@ export class MainScene extends Phaser.Scene {
         comfortLevel: this.save.upgrades.comfort,
         rating: this.save.rating,
         taxiLicensed: this.activeFleetVehicle()?.taxiLicensed === true,
-        taxiPoints: this.map.taxiPoints
+        taxiPoints: this.map.taxiPoints,
+        regions: this.map.manifest?.regions
       });
+      if (this.mission.mission.phase === 'pickup' || this.mission.mission.phase === 'passenger-on-board') {
+        this.mission.recalculate(this.vehicle.position, this.vehicle.rotation);
+      }
       this.services = new ServiceSystem(this, this.map.services, this.project);
       this.taxiPoints = new TaxiPointSystem(this, this.map.taxiPoints, this.project);
       const garage = this.map.services.find((service) => service.id === this.save.fleet.garageServiceId)?.entrance ?? { x: -744.43, y: 55.13 };
@@ -167,7 +182,13 @@ export class MainScene extends Phaser.Scene {
       this.syncMissionVisuals();
       this.time.addEvent({ delay: GAME_CONFIG.storage.autosaveMs, loop: true, callback: () => this.persist() });
       this.initialized = true;
-      if (this.offlineReport) {
+      const mapLocation = this.mapStream.location(this.vehicle.position);
+      this.save.currentChunk = mapLocation.chunkId;
+      this.save.currentRegion = mapLocation.region.name;
+      if (this.save.mapMigrationNotice) {
+        this.save.mapMigrationNotice = false;
+        this.emitToast('Mapa atualizado: o veículo foi alinhado à faixa válida mais próxima.', 'info');
+      } else if (this.offlineReport) {
         this.fleetReportNotifiedId = this.offlineReport.id;
         this.emitToast(`Relatório da frota: ${this.offlineReport.rides} corridas, lucro ${this.formatMoney(this.offlineReport.netProfit)}.`, 'success');
       } else this.emitToast('Direção manual livre. Ative o piloto automático acima do menu quando quiser.', 'info');
@@ -191,6 +212,7 @@ export class MainScene extends Phaser.Scene {
     this.services?.update(this.simulationSeconds);
     this.taxiPoints?.update(this.simulationSeconds);
     this.airTraffic?.update(Math.min(0.1, delta / 1000), this.simulationSeconds);
+    this.updateMapStreaming();
 
     if ((this.mission.mission.phase !== 'completed' || this.services?.selected) && time - this.lastRouteUpdate > 500) {
       this.drawRoute();
@@ -282,7 +304,7 @@ export class MainScene extends Phaser.Scene {
     );
     if (trafficUpdate.autopilotDeadlockRecovery) {
       this.vehicle.recoverAutopilotToLane(input.assistanceHeading);
-      this.mission.recalculate(this.vehicle.position);
+      this.mission.recalculate(this.vehicle.position, this.vehicle.rotation);
       this.syncMissionVisuals();
       this.autopilotCollisionRecoveryUntil = this.simulationSeconds + GAME_CONFIG.traffic.autopilotCollisionGhostSeconds;
     }
@@ -295,7 +317,7 @@ export class MainScene extends Phaser.Scene {
     );
     if (collision.autopilotRecovery) {
       this.vehicle.recoverAutopilotToLane(input.assistanceHeading);
-      this.mission.recalculate(this.vehicle.position);
+      this.mission.recalculate(this.vehicle.position, this.vehicle.rotation);
       this.syncMissionVisuals();
       this.autopilotCollisionRecoveryUntil = this.simulationSeconds + GAME_CONFIG.traffic.autopilotCollisionGhostSeconds;
     }
@@ -335,7 +357,8 @@ export class MainScene extends Phaser.Scene {
       travelled,
       this.save.rating,
       this.autopilotEnabled ? GAME_CONFIG.mission.autopilotInteractionRadiusMeters : GAME_CONFIG.mission.interactionRadiusMeters,
-      this.autopilotEnabled ? GAME_CONFIG.mission.autopilotMaxInteractionSpeedKmh : GAME_CONFIG.mission.maxInteractionSpeedKmh
+      this.autopilotEnabled ? GAME_CONFIG.mission.autopilotMaxInteractionSpeedKmh : GAME_CONFIG.mission.maxInteractionSpeedKmh,
+      this.vehicle.rotation
     );
     if (missionEvent === 'picked-up') {
       if (this.mission.mission.rideMode === 'official-taxi') {
@@ -399,7 +422,7 @@ export class MainScene extends Phaser.Scene {
       && time >= this.autopilotNextMissionAt
     ) {
       this.mission.next(this.vehicle.position, this.save.completedRides);
-      if (this.mission.accept(this.vehicle.position)) this.prepareAcceptedTaxiRide();
+      if (this.mission.accept(this.vehicle.position, this.vehicle.rotation)) this.prepareAcceptedTaxiRide();
       this.autopilotNextMissionAt = 0;
       this.syncMissionVisuals();
       this.emitToast('Nova corrida recomendada aceita. Indo buscar o cliente.', 'success');
@@ -409,7 +432,7 @@ export class MainScene extends Phaser.Scene {
       const routeDeviation = this.mission.advanceRoute(this.vehicle.position);
       this.offRouteSeconds = routeDeviation > 28 ? this.offRouteSeconds + dt : 0;
       if (this.offRouteSeconds > 2.5) {
-        this.mission.recalculate(this.vehicle.position);
+        this.mission.recalculate(this.vehicle.position, this.vehicle.rotation);
         this.routeRecalculations += 1;
         this.offRouteSeconds = 0;
         this.emitToast('Rota recalculada: retomando o caminho principal.', 'info');
@@ -481,7 +504,7 @@ export class MainScene extends Phaser.Scene {
 
     if (this.autopilotEnabled && this.vehicle && this.mission && this.traffic) {
       if (this.mission.mission.phase === 'offered' && !this.services?.selected) {
-        if (this.mission.accept(this.vehicle.position)) this.prepareAcceptedTaxiRide();
+        if (this.mission.accept(this.vehicle.position, this.vehicle.rotation)) this.prepareAcceptedTaxiRide();
         this.syncMissionVisuals();
       }
       const activeRoute = this.activeRoute();
@@ -568,9 +591,56 @@ export class MainScene extends Phaser.Scene {
     return Math.hypot(this.vehicle.position.x - target.x, this.vehicle.position.y - target.y);
   }
 
+  private updateMapStreaming() {
+    if (!this.mapStream || !this.vehicle || !this.traffic || !this.roadSurface || this.mapStreamLoading) return;
+    const focusPosition = this.followFleetVehicle
+      ? this.fleetVehicles?.activePosition() ?? this.vehicle.position
+      : this.vehicle.position;
+    if (!this.mapStream.needsWindow(focusPosition)) {
+      if (this.map && (!this.mapRenderCenter || Math.hypot(focusPosition.x - this.mapRenderCenter.x, focusPosition.y - this.mapRenderCenter.y) > 150)) {
+        this.renderMap(this.map);
+        this.drawRoute();
+      }
+      return;
+    }
+    this.mapStreamLoading = true;
+    const previousRegion = this.save.currentRegion;
+    void this.mapStream.windowAt(focusPosition).then((map) => {
+      if (!this.vehicle || !this.traffic || !this.roadSurface || !this.mapStream) return;
+      this.map = map;
+      this.roadSurface.replaceRoads(map.roads);
+      this.traffic.updateMap(map.roads, map.signals, focusPosition);
+      this.renderMap(map);
+      const location = this.mapStream.location(focusPosition);
+      this.save.currentChunk = location.chunkId;
+      this.save.currentRegion = location.region.name;
+      if (previousRegion !== this.save.currentRegion) this.emitToast(`Entrando em ${this.save.currentRegion}.`, 'info');
+      if (this.showGraph) this.renderDebugGraph();
+      this.drawRoute();
+    }).catch((error) => {
+      console.error(error);
+      this.emitToast('O próximo trecho do mapa não pôde ser carregado. Tentando novamente.', 'warning');
+    }).finally(() => {
+      this.mapStreamLoading = false;
+    });
+  }
+
   private renderMap(map: CityMapData) {
+    for (const visual of this.mapVisuals) visual.destroy();
+    this.mapVisuals = [];
+    this.signalVisuals = [];
+    const renderCenter = this.followFleetVehicle
+      ? this.fleetVehicles?.activePosition() ?? this.vehicle?.position ?? this.save.position
+      : this.vehicle?.position ?? this.save.position;
+    this.mapRenderCenter = { ...renderCenter };
+    const renderRadius = this.save.settings.cameraZoom === 'far' ? 560 : 420;
+    const visibleRoads = map.roads.filter((road) => pointsNear(road.points, renderCenter, renderRadius));
+    const visibleBuildings = map.buildings.filter((building) => pointsNear(building.points, renderCenter, renderRadius));
+    const visibleStops = map.busStops.filter((stop) => Math.hypot(stop.x - renderCenter.x, stop.y - renderCenter.y) <= renderRadius);
+    const visibleSignals = map.signals.filter((signal) => Math.hypot(signal.x - renderCenter.x, signal.y - renderCenter.y) <= renderRadius);
     const ground = this.add.graphics().setDepth(-20);
-    ground.fillStyle(0x8fb878).fillRect(-2_000, -1_600, 4_000, 3_200);
+    this.mapVisuals.push(ground);
+    ground.fillStyle(0x8fb878).fillRect(-20_000, -20_000, 40_000, 40_000);
     ground.fillStyle(0x7da66d, 0.55);
     for (let index = 0; index < 130; index += 1) {
       const x = ((index * 173) % 2_100) - 1_050;
@@ -582,7 +652,8 @@ export class MainScene extends Phaser.Scene {
     }
 
     const buildings = this.add.graphics().setDepth(3);
-    for (const building of map.buildings) {
+    this.mapVisuals.push(buildings);
+    for (const building of visibleBuildings) {
       const points = building.points.map((point) => {
         const projected = this.project(point);
         return new Phaser.Math.Vector2(projected.x, projected.y);
@@ -595,16 +666,18 @@ export class MainScene extends Phaser.Scene {
     }
 
     const roads = this.add.graphics().setDepth(8);
-    for (const road of map.roads) {
+    this.mapVisuals.push(roads);
+    for (const road of visibleRoads) {
       const width = visibleRoadWidth(road);
       roads.lineStyle(width + 2.2, 0xd7d3c8, 1);
       this.strokeRoad(roads, road.points);
     }
-    for (const road of map.roads) {
+    for (const road of visibleRoads) {
       const width = visibleRoadWidth(road);
       roads.lineStyle(width, road.highway === 'service' ? 0x5d6570 : 0x454e59, 1);
       this.strokeRoad(roads, road.points);
-      if (road.lanes >= 2 && road.points.length > 1) {
+      const renderLaneMarkings = this.save.settings.quality === 'high' || DETAILED_ROAD_MARKINGS.has(road.highway);
+      if (renderLaneMarkings && road.lanes >= 2 && road.points.length > 1) {
         if (!road.oneway) {
           roads.lineStyle(0.38, 0xf8d96a, 0.9);
           this.strokeRoad(roads, road.points);
@@ -618,12 +691,13 @@ export class MainScene extends Phaser.Scene {
         }
       }
     }
-    this.renderBusStops(map);
-    this.renderSignals(map);
+    this.renderBusStops(visibleStops);
+    this.renderSignals(visibleSignals);
 
-    this.add.text(0, 0, '© OpenStreetMap contributors', {
+    const attribution = this.add.text(0, 0, '© OpenStreetMap contributors', {
       fontFamily: 'Inter, sans-serif', fontSize: '10px', color: '#f8fafc', backgroundColor: '#102a43aa', padding: { x: 5, y: 3 }
     }).setScrollFactor(0).setPosition(8, this.scale.height - 92).setDepth(1000);
+    this.mapVisuals.push(attribution);
   }
 
   private strokeRoad(graphics: Phaser.GameObjects.Graphics, points: Point[]) {
@@ -646,17 +720,19 @@ export class MainScene extends Phaser.Scene {
     });
   }
 
-  private renderBusStops(map: CityMapData) {
-    for (const [index, stop] of map.busStops.entries()) {
+  private renderBusStops(stops: CityMapData['busStops']) {
+    const maximumStops = this.save.settings.quality === 'high' ? stops.length : this.save.settings.quality === 'low' ? 12 : 20;
+    for (const [index, stop] of stops.slice(0, maximumStops).entries()) {
       const p = this.project(stop);
       const container = this.add.container(p.x, p.y).setDepth(22);
+      this.mapVisuals.push(container);
       const shelter = this.add.graphics();
       shelter.fillStyle(0x102a43, 0.92).fillRect(-3.7, -4.4, 0.55, 5.4).fillRect(3.2, -4.4, 0.55, 5.4);
       shelter.fillStyle(0x1fb997, 0.9).fillRoundedRect(-4.2, -5, 8.4, 1.1, 0.3);
       shelter.fillStyle(0x8fd3e8, 0.42).fillRect(-3.1, -3.9, 6.2, 3.8);
       shelter.fillStyle(0xf7c948).fillCircle(4.8, -4.3, 1.25);
       container.add(shelter);
-      const count = 1 + (index * 3) % 5;
+      const count = this.save.settings.quality === 'high' ? 1 + (index * 3) % 5 : 1 + index % 2;
       for (let personIndex = 0; personIndex < count; personIndex += 1) {
         const person = this.add.graphics();
         person.fillStyle(0x5b3b2e).fillCircle(0, -1.5, 0.45);
@@ -671,10 +747,11 @@ export class MainScene extends Phaser.Scene {
     }
   }
 
-  private renderSignals(map: CityMapData) {
-    for (const signal of map.signals) {
+  private renderSignals(signals: MapSignal[]) {
+    for (const signal of signals) {
       const p = this.project(signal);
       const graphics = this.add.graphics().setPosition(p.x, p.y).setDepth(26);
+      this.mapVisuals.push(graphics);
       this.signalVisuals.push({ signal, graphics });
     }
     this.updateSignals();
@@ -793,7 +870,7 @@ export class MainScene extends Phaser.Scene {
       this.autopilotStuckSeconds = 0;
       if (this.autopilotEnabled) {
         this.mobileInput = { throttle: 0, steering: 0, handbrake: false };
-        if (this.vehicle && this.mission?.mission.phase === 'offered' && !this.services?.selected && this.mission.accept(this.vehicle.position)) this.prepareAcceptedTaxiRide();
+        if (this.vehicle && this.mission?.mission.phase === 'offered' && !this.services?.selected && this.mission.accept(this.vehicle.position, this.vehicle.rotation)) this.prepareAcceptedTaxiRide();
         const route = this.activeRoute();
         const guidance = this.vehicle && route.length >= 2
           ? guidanceForRoute(
@@ -806,7 +883,7 @@ export class MainScene extends Phaser.Scene {
           )
           : null;
         if (this.vehicle?.engageAutopilot(guidance?.preferredRoadHeading) && this.mission) {
-          this.mission.recalculate(this.vehicle.position);
+          this.mission.recalculate(this.vehicle.position, this.vehicle.rotation);
           this.syncMissionVisuals();
         }
         if (this.mission?.mission.phase === 'completed') {
@@ -837,6 +914,7 @@ export class MainScene extends Phaser.Scene {
     if (command.type === 'set-camera-zoom') {
       this.save.settings.cameraZoom = command.zoom;
       this.cameras.main.setZoom(GAME_CONFIG.camera.zoomPresets[command.zoom]);
+      if (this.map) this.renderMap(this.map);
       this.emitToast(`Distância da câmera: ${command.zoom}.`, 'info');
       return;
     }
@@ -878,7 +956,7 @@ export class MainScene extends Phaser.Scene {
       return;
     }
     if (command.type === 'accept-ride' && this.mission && this.vehicle) {
-      if (this.mission.accept(this.vehicle.position)) {
+      if (this.mission.accept(this.vehicle.position, this.vehicle.rotation)) {
         this.prepareAcceptedTaxiRide();
         this.emitToast('Corrida aceita. Siga até o embarque.', 'success');
         this.syncMissionVisuals();
@@ -1007,7 +1085,7 @@ export class MainScene extends Phaser.Scene {
     if (!this.services || !this.router || !this.vehicle) return;
     const location = this.services.select(serviceId);
     if (!location) return;
-    const toEntrance = this.router.drivingRoute(this.vehicle.position, location.entrance);
+    const toEntrance = this.router.drivingRoute(this.vehicle.position, location.entrance, this.vehicle.rotation);
     this.serviceRoute = [...toEntrance, location.stopPoint];
     this.serviceArrived = false;
     this.drawRoute();
@@ -1086,8 +1164,8 @@ export class MainScene extends Phaser.Scene {
     this.serviceRoute = [];
     this.serviceArrived = false;
     if (this.vehicle && this.mission) {
-      if (this.autopilotEnabled && this.mission.mission.phase === 'offered') this.mission.accept(this.vehicle.position);
-      this.mission.recalculate(this.vehicle.position);
+      if (this.autopilotEnabled && this.mission.mission.phase === 'offered') this.mission.accept(this.vehicle.position, this.vehicle.rotation);
+      this.mission.recalculate(this.vehicle.position, this.vehicle.rotation);
     }
     this.syncMissionVisuals();
   }
@@ -1117,7 +1195,7 @@ export class MainScene extends Phaser.Scene {
     this.vehicle.alignToRoad(true, this.save.rotation);
     this.refreshPlayerVehicleVisual();
     this.updateMissionVehicleContext();
-    this.mission?.recalculate(this.vehicle.position);
+    this.mission?.recalculate(this.vehicle.position, this.vehicle.rotation);
     this.syncMissionVisuals();
   }
 
@@ -1127,7 +1205,8 @@ export class MainScene extends Phaser.Scene {
       comfortLevel: this.save.upgrades.comfort,
       rating: this.save.rating,
       taxiLicensed: this.activeFleetVehicle()?.taxiLicensed === true,
-      taxiPoints: this.map?.taxiPoints ?? []
+      taxiPoints: this.map?.taxiPoints ?? [],
+      regions: this.map?.manifest?.regions ?? []
     });
   }
 
@@ -1188,7 +1267,7 @@ export class MainScene extends Phaser.Scene {
     if (action === 'repair') { this.save.collisionDamage = 0; this.save.maintenanceWear = 0; }
     this.save.condition = vehicleCondition(this.save.collisionDamage, this.save.maintenanceWear);
     if (action === 'teleport-pickup') {
-      if (this.mission.mission.phase === 'offered') this.mission.accept(this.vehicle.position);
+      if (this.mission.mission.phase === 'offered') this.mission.accept(this.vehicle.position, this.vehicle.rotation);
       this.vehicle.teleport(this.mission.mission.pickup);
     }
     if (action === 'teleport-destination') this.vehicle.teleport(this.mission.mission.destination);
@@ -1198,7 +1277,7 @@ export class MainScene extends Phaser.Scene {
       this.serviceArrived = false;
     }
     if (action === 'complete') {
-      if (this.mission.mission.phase === 'offered') this.mission.accept(this.vehicle.position);
+      if (this.mission.mission.phase === 'offered') this.mission.accept(this.vehicle.position, this.vehicle.rotation);
       if (this.mission.mission.phase === 'pickup') this.vehicle.teleport(this.mission.mission.pickup);
       else this.vehicle.teleport(this.mission.mission.destination);
     }
@@ -1239,7 +1318,7 @@ export class MainScene extends Phaser.Scene {
       this.syncMissionVisuals();
     }
     if (action === 'meter-start') {
-      if (this.mission.mission.phase === 'offered') this.mission.accept(this.vehicle.position);
+      if (this.mission.mission.phase === 'offered') this.mission.accept(this.vehicle.position, this.vehicle.rotation);
       this.prepareAcceptedTaxiRide(); markTaxiBoarding(this.save.taxiMeter); startTaxiMeter(this.save.taxiMeter);
     }
     if (action === 'meter-finish') finishTaxiMeter(this.save.taxiMeter);
@@ -1342,7 +1421,13 @@ export class MainScene extends Phaser.Scene {
       total: 0, capacity: 0, hardCeiling: GAME_CONFIG.traffic.maximumTerrestrialEntities, reservedSlots: 0,
       buses: 0, utility: 0, stunned: 0, ghosted: 0, deadlockRecoveries: 0, brakeReason: 'clear' as const, stopReason: 'Livre'
     };
-    const nearbyService = this.services?.nearest(this.vehicle.position) ?? null;
+    const selectedService = this.services?.selected ?? null;
+    const selectedServiceDistance = selectedService
+      ? Math.hypot(this.vehicle.position.x - selectedService.stopPoint.x, this.vehicle.position.y - selectedService.stopPoint.y)
+      : Number.POSITIVE_INFINITY;
+    const nearbyService = selectedService && selectedServiceDistance <= GAME_CONFIG.services.interactionRadiusMeters
+      ? selectedService
+      : this.services?.nearest(this.vehicle.position) ?? null;
     const fleetTelemetry = this.fleetVehicles?.routeTelemetry() ?? {
       target: null, remaining: 0, routeRemaining: 0, completedStops: 0,
       recoveries: 0, lastRecoveryReason: null, identification: null
@@ -1436,7 +1521,12 @@ export class MainScene extends Phaser.Scene {
       fleetRouteRecoveries: fleetTelemetry.recoveries,
       fleetLastRecoveryReason: fleetTelemetry.lastRecoveryReason,
       fleetDriverIdentification: fleetTelemetry.identification,
-      totalTerrestrialEntities: Math.min(trafficStats.hardCeiling, trafficStats.total + 1 + (this.fleetVehicles?.isVisible() ? 1 : 0))
+      totalTerrestrialEntities: Math.min(trafficStats.hardCeiling, trafficStats.total + 1 + (this.fleetVehicles?.isVisible() ? 1 : 0)),
+      mapVersion: this.save.mapVersion,
+      currentRegion: this.save.currentRegion,
+      currentChunk: this.save.currentChunk,
+      loadedMapChunks: this.map?.loadedChunkIds?.length ?? 0,
+      mapRegions: this.map?.manifest?.regions.map((region) => region.name) ?? []
     };
     gameEvents.emit('hud', snapshot);
   }
@@ -1471,6 +1561,22 @@ export class MainScene extends Phaser.Scene {
   private persist() {
     if (!this.vehicle) return;
     this.save.position = { ...this.vehicle.position };
+    this.save.localPosition = { ...this.vehicle.position };
+    this.save.geographicPosition = localMetersToLatLon(
+      this.vehicle.position.x,
+      this.vehicle.position.y,
+      this.map?.metadata.origin ?? { lat: -15.7942, lon: -47.8822 }
+    );
+    if (this.vehicle.roadEdgeClearance() > 0) this.save.lastSafePosition = { ...this.vehicle.position };
+    if (this.mapStream) {
+      const location = this.mapStream.location(this.vehicle.position);
+      this.save.currentChunk = location.chunkId;
+      this.save.currentRegion = location.region.name;
+    }
+    const nearestLaneNode = this.router?.nearest(this.vehicle.position);
+    this.save.laneId = nearestLaneNode?.laneId ?? null;
+    this.save.roadSegmentId = nearestLaneNode?.roadSegmentId ?? null;
+    this.save.mapVersion = GAME_CONFIG.mapVersion;
     this.save.rotation = this.vehicle.rotation;
     this.save.activeMission = this.mission?.snapshot() ?? null;
     this.save.autopilotEnabled = this.autopilotEnabled;
@@ -1482,6 +1588,23 @@ export class MainScene extends Phaser.Scene {
   private pickLine(lines: readonly string[]) {
     return lines[this.save.completedRides % lines.length];
   }
+}
+
+function pointsNear(points: Point[], center: Point, radius: number) {
+  if (!points.length) return false;
+  let minX = Number.POSITIVE_INFINITY;
+  let minY = Number.POSITIVE_INFINITY;
+  let maxX = Number.NEGATIVE_INFINITY;
+  let maxY = Number.NEGATIVE_INFINITY;
+  for (const point of points) {
+    minX = Math.min(minX, point.x);
+    minY = Math.min(minY, point.y);
+    maxX = Math.max(maxX, point.x);
+    maxY = Math.max(maxY, point.y);
+  }
+  const nearestX = Math.max(minX, Math.min(center.x, maxX));
+  const nearestY = Math.max(minY, Math.min(center.y, maxY));
+  return Math.hypot(nearestX - center.x, nearestY - center.y) <= radius;
 }
 
 function collisionMessage(severity: CollisionSeverity | null, relativeSpeedKmh: number) {

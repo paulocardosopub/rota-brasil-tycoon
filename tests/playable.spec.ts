@@ -226,7 +226,7 @@ test('recarregar preserva a corrida em andamento sem duplicar progresso', async 
   await expect(page.getByTestId('receipt-card')).toBeHidden();
 });
 
-test('pagamento da corrida entra uma vez no ledger e persiste no save v4', async ({ page }) => {
+test('pagamento da corrida entra uma vez no ledger e persiste no save v5', async ({ page }) => {
   await page.goto('./');
   await page.getByTestId('guest-button').click();
   const hud = page.locator('[data-game-ready="true"]');

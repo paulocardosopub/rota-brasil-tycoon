@@ -1,0 +1,19 @@
+{
+  "source": "OpenStreetMap",
+  "license": "ODbL 1.0",
+  "importedAt": "2026-07-16T23:23:32.108Z",
+  "bbox": {
+    "south": -15.84,
+    "west": -47.95,
+    "north": -15.73,
+    "east": -47.83
+  },
+  "overpassQueryVersion": "0.7.0",
+  "modifications": [
+    "filtro de vias dirigíveis",
+    "inferência canônica de corredores",
+    "grafo por faixa",
+    "chunks de 800 m"
+  ],
+  "overrideFile": "data/map-overrides/brasilia/road-overrides.json"
+}
