@@ -14,11 +14,15 @@ export default defineConfig({
     baseURL: `http://127.0.0.1:${port}${path}`,
     trace: 'retain-on-failure'
   },
-  webServer: {
+  webServer: [{
     command: `npm run dev -- --port ${port}`,
     url: `http://127.0.0.1:${port}`,
     reuseExistingServer: true
-  },
+  }, {
+    command: 'npm run online:mock',
+    url: 'http://127.0.0.1:4175',
+    reuseExistingServer: true
+  }],
   projects: [
     { name: 'chromium', use: { ...devices['Desktop Chrome'] } }
   ]

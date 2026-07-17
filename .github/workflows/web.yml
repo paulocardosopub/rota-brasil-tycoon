@@ -25,11 +25,17 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
+      - run: npm run typecheck
       - run: npm run map:validate
       - run: npm run navigation:simulate
+      - run: npm run traffic:simulate
       - run: npm run economy:simulate
+      - run: npm run online:simulate
       - run: npm run test
       - run: npm run build
+        env:
+          VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ vars.VITE_SUPABASE_PUBLISHABLE_KEY }}
       - run: npx playwright install --with-deps chromium
       - run: npm run test:e2e
       - uses: actions/configure-pages@v5

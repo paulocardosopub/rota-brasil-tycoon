@@ -115,6 +115,22 @@ export class FleetVehicleSystem {
     return this.controller ? { ...this.controller.position } : null;
   }
 
+  publicMovementState(save: PlayerSave) {
+    const shift = save.fleet.activeShift;
+    const vehicle = shift ? save.fleet.vehicles.find((item) => item.id === shift.vehicleId) : undefined;
+    if (!shift || !vehicle || !this.controller || !this.visual?.visible) return null;
+    return {
+      vehicleId: vehicle.id,
+      vehicleModel: vehicle.model,
+      position: { ...this.controller.position },
+      heading: this.controller.rotation,
+      speed: this.controller.speed,
+      acceleration: 0,
+      occupied: shift.state === 'with-passenger',
+      braking: Math.abs(this.controller.speed) < 0.4
+    };
+  }
+
   routeTelemetry() {
     const target = this.routePlan.current(this.waypoints);
     return {

@@ -15,7 +15,7 @@ const emptyUpgrades = { engine: 0, brakes: 0, tires: 0, suspension: 0, economy: 
 const emptySave = createNewSave();
 const initialHud: HudSnapshot = {
   ready: false,
-  settings: { quality: 'automatic', cameraMode: 'follow', audio: true, masterVolume: 0.7, engineVolume: 0.55, effectsVolume: 0.75, cameraShake: true, cameraZoom: 'normal', trafficDensity: 'automatic' },
+  settings: { quality: 'automatic', cameraMode: 'follow', audio: true, masterVolume: 0.7, engineVolume: 0.55, effectsVolume: 0.75, cameraShake: true, cameraZoom: 'normal', trafficDensity: 'automatic', showPlayerNames: true, showFleetNames: true, showPlayersOnMap: true, remoteSounds: true, onlineVisualLimit: 24, publicPresence: true },
   money: 100, speedKmh: 0, fuel: 18, fuelCapacity: 40, condition: 70, objective: 'Carregando o mapa de Brasília…',
   distanceRemaining: 0, etaSeconds: 0, headingDelta: 0, vehicleHeading: 0, fps: 0, redLightWarning: false,
   trafficVehicles: 0, trafficBuses: 0, trafficStunned: 0, trafficGhosted: 0, autopilotDeadlockRecoveries: 0,
@@ -32,7 +32,8 @@ const initialHud: HudSnapshot = {
   fleetVehicleVisible: false, fleetRouteTarget: null, fleetRouteRemaining: 0, fleetRoutePathRemaining: 0,
   fleetCompletedStops: 0, fleetRouteRecoveries: 0, fleetLastRecoveryReason: null,
   fleetDriverIdentification: null, totalTerrestrialEntities: 1,
-  mapVersion: GAME_CONFIG.mapVersion, currentRegion: 'Setores Centrais', currentChunk: '0_0', loadedMapChunks: 0, mapRegions: []
+  mapVersion: GAME_CONFIG.mapVersion, currentRegion: 'Setores Centrais', currentChunk: '0_0', loadedMapChunks: 0, mapRegions: [],
+  online: { mode: 'online', state: 'OFFLINE', accountLinkState: 'local', publicSessionId: null, nearbyPlayers: 0, remoteEmployees: 0, offlineDeployments: 0, pingMs: null, quality: 'offline', subscribedTopics: [], sendRateHz: 0, receiveRateHz: 0, sequence: 0, interpolationBuffer: 0, extrapolating: 0, lostPackets: 0, outOfOrderPackets: 0, npcReplacements: 0, reconnectAttempts: 0, warning: null }
 };
 
 type Panel = 'rides' | 'garage' | 'fleet' | 'city' | 'settings' | 'cash' | null;
@@ -94,6 +95,10 @@ export function Hud() {
       data-fleet-completed-stops={hud.fleetCompletedStops} data-fleet-route-recoveries={hud.fleetRouteRecoveries}
       data-fleet-last-recovery={hud.fleetLastRecoveryReason ?? 'none'} data-map-version={hud.mapVersion}
       data-current-region={hud.currentRegion} data-current-chunk={hud.currentChunk} data-loaded-map-chunks={hud.loadedMapChunks}
+      data-online-state={hud.online.state} data-online-mode={hud.online.mode} data-online-nearby-players={hud.online.nearbyPlayers}
+      data-online-remote-employees={hud.online.remoteEmployees} data-online-session={hud.online.publicSessionId ?? 'none'}
+      data-online-send-rate={hud.online.sendRateHz} data-online-receive-rate={hud.online.receiveRateHz}
+      data-online-npc-replacements={hud.online.npcReplacements} data-online-channels={hud.online.subscribedTopics.length}
     >
       <header className="top-hud">
         <div className="brand-chip"><span>RB</span><div><b>Brasília</b><small>{hud.currentRegion} • Dia</small></div></div>
@@ -108,6 +113,8 @@ export function Hud() {
           <button className="icon-button" onClick={() => choosePanel('settings')} aria-label="Configurações">⚙</button>
         </div>
       </header>
+      <OnlineBadge hud={hud} />
+      {hud.online.accountLinkState === 'anonymous' && <div className="guest-account-notice">Conta de visitante. Vincule um e-mail para não perder o acesso em outro dispositivo.</div>}
 
       <section className="objective-card" data-testid="objective-card"><div className="objective-icon" style={{ transform: `rotate(${hud.headingDelta}rad)` }}>↑</div><div><small>OBJETIVO ATUAL</small><strong>{hud.objective}</strong><span>{hud.distanceRemaining < 1_000 ? `${Math.round(hud.distanceRemaining)} m` : `${(hud.distanceRemaining / 1000).toFixed(1)} km`} • aprox. {eta}</span></div></section>
       <div className="speedometer" data-testid="speedometer"><strong>{Math.round(hud.speedKmh)}</strong><span>km/h</span><small>{hud.speedKmh < 1 ? 'P' : 'D'}</small></div>
@@ -144,6 +151,14 @@ export function Hud() {
   );
 }
 
+function OnlineBadge({ hud }: { hud: HudSnapshot }) {
+  const online = hud.online;
+  const label = online.state === 'ONLINE' ? 'ONLINE' : online.state === 'RECONNECTING' ? 'RECONECTANDO' : online.mode === 'solo' || online.state === 'SOLO' ? 'SOLO' : 'SOLO TEMPORÁRIO';
+  return <div className={`online-badge ${online.state.toLowerCase()}`} data-testid="online-badge" title={online.warning ?? undefined}>
+    <i /><b>{label}</b>{online.state === 'ONLINE' && <><span>{online.nearbyPlayers} perto</span><span>{online.pingMs ?? '—'} ms</span></>}
+  </div>;
+}
+
 function TaxiMeter({ hud }: { hud: HudSnapshot }) {
   const meter = hud.taxiMeter;
   const labels = { free: 'LIVRE', 'en-route': 'A CAMINHO', boarding: 'EMBARQUE', occupied: 'OCUPADO', waiting: 'AGUARDANDO', finished: 'FINALIZADO' } as const;
@@ -167,7 +182,7 @@ function PanelContent({ panel, hud, close }: { panel: Exclude<Panel, null>; hud:
     {panel === 'fleet' && <FleetPanel hud={hud} confirm={confirm} />}
     {panel === 'city' && <ServicesPanel hud={hud} confirm={confirm} />}
     {panel === 'cash' && <CashPanel hud={hud} confirm={confirm} />}
-    {panel === 'settings' && <SettingsPanel hud={hud} />}
+    {panel === 'settings' && <><SettingsPanel hud={hud} /><OnlineSettingsPanel hud={hud} /></>}
     {confirmation && <div className="confirm-strip"><b>Confirmar {confirmation.label}?</b><button className="primary-button" onClick={execute}>Confirmar</button><button className="ghost-button" onClick={() => setConfirmation(null)}>Voltar</button></div>}
   </aside>;
 }
@@ -254,6 +269,31 @@ function SettingsPanel({ hud }: { hud: HudSnapshot }) {
   return <><div className="panel-kicker">CONFIGURAÇÕES</div><h2>Experiência de jogo</h2><label className="quality-select">Qualidade gráfica<select value={hud.settings.quality} onChange={(event) => setQuality(event.target.value as Quality)}><option value="automatic">Automática</option><option value="low">Baixa</option><option value="medium">Média</option><option value="high">Alta</option></select></label><label className="quality-select">Distância da câmera<select value={hud.settings.cameraZoom} onChange={(event) => setZoom(event.target.value as CameraZoom)}><option value="near">Próxima</option><option value="normal">Normal</option><option value="far">Distante</option></select></label><label className="quality-select">Densidade do trânsito<select value={hud.settings.trafficDensity} onChange={(event) => setDensity(event.target.value as TrafficDensity)}><option value="automatic">Automática • leve</option><option value="low">Baixa</option><option value="medium">Média</option><option value="high">Alta • 72 NPCs</option></select></label><label className="toggle-setting"><input type="checkbox" checked={hud.settings.cameraShake} onChange={(event) => gameEvents.emit('command', { type: 'set-camera-shake', enabled: event.target.checked })} /> Vibração da câmera em impactos</label><label className="toggle-setting"><input type="checkbox" checked={hud.settings.audio} onChange={(event) => gameEvents.emit('command', { type: 'set-audio', enabled: event.target.checked })} /> Áudio do jogo</label><p>WASD controla livremente. O piloto segue rotas e serviços. Espaço: freio de mão • R: reposicionar.</p><button className="danger-button" onClick={() => { if (confirm('Apagar todo o progresso local?')) { deleteSave(); location.reload(); } }}>Apagar progresso</button></>;
 }
 
+function OnlineSettingsPanel({ hud }: { hud: HudSnapshot }) {
+  const toggle = (setting: 'showPlayerNames' | 'showFleetNames' | 'showPlayersOnMap' | 'remoteSounds' | 'publicPresence', enabled: boolean) =>
+    gameEvents.emit('command', { type: 'set-online-visibility', setting, enabled });
+  return <section className="online-settings">
+    <div className="panel-kicker">CIDADE COMPARTILHADA</div>
+    <h2>Modo de jogo</h2>
+    <label className="quality-select">Conexão
+      <select data-testid="online-mode-select" value={hud.online.mode} onChange={(event) => gameEvents.emit('command', { type: 'set-online-mode', mode: event.target.value as 'online' | 'solo' })}>
+        <option value="online">Online</option><option value="solo">Solo</option>
+      </select>
+    </label>
+    <label className="quality-select">Limite visual
+      <select value={hud.settings.onlineVisualLimit} onChange={(event) => gameEvents.emit('command', { type: 'set-online-visual-limit', limit: Number(event.target.value) })}>
+        <option value="8">8 veículos</option><option value="16">16 veículos</option><option value="24">24 veículos</option><option value="40">40 veículos</option>
+      </select>
+    </label>
+    <label className="toggle-setting"><input type="checkbox" checked={hud.settings.showPlayerNames} onChange={(event) => toggle('showPlayerNames', event.target.checked)} /> Mostrar nomes</label>
+    <label className="toggle-setting"><input type="checkbox" checked={hud.settings.showFleetNames} onChange={(event) => toggle('showFleetNames', event.target.checked)} /> Mostrar frotas</label>
+    <label className="toggle-setting"><input type="checkbox" checked={hud.settings.showPlayersOnMap} onChange={(event) => toggle('showPlayersOnMap', event.target.checked)} /> Jogadores próximos no mapa</label>
+    <label className="toggle-setting"><input type="checkbox" checked={hud.settings.remoteSounds} onChange={(event) => toggle('remoteSounds', event.target.checked)} /> Sons remotos limitados</label>
+    <label className="toggle-setting"><input type="checkbox" checked={hud.settings.publicPresence} onChange={(event) => toggle('publicPresence', event.target.checked)} /> Presença pública</label>
+    <p>{hud.online.warning ?? (hud.online.state === 'ONLINE' ? `${hud.online.nearbyPlayers} jogadores próximos • ${hud.online.pingMs ?? '—'} ms` : 'O jogo continua local quando o serviço online não responde.')}</p>
+  </section>;
+}
+
 function ReceiptCard({ hud }: { hud: HudSnapshot }) {
   const receipt = hud.receipt!;
   const official = hud.taxiMeter.state === 'finished';
@@ -268,9 +308,10 @@ function DevPanel({ hud, close }: { hud: HudSnapshot; close: () => void }) {
     ['hire-bia','Contratar Bia'],['hire-leo','Contratar Léo'],['hire-nara','Contratar Nara'],['dismiss-employee','Demitir'],['buy-sedan','Comprar Sedan'],['assign-first','Atribuir motorista'],['start-shift','Iniciar turno'],['end-shift','Encerrar turno'],
     ['fleet-hour','Simular 1 hora'],['fleet-eight-hours','Simular 8 horas'],['follow-fleet','Acompanhar frota'],['force-fuel','Forçar abastecimento'],['force-maintenance','Forçar manutenção'],
     ['traffic-ahead','NPC à frente'],['traffic-collision','NPC sobre o carro'],['traffic-head-on','NPC de frente'],['collision-light','Colisão leve'],['collision-moderate','Colisão moderada'],['collision-severe','Colisão severa'],
-    ['traffic','Alternar trânsito'],['signals','Alternar semáforos'],['signal-phase','Avançar fase dos sinais'],['graph','Grafo de rotas'],['reset','Reiniciar save']
+    ['traffic','Alternar trânsito'],['signals','Alternar semáforos'],['signal-phase','Avançar fase dos sinais'],['graph','Grafo de rotas'],
+    ['online-latency','Latência online'],['online-loss','Perda online'],['online-disconnect','Forçar reconexão'],['online-fake','Criar remoto fictício'],['online-clear','Limpar remotos'],['reset','Reiniciar save']
   ];
-  return <aside className="dev-panel"><button onClick={close}>×</button><h3>Painel de desenvolvimento 0.7.2</h3><p className="dev-metrics">{hud.fps} FPS • {hud.trafficVehicles}/{hud.trafficCapacity} NPCs • teto {hud.trafficHardCeiling}<br />Frota: {hud.fleet.vehicles.length} veículos • {hud.fleet.employees.length} motorista • vaga reservada {hud.trafficReservedSlots}</p><div>{actions.map(([action,label]) => <button key={action} onClick={() => gameEvents.emit('command', { type: 'dev', action })}>{label}</button>)}</div></aside>;
+  return <aside className="dev-panel"><button onClick={close}>×</button><h3>Painel de desenvolvimento 0.8.0</h3><p className="dev-metrics">{hud.fps} FPS • {hud.trafficVehicles}/{hud.trafficCapacity} NPCs • teto {hud.trafficHardCeiling}<br />Frota: {hud.fleet.vehicles.length} veículos • {hud.fleet.employees.length} motorista • vaga reservada {hud.trafficReservedSlots}<br />Online: {hud.online.state} • sessão {hud.online.publicSessionId ?? '—'} • chunk {hud.currentChunk}<br />Canais {hud.online.subscribedTopics.length} • TX {hud.online.sendRateHz} Hz • RX {hud.online.receiveRateHz} Hz • ping {hud.online.pingMs ?? '—'} ms<br />Buffer {hud.online.interpolationBuffer} • extrapolando {hud.online.extrapolating} • perdidos {hud.online.lostPackets} • fora de ordem {hud.online.outOfOrderPackets}<br />Remotos {hud.online.nearbyPlayers} • funcionários {hud.online.remoteEmployees} • NPCs substituídos {hud.online.npcReplacements}</p><div>{actions.map(([action,label]) => <button key={action} onClick={() => gameEvents.emit('command', { type: 'dev', action })}>{label}</button>)}</div></aside>;
 }
 
 type ConfirmFn = (label: string, command: GameCommand) => void;

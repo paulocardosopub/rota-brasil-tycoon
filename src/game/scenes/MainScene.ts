@@ -33,6 +33,8 @@ import {
 } from '../fleet/FleetService';
 import { FleetVehicleSystem } from '../fleet/FleetVehicleSystem';
 import { roundMoney } from '../economy/TransactionLedger';
+import { OnlineWorldClient, type LocalMovementState } from '../../online/OnlineWorldClient';
+import { RemoteVehicleSystem } from '../../online/RemoteVehicleSystem';
 
 type SignalVisual = { signal: MapSignal; graphics: Phaser.GameObjects.Graphics };
 const DETAILED_ROAD_MARKINGS = new Set(['motorway', 'motorway_link', 'trunk', 'trunk_link', 'primary', 'primary_link', 'secondary', 'secondary_link']);
@@ -94,6 +96,13 @@ export class MainScene extends Phaser.Scene {
   private followFleetVehicle = false;
   private fleetReportNotifiedId: string | null = null;
   private offlineReport?: FleetReport | null;
+  private online?: OnlineWorldClient;
+  private remoteVehicles?: RemoteVehicleSystem;
+  private lastOnlineSpeed = 0;
+  private lastOnlineUpdateAt = 0;
+  private onlineUnsubscribers: Array<() => void> = [];
+  private debugOnlineLatencyMs = 0;
+  private debugOnlineLossRate = 0;
 
   constructor(initialSave: PlayerSave) {
     super('MainScene');
@@ -113,7 +122,13 @@ export class MainScene extends Phaser.Scene {
       camera.setZoom(Phaser.Math.Clamp(camera.zoom - dy * 0.0015, GAME_CONFIG.camera.minZoom, GAME_CONFIG.camera.maxZoom));
     });
     this.unsubscribe = gameEvents.on('command', (command) => this.handleCommand(command));
-    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.unsubscribe?.());
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+      this.unsubscribe?.();
+      for (const unsubscribe of this.onlineUnsubscribers) unsubscribe();
+      this.onlineUnsubscribers = [];
+      this.remoteVehicles?.destroy();
+      void this.online?.stop();
+    });
     document.addEventListener('visibilitychange', this.handleVisibility);
     this.events.once(Phaser.Scenes.Events.DESTROY, () => {
       document.removeEventListener('visibilitychange', this.handleVisibility);
@@ -180,6 +195,15 @@ export class MainScene extends Phaser.Scene {
       this.taxiPoints = new TaxiPointSystem(this, this.map.taxiPoints, this.project);
       const garage = this.map.services.find((service) => service.id === this.save.fleet.garageServiceId)?.entrance ?? { x: -744.43, y: 55.13 };
       this.fleetVehicles = new FleetVehicleSystem(this, this.router, surface, this.traffic, this.project, this.map.taxiPoints, garage);
+      this.online = new OnlineWorldClient(this.save);
+      this.remoteVehicles = new RemoteVehicleSystem(this, this.traffic, this.project);
+      this.onlineUnsubscribers.push(
+        this.online.onSnapshot((snapshot, presence) => this.remoteVehicles?.receive(snapshot, presence)),
+        this.online.onPresence((profiles) => this.remoteVehicles?.updateProfiles(profiles)),
+        this.online.onConnection((state) => {
+          if (state === 'SOLO' || state === 'SOLO_TEMPORARY' || state === 'OFFLINE') this.remoteVehicles?.clear();
+        })
+      );
       this.airTraffic = new AirTrafficSystem(this);
       this.routeGraphics = this.add.graphics().setDepth(18);
       this.passengerVisual = createPassengerVisual(this).setPosition(0, 0);
@@ -191,6 +215,7 @@ export class MainScene extends Phaser.Scene {
       const mapLocation = this.mapStream.location(this.vehicle.position);
       this.save.currentChunk = mapLocation.chunkId;
       this.save.currentRegion = mapLocation.region.name;
+      void this.online.start(mapLocation.chunkId, this.adjacentChunks(mapLocation.chunkId));
       if (this.save.mapMigrationNotice) {
         this.save.mapMigrationNotice = false;
         this.emitToast('Mapa atualizado: o veículo foi alinhado à faixa válida mais próxima.', 'info');
@@ -219,6 +244,8 @@ export class MainScene extends Phaser.Scene {
     this.taxiPoints?.update(this.simulationSeconds);
     this.airTraffic?.update(Math.min(0.1, delta / 1000), this.simulationSeconds);
     this.updateMapStreaming();
+    if (this.remoteVehicles?.count()) this.remoteVehicles.update(Date.now(), this.vehicle.position, this.save.settings);
+    if (this.online?.isOnline()) this.publishOnlineMovement();
 
     if ((this.mission.mission.phase !== 'completed' || this.services?.selected) && time - this.lastRouteUpdate > 500) {
       this.drawRoute();
@@ -289,6 +316,13 @@ export class MainScene extends Phaser.Scene {
       this.save.condition = vehicleCondition(this.save.collisionDamage, this.save.maintenanceWear);
       this.mission.recordCollision();
       this.emitToast('Contato com o veículo da frota. Ambos reduziram para se separar.', 'warning');
+    }
+    const remoteCollision = this.remoteVehicles?.count()
+      ? this.remoteVehicles.handlePlayerCollision(this.vehicle.position, this.vehicle.speed)
+      : undefined;
+    if (remoteCollision?.impact) {
+      this.vehicle.speed *= remoteCollision.retainedSpeed;
+      this.emitToast('Contato online corrigido com segurança. Nenhum custo foi aplicado.', 'warning');
     }
     if (this.save.fuel <= 0.0001 && !this.emergencyFuelGranted) {
       new EconomyService(this.save).expense(
@@ -619,6 +653,7 @@ export class MainScene extends Phaser.Scene {
       const location = this.mapStream.location(focusPosition);
       this.save.currentChunk = location.chunkId;
       this.save.currentRegion = location.region.name;
+      void this.online?.updateChunks(location.chunkId, this.adjacentChunks(location.chunkId));
       if (previousRegion !== this.save.currentRegion) this.emitToast(`Entrando em ${this.save.currentRegion}.`, 'info');
       if (this.showGraph) this.renderDebugGraph();
       this.drawRoute();
@@ -947,6 +982,24 @@ export class MainScene extends Phaser.Scene {
       if (command.enabled) this.audio.unlock(this.save.settings);
       return;
     }
+    if (command.type === 'set-online-mode') {
+      this.save.onlinePreference = command.mode;
+      if (command.mode === 'solo') this.remoteVehicles?.clear();
+      void this.online?.setMode(command.mode, this.save.currentChunk, this.adjacentChunks(this.save.currentChunk));
+      this.emitToast(command.mode === 'online' ? 'Modo online ativado. Conectando sem interromper a partida.' : 'Modo solo ativado. Seu progresso foi preservado.', 'info');
+      this.persist();
+      return;
+    }
+    if (command.type === 'set-online-visibility') {
+      this.save.settings[command.setting] = command.enabled;
+      this.persist();
+      return;
+    }
+    if (command.type === 'set-online-visual-limit') {
+      this.save.settings.onlineVisualLimit = Math.max(0, Math.min(50, Math.floor(command.limit)));
+      this.persist();
+      return;
+    }
     if (command.type === 'cancel-ride' && this.mission) {
       const penalized = this.mission.cancel();
       if (penalized) new EconomyService(this.save).expense(
@@ -1061,23 +1114,28 @@ export class MainScene extends Phaser.Scene {
     if (command.type === 'start-fleet-shift') {
       const result = startFleetShift(this.save, command.employeeId, command.requestId);
       this.emitToast(result.applied ? 'Turno iniciado. O veículo do funcionário entrou na operação.' : result.reason === 'taxi-required' ? 'O funcionário precisa de um veículo convertido em táxi.' : result.reason === 'vehicle-unfit' ? 'Abasteça ou repare o veículo antes do turno.' : 'Atribua um veículo livre ao motorista.', result.applied ? 'success' : 'warning');
-      if (result.applied) this.persist();
+      if (result.applied) { this.persist(); void this.online?.createFleetDeployment(); }
       return;
     }
     if (command.type === 'end-fleet-shift') {
+      const shiftId = this.save.fleet.activeShift?.id;
       const report = endFleetShift(this.save, ['Turno encerrado pelo proprietário.']);
       this.followFleetVehicle = false;
       this.fleetVehicles?.setFollowEnabled(false);
       if (this.vehicleVisual) this.cameras.main.startFollow(this.vehicleVisual, true, GAME_CONFIG.camera.followLerp, GAME_CONFIG.camera.followLerp);
       this.emitToast(report ? `Turno encerrado com lucro de ${this.formatMoney(report.netProfit)}.` : 'Não há turno ativo.', report ? 'success' : 'info');
-      if (report) { this.fleetReportNotifiedId = report.id; this.persist(); }
+      if (report) { this.fleetReportNotifiedId = report.id; this.persist(); if (shiftId) void this.online?.finishFleetDeployment(shiftId); }
       return;
     }
     if (command.type === 'select-vehicle') {
       if (!this.activeNearbyService('garage')) return;
       const result = selectPlayerVehicle(this.save, command.vehicleId);
       this.emitToast(result.applied && result.vehicle ? `${result.vehicle.model} agora é o veículo do jogador.` : 'Esse veículo está atribuído ou em operação.', result.applied ? 'success' : 'warning');
-      if (result.applied) { this.rebuildPlayerVehicle(); this.persist(); }
+      if (result.applied) {
+        this.rebuildPlayerVehicle();
+        this.persist();
+        void this.online?.setMode(this.save.onlinePreference, this.save.currentChunk, this.adjacentChunks(this.save.currentChunk));
+      }
       return;
     }
     if (command.type === 'ack-fleet-report') {
@@ -1269,6 +1327,21 @@ export class MainScene extends Phaser.Scene {
   }
 
   private handleDevAction(action: string) {
+    if (action === 'online-latency') {
+      this.debugOnlineLatencyMs = this.debugOnlineLatencyMs === 0 ? 120 : this.debugOnlineLatencyMs === 120 ? 300 : 0;
+      this.online?.setDebugNetwork(this.debugOnlineLatencyMs, this.debugOnlineLossRate);
+      this.emitToast(`Latência online simulada: ${this.debugOnlineLatencyMs} ms.`, 'info');
+      return;
+    }
+    if (action === 'online-loss') {
+      this.debugOnlineLossRate = this.debugOnlineLossRate === 0 ? 0.1 : this.debugOnlineLossRate === 0.1 ? 0.3 : 0;
+      this.online?.setDebugNetwork(this.debugOnlineLatencyMs, this.debugOnlineLossRate);
+      this.emitToast(`Perda online simulada: ${Math.round(this.debugOnlineLossRate * 100)}%.`, 'info');
+      return;
+    }
+    if (action === 'online-disconnect') { void this.online?.forceReconnect(); return; }
+    if (action === 'online-fake' && this.vehicle) { this.remoteVehicles?.injectFake(this.vehicle.position); return; }
+    if (action === 'online-clear') { this.remoteVehicles?.clear(); return; }
     if (!import.meta.env.DEV || !this.vehicle || !this.mission || !this.traffic) return;
     if (action === 'money-add') new EconomyService(this.save).income(1_000, 'dev', 'Painel dev', `dev-money-add-${Date.now()}`);
     if (action === 'money-remove') new EconomyService(this.save).expense(100, 'dev', 'Painel dev', `dev-money-remove-${Date.now()}`);
@@ -1444,6 +1517,19 @@ export class MainScene extends Phaser.Scene {
       target: null, remaining: 0, routeRemaining: 0, completedStops: 0,
       recoveries: 0, lastRecoveryReason: null, identification: null
     };
+    const remoteTelemetry = this.remoteVehicles?.telemetry() ?? {
+      nearbyPlayers: 0, remoteEmployees: 0, interpolationBuffer: 0, extrapolating: 0,
+      lostPackets: 0, outOfOrderPackets: 0, npcReplacements: 0
+    };
+    const onlineTelemetry = this.online?.telemetry(remoteTelemetry) ?? {
+      mode: this.save.onlinePreference,
+      state: this.save.onlinePreference === 'solo' ? 'SOLO' as const : 'OFFLINE' as const,
+      accountLinkState: this.save.accountLinkState,
+      publicSessionId: null, nearbyPlayers: 0, remoteEmployees: 0, offlineDeployments: 0,
+      pingMs: null, quality: 'offline' as const, subscribedTopics: [], sendRateHz: 0, receiveRateHz: 0,
+      sequence: 0, interpolationBuffer: 0, extrapolating: 0, lostPackets: 0, outOfOrderPackets: 0,
+      npcReplacements: 0, reconnectAttempts: 0, warning: null
+    };
     if (this.simulationSeconds >= this.collisionFeedbackUntil) {
       this.collisionSeverity = null;
       this.collisionRelativeSpeedKmh = 0;
@@ -1533,12 +1619,13 @@ export class MainScene extends Phaser.Scene {
       fleetRouteRecoveries: fleetTelemetry.recoveries,
       fleetLastRecoveryReason: fleetTelemetry.lastRecoveryReason,
       fleetDriverIdentification: fleetTelemetry.identification,
-      totalTerrestrialEntities: Math.min(trafficStats.hardCeiling, trafficStats.total + 1 + (this.fleetVehicles?.isVisible() ? 1 : 0)),
+      totalTerrestrialEntities: Math.min(trafficStats.hardCeiling, trafficStats.total + 1 + (this.fleetVehicles?.isVisible() ? 1 : 0) + (this.remoteVehicles?.count() ?? 0)),
       mapVersion: this.save.mapVersion,
       currentRegion: this.save.currentRegion,
       currentChunk: this.save.currentChunk,
       loadedMapChunks: this.map?.loadedChunkIds?.length ?? 0,
-      mapRegions: this.map?.manifest?.regions.map((region) => region.name) ?? []
+      mapRegions: this.map?.manifest?.regions.map((region) => region.name) ?? [],
+      online: onlineTelemetry
     };
     gameEvents.emit('hud', snapshot);
   }
@@ -1589,6 +1676,10 @@ export class MainScene extends Phaser.Scene {
     this.save.laneId = nearestLaneNode?.laneId ?? null;
     this.save.roadSegmentId = nearestLaneNode?.roadSegmentId ?? null;
     this.save.mapVersion = GAME_CONFIG.mapVersion;
+    this.save.lastOnlineChunk = this.save.currentChunk;
+    this.save.fleetPublicProfile.publicVehicleCount = this.save.fleet.vehicles.length;
+    this.save.fleetPublicProfile.name = this.save.fleet.name;
+    this.save.fleetPublicProfile.status = this.online?.telemetry().state === 'ONLINE' ? 'active' : 'offline';
     this.save.rotation = this.vehicle.rotation;
     this.save.activeMission = this.mission?.snapshot() ?? null;
     this.save.autopilotEnabled = this.autopilotEnabled;
@@ -1599,6 +1690,39 @@ export class MainScene extends Phaser.Scene {
 
   private pickLine(lines: readonly string[]) {
     return lines[this.save.completedRides % lines.length];
+  }
+
+  private adjacentChunks(chunkId: string) {
+    return this.map?.manifest?.chunks.find((chunk) => chunk.id === chunkId)?.adjacent ?? [];
+  }
+
+  private publishOnlineMovement() {
+    if (!this.online || !this.vehicle) return;
+    const now = Date.now();
+    const elapsed = Math.max(0.016, (now - this.lastOnlineUpdateAt) / 1_000);
+    const acceleration = this.lastOnlineUpdateAt ? (this.vehicle.speed - this.lastOnlineSpeed) / elapsed : 0;
+    const active = this.activeFleetVehicle();
+    const movement: LocalMovementState = {
+      vehicleId: active?.id ?? this.save.activeVehicleId,
+      controllerType: 'PLAYER',
+      vehicleModel: active?.model ?? 'Hatch 1998',
+      position: { ...this.vehicle.position },
+      heading: this.vehicle.rotation,
+      speed: this.vehicle.speed,
+      acceleration,
+      occupied: this.mission?.mission.phase === 'passenger-on-board',
+      autopilot: this.autopilotEnabled,
+      braking: acceleration < -1.5 || Math.abs(this.vehicle.speed) < 0.2,
+      colorId: active?.taxiVisualEnabled ? 'taxi' : active?.model === 'Sedan 2012' ? 'blue' : 'amber'
+    };
+    this.online.updateVehicle(movement, now);
+    const employee = this.fleetVehicles?.publicMovementState(this.save);
+    this.online.updateEmployee(employee ? {
+      ...employee, controllerType: 'EMPLOYEE', autopilot: true,
+      colorId: employee.vehicleModel === 'Sedan 2012' ? 'green' : 'amber'
+    } : null, now);
+    this.lastOnlineSpeed = this.vehicle.speed;
+    this.lastOnlineUpdateAt = now;
   }
 }
 

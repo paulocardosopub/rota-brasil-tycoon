@@ -76,6 +76,10 @@ export class TrafficSystem {
   private activeVehicleLimit = Number.POSITIVE_INFINITY;
   private requestedVehicleLimit = Number.POSITIVE_INFINITY;
   private reservedSlots = 0;
+  private fleetReservedSlots = 0;
+  private onlineReservedSlots = 0;
+  private fleetPriorityVehicles: PriorityTrafficVehicle[] = [];
+  private onlinePriorityVehicles: PriorityTrafficVehicle[] = [];
   private priorityVehicles: PriorityTrafficVehicle[] = [];
   private signalOverride: SignalState | null = null;
   private readonly spatialVehicles = new Map<string, TrafficVehicle[]>();
@@ -526,12 +530,29 @@ export class TrafficSystem {
   }
 
   setReservedSlots(count: number) {
-    this.reservedSlots = Math.max(0, Math.min(8, Math.floor(count)));
+    this.fleetReservedSlots = Math.max(0, Math.min(8, Math.floor(count)));
+    this.rebuildExternalTraffic();
+  }
+
+  setOnlineReservedSlots(count: number) {
+    this.onlineReservedSlots = Math.max(0, Math.min(GAME_CONFIG.traffic.npcVehicleCount + GAME_CONFIG.traffic.npcBusCount + GAME_CONFIG.traffic.npcUtilityCount, Math.floor(count)));
+    this.rebuildExternalTraffic();
+  }
+
+  private rebuildExternalTraffic() {
+    this.reservedSlots = this.fleetReservedSlots + this.onlineReservedSlots;
     this.activeVehicleLimit = Math.max(0, this.requestedVehicleLimit - this.reservedSlots);
+    this.priorityVehicles = [...this.fleetPriorityVehicles, ...this.onlinePriorityVehicles].slice(0, 32);
   }
 
   setPriorityVehicles(vehicles: PriorityTrafficVehicle[]) {
-    this.priorityVehicles = vehicles.slice(0, 8).map((vehicle) => ({ ...vehicle, position: { ...vehicle.position } }));
+    this.fleetPriorityVehicles = vehicles.slice(0, 8).map((vehicle) => ({ ...vehicle, position: { ...vehicle.position } }));
+    this.rebuildExternalTraffic();
+  }
+
+  setOnlinePriorityVehicles(vehicles: PriorityTrafficVehicle[]) {
+    this.onlinePriorityVehicles = vehicles.slice(0, 24).map((vehicle) => ({ ...vehicle, position: { ...vehicle.position } }));
+    this.rebuildExternalTraffic();
   }
 
   handlePlayerCollision(previousPosition: Point, position: Point, playerSpeed = 0, playerHeading = 0, autopilotEnabled = false): PlayerCollisionResult {
