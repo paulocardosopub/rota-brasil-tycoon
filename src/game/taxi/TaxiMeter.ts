@@ -27,7 +27,7 @@ export function startTaxiMeter(meter: TaxiMeterSnapshot, now = new Date().toISOS
   if (!meter.tripId || !['en-route', 'boarding'].includes(meter.state)) return false;
   meter.state = 'occupied';
   meter.startedAt ??= now;
-  meter.currentFare = calculateMeterFare(meter);
+  meter.currentFare = calculateRunningMeterFare(meter);
   return true;
 }
 
@@ -41,7 +41,7 @@ export function updateTaxiMeter(meter: TaxiMeterSnapshot, distanceMeters: number
     meter.waitingSeconds += safeDelta;
     meter.state = 'waiting';
   } else meter.state = 'occupied';
-  meter.currentFare = calculateMeterFare(meter);
+  meter.currentFare = calculateRunningMeterFare(meter);
   return meter.currentFare;
 }
 
@@ -58,13 +58,21 @@ export function resetTaxiMeter(meter: TaxiMeterSnapshot) {
 }
 
 export function calculateMeterFare(meter: TaxiMeterSnapshot) {
+  return calculateMeterFareWithMinimum(meter, GAME_CONFIG.taxi.meter.minimumFare);
+}
+
+export function calculateRunningMeterFare(meter: TaxiMeterSnapshot) {
+  return calculateMeterFareWithMinimum(meter, 0);
+}
+
+function calculateMeterFareWithMinimum(meter: TaxiMeterSnapshot, minimumFare: number) {
   const config = GAME_CONFIG.taxi.meter;
   const categoryMultiplier = meter.category === 'urgent' ? 1.12 : meter.category === 'comfort' ? 1.08 : 1;
   const raw = (config.initialFare
     + meter.distanceMeters / 1_000 * config.perKilometer
     + meter.waitingSeconds / 60 * config.waitingPerMinute)
     * meter.demandMultiplier * categoryMultiplier;
-  return roundMoney(clamp(raw, config.minimumFare, config.safetyLimit));
+  return roundMoney(clamp(raw, minimumFare, config.safetyLimit));
 }
 
 function clamp(value: number, minimum: number, maximum: number) {

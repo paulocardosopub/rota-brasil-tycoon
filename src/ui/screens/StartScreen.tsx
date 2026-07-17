@@ -1,7 +1,8 @@
-import { useState } from 'react';
-import { hasSave } from '../../services/storage/saveService';
+import { useEffect, useState } from 'react';
+import { forceCloudSave } from '../../services/supabase/cloudSaveService';
+import { getAccountStatus, finishPermanentAccount, registerPermanentAccount, signInPermanent, type AccountStatus } from '../../services/supabase/authService';
 import { isCloudEnabled, supabase } from '../../services/supabase/client';
-import { linkOrCreatePermanentAccount, signInPermanent } from '../../services/supabase/authService';
+import { hasSave, loadSave, writeSave } from '../../services/storage/saveService';
 
 interface Props {
   onContinue: () => void;
@@ -9,31 +10,149 @@ interface Props {
   onGuest: () => void;
 }
 
+type AuthMode = 'signin' | 'signup' | null;
+
+function authErrorMessage(error: unknown) {
+  const message = error instanceof Error ? error.message : '';
+  if (message === 'CLOUD_NOT_CONFIGURED') return 'O modo nuvem não está configurado. Você ainda pode jogar como visitante.';
+  if (message === 'ACCOUNT_ALREADY_SIGNED_IN') return 'Já existe uma conta conectada neste dispositivo.';
+  if (/invalid login credentials/i.test(message)) return 'E-mail ou senha incorretos.';
+  if (/already registered|already been registered|user already exists/i.test(message)) return 'Este e-mail já possui conta. Use a opção Entrar.';
+  if (/rate limit/i.test(message)) return 'Muitas tentativas seguidas. Aguarde um pouco e tente novamente.';
+  return message || 'Não foi possível concluir. Tente novamente.';
+}
+
+function saveAccountState(state: 'pending-email' | 'permanent') {
+  const save = loadSave();
+  save.accountLinkState = state;
+  writeSave(save);
+}
+
 export function StartScreen({ onContinue, onNewGame, onGuest }: Props) {
-  const [loginOpen, setLoginOpen] = useState(false);
+  const [authMode, setAuthMode] = useState<AuthMode>(null);
+  const [account, setAccount] = useState<AccountStatus | null>(null);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [confirmationEmail, setConfirmationEmail] = useState<string | null>(null);
   const [message, setMessage] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  const refreshAccount = async () => {
+    const status = await getAccountStatus();
+    setAccount(status);
+    if (status.email) setEmail(status.email);
+    if (status.kind === 'needs-password') setAuthMode('signup');
+    return status;
+  };
+
+  useEffect(() => {
+    void refreshAccount().catch(() => undefined);
+  }, []);
+
+  const openAuth = (mode: Exclude<AuthMode, null>) => {
+    setAuthMode(mode);
+    setMessage('');
+    setPassword('');
+    setConfirmPassword('');
+    void refreshAccount().catch(() => undefined);
+  };
 
   const signIn = async () => {
-    if (!supabase) {
-      setMessage('O modo nuvem não está configurado. Você ainda pode jogar como visitante.');
-      return;
-    }
+    if (!supabase) { setMessage(authErrorMessage(new Error('CLOUD_NOT_CONFIGURED'))); return; }
+    if (!email.trim() || !password) { setMessage('Informe seu e-mail e sua senha.'); return; }
+    setBusy(true);
     setMessage('Entrando…');
-    try { await signInPermanent(email, password); onContinue(); }
-    catch (error) { setMessage(error instanceof Error ? error.message : 'Não foi possível entrar.'); }
+    try {
+      await signInPermanent(email, password);
+      setMessage('Conta conectada. Carregando seu progresso…');
+      await onContinue();
+    } catch (error) {
+      setMessage(authErrorMessage(error));
+    } finally {
+      setBusy(false);
+    }
   };
 
-  const linkAccount = async () => {
-    if (!supabase) { setMessage('O modo nuvem não está configurado.'); return; }
-    if (password.length < 8) { setMessage('Use uma senha com pelo menos 8 caracteres.'); return; }
-    setMessage('Preparando a conta…');
+  const createOrProtectAccount = async () => {
+    if (!supabase) { setMessage(authErrorMessage(new Error('CLOUD_NOT_CONFIGURED'))); return; }
+    if (account?.kind === 'pending-email') {
+      setMessage(`Abra a mensagem enviada para ${account.email ?? email} e confirme o e-mail. Depois volte ao jogo para definir sua senha.`);
+      return;
+    }
+    if (account?.kind === 'permanent') { onContinue(); return; }
+    if (account?.kind === 'needs-password') {
+      if (password.length < 8) { setMessage('Use uma senha com pelo menos 8 caracteres.'); return; }
+      if (password !== confirmPassword) { setMessage('As senhas não coincidem.'); return; }
+      setBusy(true);
+      setMessage('Protegendo sua conta e seu progresso…');
+      try {
+        await forceCloudSave(loadSave());
+        await finishPermanentAccount(password);
+        saveAccountState('permanent');
+        setAccount(await getAccountStatus());
+        setMessage('Conta protegida. O progresso foi mantido e já pode ser acessado em outro dispositivo.');
+      } catch (error) {
+        setMessage(authErrorMessage(error));
+      } finally {
+        setBusy(false);
+      }
+      return;
+    }
+
+    if (!email.trim()) { setMessage('Informe o e-mail que ficará vinculado ao seu progresso.'); return; }
+    const linkingGuest = account?.kind === 'anonymous';
+    if (!linkingGuest) {
+      if (password.length < 8) { setMessage('Use uma senha com pelo menos 8 caracteres.'); return; }
+      if (password !== confirmPassword) { setMessage('As senhas não coincidem.'); return; }
+    }
+
+    setBusy(true);
+    setMessage(linkingGuest ? 'Salvando o progresso antes de vincular…' : 'Criando sua conta…');
     try {
-      const result = await linkOrCreatePermanentAccount(email, password);
-      setMessage(result.status === 'verification-sent' ? 'Confirme o e-mail e volte aqui para definir a senha sem perder o save.' : 'Conta vinculada ao mesmo progresso.');
-    } catch (error) { setMessage(error instanceof Error ? error.message : 'Não foi possível vincular a conta.'); }
+      if (linkingGuest) await forceCloudSave(loadSave());
+      const result = await registerPermanentAccount(email, password);
+      if (result.status === 'verification-sent') {
+        if (linkingGuest) saveAccountState('pending-email');
+        if (!linkingGuest) setConfirmationEmail(email.trim().toLowerCase());
+        setAccount(await getAccountStatus());
+        setMessage(linkingGuest
+          ? 'Progresso salvo. Confirme o e-mail recebido e volte ao jogo para definir sua senha.'
+          : 'Conta criada. Confirme o e-mail recebido para liberar o acesso.');
+      } else {
+        saveAccountState('permanent');
+        setAccount(await getAccountStatus());
+        setMessage('Conta criada e progresso protegido.');
+      }
+    } catch (error) {
+      setMessage(authErrorMessage(error));
+    } finally {
+      setBusy(false);
+    }
   };
+
+  const verifyConfirmation = async () => {
+    setBusy(true);
+    try {
+      const status = await refreshAccount();
+      if (status.kind === 'needs-password') setMessage('E-mail confirmado. Agora defina sua senha para concluir.');
+      else if (status.kind === 'permanent') {
+        setConfirmationEmail(null);
+        saveAccountState('permanent');
+        setMessage('E-mail confirmado. Carregando seu progresso…');
+        await onContinue();
+      } else setMessage('A confirmação ainda não chegou. Abra o link do e-mail e tente novamente.');
+    } catch (error) {
+      setMessage(authErrorMessage(error));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const isGuestLink = account?.kind === 'anonymous';
+  const needsPassword = account?.kind === 'needs-password';
+  const pendingEmail = account?.kind === 'pending-email';
+  const awaitingConfirmation = pendingEmail || confirmationEmail !== null;
 
   return (
     <main className="start-screen">
@@ -47,23 +166,42 @@ export function StartScreen({ onContinue, onNewGame, onGuest }: Props) {
         <div className="eyebrow">PLAYABLE 0.8.0 • ONLINE ALPHA</div>
         <h1><span>Rota Brasil</span> Tycoon</h1>
         <p>Comece ao volante de um Hatch 1998. Busque passageiros e construa sua futura empresa de transporte.</p>
-        {!loginOpen ? (
+        {!authMode ? (
           <div className="start-actions">
             <button className="primary-button" onClick={onGuest} data-testid="guest-button">Jogar como visitante <span>→</span></button>
+            <button className="create-account-button" onClick={() => openAuth('signup')} data-testid="create-account-button">Criar conta grátis <span>Proteja seu progresso</span></button>
             <div className="button-row">
               <button onClick={onContinue} disabled={!hasSave()}>Continuar</button>
               <button onClick={onNewGame}>Novo jogo</button>
-              <button onClick={() => setLoginOpen(true)}>Entrar</button>
+              <button onClick={() => openAuth('signin')}>Entrar</button>
             </div>
           </div>
         ) : (
-          <div className="login-panel">
-            <button className="back-link" onClick={() => setLoginOpen(false)}>← Voltar</button>
-            <label>E-mail<input type="email" value={email} onChange={(event) => setEmail(event.target.value)} autoComplete="email" /></label>
-            <label>Senha<input type="password" value={password} onChange={(event) => setPassword(event.target.value)} autoComplete="current-password" /></label>
-            <button className="primary-button" onClick={signIn}>Entrar na nuvem</button>
-            <button onClick={linkAccount}>Criar ou vincular conta</button>
-            <small>{message || (isCloudEnabled ? 'Seu progresso local será sincronizado após entrar.' : 'Supabase opcional não configurado.')}</small>
+          <div className="login-panel" data-testid={`auth-${authMode}`}>
+            <button className="back-link" onClick={() => setAuthMode(null)}>← Voltar</button>
+            <div className="auth-heading">
+              <div className="panel-kicker">{authMode === 'signin' ? 'CONTA EXISTENTE' : isGuestLink || pendingEmail || needsPassword ? 'PROTEGER PROGRESSO' : 'NOVA CONTA'}</div>
+              <h2>{authMode === 'signin' ? 'Entrar' : needsPassword ? 'Defina sua senha' : awaitingConfirmation ? 'Confirme seu e-mail' : isGuestLink ? 'Vincule seu convidado' : 'Criar sua conta'}</h2>
+              {authMode === 'signup' && <p>{isGuestLink
+                ? 'Seu jogador, dinheiro, veículos e corridas continuarão iguais. Primeiro enviaremos a confirmação do e-mail.'
+                : needsPassword ? `E-mail ${account.email ?? email} confirmado. Falta apenas criar a senha.`
+                  : awaitingConfirmation ? `Enviamos uma confirmação para ${account?.email ?? confirmationEmail ?? email}.${pendingEmail ? ' O progresso já está salvo na mesma conta de convidado.' : ''}`
+                    : 'Crie uma conta para acessar o mesmo progresso em outros dispositivos.'}</p>}
+            </div>
+
+            {!needsPassword && !awaitingConfirmation && <label>E-mail<input type="email" value={email} onChange={(event) => setEmail(event.target.value)} autoComplete="email" /></label>}
+            {authMode === 'signin' && <label>Senha<input type="password" value={password} onChange={(event) => setPassword(event.target.value)} autoComplete="current-password" /></label>}
+            {authMode === 'signup' && !isGuestLink && !awaitingConfirmation && <>
+              <label>Senha<input type="password" value={password} onChange={(event) => setPassword(event.target.value)} autoComplete="new-password" minLength={8} /></label>
+              <label>Confirmar senha<input type="password" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} autoComplete="new-password" minLength={8} /></label>
+            </>}
+
+            {authMode === 'signin' && <button className="primary-button" onClick={signIn} disabled={busy}>Entrar na minha conta</button>}
+            {authMode === 'signup' && awaitingConfirmation && <button className="primary-button" onClick={verifyConfirmation} disabled={busy}>Já confirmei o e-mail</button>}
+            {authMode === 'signup' && !awaitingConfirmation && <button className="primary-button" onClick={createOrProtectAccount} disabled={busy}>{needsPassword ? 'Concluir e proteger progresso' : isGuestLink ? 'Vincular e-mail sem perder progresso' : 'Criar conta grátis'}</button>}
+            {authMode === 'signin' && <button className="auth-switch" onClick={() => openAuth('signup')}>Ainda não tenho conta</button>}
+            {authMode === 'signup' && !needsPassword && !awaitingConfirmation && <button className="auth-switch" onClick={() => openAuth('signin')}>Já tenho uma conta</button>}
+            <small role="status">{message || (isCloudEnabled ? 'Seu progresso local será sincronizado com segurança.' : 'Supabase opcional não configurado.')}</small>
           </div>
         )}
         <footer><span className="status-dot" /> Jogue offline • Progresso salvo neste dispositivo</footer>

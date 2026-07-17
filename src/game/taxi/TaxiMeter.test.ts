@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { calculateMeterFare, createTaxiMeter, finishTaxiMeter, markTaxiBoarding, prepareTaxiMeter, startTaxiMeter, updateTaxiMeter } from './TaxiMeter';
+import { calculateMeterFare, calculateRunningMeterFare, createTaxiMeter, finishTaxiMeter, markTaxiBoarding, prepareTaxiMeter, startTaxiMeter, updateTaxiMeter } from './TaxiMeter';
 
 describe('taxímetro', () => {
   it('só inicia depois do embarque e não acumula a caminho', () => {
@@ -10,6 +10,18 @@ describe('taxímetro', () => {
     markTaxiBoarding(meter);
     expect(startTaxiMeter(meter, '2026-07-16T10:00:00.000Z')).toBe(true);
     expect(meter.state).toBe('occupied');
+    expect(meter.currentFare).toBe(calculateRunningMeterFare(meter));
+  });
+
+  it('mostra a bandeirada crescendo ao vivo e aplica a tarifa mínima apenas no fim', () => {
+    const meter = createTaxiMeter();
+    prepareTaxiMeter(meter, 'trip-live', 'Destino', 'popular', 1);
+    markTaxiBoarding(meter); startTaxiMeter(meter);
+    const initial = meter.currentFare;
+    updateTaxiMeter(meter, 100, 0.25, 30);
+    expect(meter.currentFare).toBeGreaterThan(initial);
+    expect(meter.currentFare).toBeLessThan(12);
+    expect(finishTaxiMeter(meter)).toBe(12);
   });
 
   it('calcula distância, espera e finaliza uma única vez', () => {

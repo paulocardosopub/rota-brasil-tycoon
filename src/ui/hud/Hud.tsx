@@ -6,7 +6,9 @@ import { fuelPurchaseCost, upgradePrice, workshopPrice, type WorkshopServiceId }
 import { gameEvents, type GameCommand } from '../../game/events';
 import { EMPLOYEE_CANDIDATES } from '../../game/fleet/FleetConfig';
 import { employeeIdentification } from '../../game/fleet/FleetRoutePlan';
-import { createNewSave, deleteSave } from '../../services/storage/saveService';
+import { createNewSave, deleteSave, loadSave } from '../../services/storage/saveService';
+import { forceCloudSave } from '../../services/supabase/cloudSaveService';
+import { ensureGuestSession, finishPermanentAccount, getAccountStatus, requestGuestAccountLink, type AccountStatus } from '../../services/supabase/authService';
 import type { CameraZoom, HudSnapshot, Quality, TrafficDensity } from '../../types/game';
 import { MobileControls } from './MobileControls';
 
@@ -114,7 +116,7 @@ export function Hud() {
         </div>
       </header>
       <OnlineBadge hud={hud} />
-      {hud.online.accountLinkState === 'anonymous' && <div className="guest-account-notice">Conta de visitante. Vincule um e-mail para não perder o acesso em outro dispositivo.</div>}
+      {(hud.online.accountLinkState === 'anonymous' || hud.online.accountLinkState === 'pending-email') && <button className="guest-account-notice" onClick={() => setPanel('settings')}>{hud.online.accountLinkState === 'pending-email' ? 'Confirme seu e-mail para concluir a proteção do progresso.' : 'Conta de visitante. Vincule um e-mail para não perder seu progresso.'}</button>}
 
       <section className="objective-card" data-testid="objective-card"><div className="objective-icon" style={{ transform: `rotate(${hud.headingDelta}rad)` }}>↑</div><div><small>OBJETIVO ATUAL</small><strong>{hud.objective}</strong><span>{hud.distanceRemaining < 1_000 ? `${Math.round(hud.distanceRemaining)} m` : `${(hud.distanceRemaining / 1000).toFixed(1)} km`} • aprox. {eta}</span></div></section>
       <div className="speedometer" data-testid="speedometer"><strong>{Math.round(hud.speedKmh)}</strong><span>km/h</span><small>{hud.speedKmh < 1 ? 'P' : 'D'}</small></div>
@@ -162,7 +164,11 @@ function OnlineBadge({ hud }: { hud: HudSnapshot }) {
 function TaxiMeter({ hud }: { hud: HudSnapshot }) {
   const meter = hud.taxiMeter;
   const labels = { free: 'LIVRE', 'en-route': 'A CAMINHO', boarding: 'EMBARQUE', occupied: 'OCUPADO', waiting: 'AGUARDANDO', finished: 'FINALIZADO' } as const;
-  return <section className={`taxi-meter ${meter.state}`} data-testid="taxi-meter"><small>TAXÍMETRO • VALORES DE GAMEPLAY</small><b>{labels[meter.state]}</b><strong>{formatCurrency(meter.currentFare)}</strong>{meter.tripId && <span>{(meter.distanceMeters / 1_000).toFixed(2)} km • {Math.floor(meter.elapsedSeconds / 60)}:{String(Math.floor(meter.elapsedSeconds % 60)).padStart(2, '0')}</span>}</section>;
+  const running = meter.state === 'occupied' || meter.state === 'waiting' || meter.state === 'finished';
+  const detail = meter.state === 'free' ? 'Aceite uma corrida oficial'
+    : meter.state === 'en-route' || meter.state === 'boarding' ? 'Inicia depois do embarque'
+      : `${(meter.distanceMeters / 1_000).toFixed(2)} km • ${Math.floor(meter.elapsedSeconds / 60)}:${String(Math.floor(meter.elapsedSeconds % 60)).padStart(2, '0')}`;
+  return <section className={`taxi-meter ${meter.state}`} data-testid="taxi-meter" data-meter-fare={meter.currentFare.toFixed(2)}><small>TAXÍMETRO • VALORES DE GAMEPLAY</small><b>{labels[meter.state]}</b><strong>{running ? formatCurrency(meter.currentFare) : '—'}</strong><span>{detail}</span></section>;
 }
 
 function RideOfferCard({ hud }: { hud: HudSnapshot }) {
@@ -182,7 +188,7 @@ function PanelContent({ panel, hud, close }: { panel: Exclude<Panel, null>; hud:
     {panel === 'fleet' && <FleetPanel hud={hud} confirm={confirm} />}
     {panel === 'city' && <ServicesPanel hud={hud} confirm={confirm} />}
     {panel === 'cash' && <CashPanel hud={hud} confirm={confirm} />}
-    {panel === 'settings' && <><SettingsPanel hud={hud} /><OnlineSettingsPanel hud={hud} /></>}
+    {panel === 'settings' && <><SettingsPanel hud={hud} /><AccountSettingsPanel hud={hud} /><OnlineSettingsPanel hud={hud} /></>}
     {confirmation && <div className="confirm-strip"><b>Confirmar {confirmation.label}?</b><button className="primary-button" onClick={execute}>Confirmar</button><button className="ghost-button" onClick={() => setConfirmation(null)}>Voltar</button></div>}
   </aside>;
 }
@@ -267,6 +273,101 @@ function SettingsPanel({ hud }: { hud: HudSnapshot }) {
   const setZoom = (zoom: CameraZoom) => gameEvents.emit('command', { type: 'set-camera-zoom', zoom });
   const setDensity = (density: TrafficDensity) => gameEvents.emit('command', { type: 'set-traffic-density', density });
   return <><div className="panel-kicker">CONFIGURAÇÕES</div><h2>Experiência de jogo</h2><label className="quality-select">Qualidade gráfica<select value={hud.settings.quality} onChange={(event) => setQuality(event.target.value as Quality)}><option value="automatic">Automática</option><option value="low">Baixa</option><option value="medium">Média</option><option value="high">Alta</option></select></label><label className="quality-select">Distância da câmera<select value={hud.settings.cameraZoom} onChange={(event) => setZoom(event.target.value as CameraZoom)}><option value="near">Próxima</option><option value="normal">Normal</option><option value="far">Distante</option></select></label><label className="quality-select">Densidade do trânsito<select value={hud.settings.trafficDensity} onChange={(event) => setDensity(event.target.value as TrafficDensity)}><option value="automatic">Automática • leve</option><option value="low">Baixa</option><option value="medium">Média</option><option value="high">Alta • 72 NPCs</option></select></label><label className="toggle-setting"><input type="checkbox" checked={hud.settings.cameraShake} onChange={(event) => gameEvents.emit('command', { type: 'set-camera-shake', enabled: event.target.checked })} /> Vibração da câmera em impactos</label><label className="toggle-setting"><input type="checkbox" checked={hud.settings.audio} onChange={(event) => gameEvents.emit('command', { type: 'set-audio', enabled: event.target.checked })} /> Áudio do jogo</label><p>WASD controla livremente. O piloto segue rotas e serviços. Espaço: freio de mão • R: reposicionar.</p><button className="danger-button" onClick={() => { if (confirm('Apagar todo o progresso local?')) { deleteSave(); location.reload(); } }}>Apagar progresso</button></>;
+}
+
+function accountErrorMessage(error: unknown) {
+  const message = error instanceof Error ? error.message : '';
+  if (message === 'CLOUD_NOT_CONFIGURED') return 'A nuvem está temporariamente indisponível. Seu progresso continua salvo neste dispositivo.';
+  if (/already registered|already been registered|user already exists/i.test(message)) return 'Este e-mail já possui conta. Volte à tela inicial e use Entrar.';
+  if (/rate limit/i.test(message)) return 'Muitas tentativas seguidas. Aguarde um pouco e tente novamente.';
+  return message || 'Não foi possível concluir agora. Tente novamente.';
+}
+
+function AccountSettingsPanel({ hud }: { hud: HudSnapshot }) {
+  const [account, setAccount] = useState<AccountStatus | null>(null);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [message, setMessage] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  const refresh = async () => {
+    const next = await getAccountStatus();
+    setAccount(next);
+    if (next.email) setEmail(next.email);
+    return next;
+  };
+
+  useEffect(() => {
+    void refresh().catch((error) => setMessage(accountErrorMessage(error)));
+  }, [hud.online.accountLinkState]);
+
+  const linkEmail = async () => {
+    if (!email.trim()) { setMessage('Informe o e-mail que deseja vincular.'); return; }
+    setBusy(true);
+    setMessage('Criando uma cópia segura do progresso…');
+    try {
+      const guest = await ensureGuestSession();
+      if (guest.kind === 'local') throw new Error('CLOUD_NOT_CONFIGURED');
+      await forceCloudSave(loadSave());
+      await requestGuestAccountLink(email);
+      gameEvents.emit('command', { type: 'set-account-link-state', state: 'pending-email' });
+      await refresh();
+      setMessage('Progresso salvo. Confirme o e-mail recebido e depois volte aqui para definir sua senha.');
+    } catch (error) {
+      setMessage(accountErrorMessage(error));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const checkConfirmation = async () => {
+    setBusy(true);
+    try {
+      const next = await refresh();
+      if (next.kind === 'needs-password') setMessage('E-mail confirmado. Agora defina sua senha.');
+      else if (next.kind === 'permanent') {
+        gameEvents.emit('command', { type: 'set-account-link-state', state: 'permanent' });
+        setMessage('Conta protegida e pronta para uso em outros dispositivos.');
+      } else setMessage('Ainda aguardando a confirmação. Abra o link enviado para seu e-mail.');
+    } catch (error) {
+      setMessage(accountErrorMessage(error));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const finishAccount = async () => {
+    if (password.length < 8) { setMessage('Use uma senha com pelo menos 8 caracteres.'); return; }
+    if (password !== confirmPassword) { setMessage('As senhas não coincidem.'); return; }
+    setBusy(true);
+    setMessage('Finalizando a proteção do progresso…');
+    try {
+      await forceCloudSave(loadSave());
+      await finishPermanentAccount(password);
+      gameEvents.emit('command', { type: 'set-account-link-state', state: 'permanent' });
+      await refresh();
+      setPassword('');
+      setConfirmPassword('');
+      setMessage('Conta criada. Todo o progresso foi mantido e está protegido.');
+    } catch (error) {
+      setMessage(accountErrorMessage(error));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const status = account?.kind ?? (hud.online.accountLinkState === 'anonymous' ? 'anonymous' : hud.online.accountLinkState === 'pending-email' ? 'pending-email' : null);
+  return <section className="account-settings" data-testid="account-settings">
+    <div className="panel-kicker">CONTA E PROGRESSO</div>
+    <h2>{status === 'permanent' ? 'Progresso protegido' : status === 'needs-password' ? 'Defina sua senha' : status === 'pending-email' ? 'Confirme seu e-mail' : 'Proteja seu progresso'}</h2>
+    {status === 'permanent' ? <div className="account-protected"><span>✓</span><div><b>Conta vinculada</b><small>{account?.email ?? 'E-mail confirmado'} • disponível em outros dispositivos</small></div></div>
+      : status === 'needs-password' ? <div className="account-form"><p>O e-mail <b>{account?.email}</b> foi confirmado. Crie a senha para concluir sem alterar seu jogador.</p><label>Nova senha<input type="password" value={password} onChange={(event) => setPassword(event.target.value)} autoComplete="new-password" minLength={8} /></label><label>Confirmar senha<input type="password" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} autoComplete="new-password" minLength={8} /></label><button className="primary-button" onClick={finishAccount} disabled={busy}>Concluir vínculo</button></div>
+        : status === 'pending-email' ? <div className="account-form"><p>O save já foi associado à mesma conta de convidado. Abra a confirmação enviada para <b>{account?.email ?? email}</b>.</p><button className="primary-button" onClick={checkConfirmation} disabled={busy}>Já confirmei o e-mail</button></div>
+          : status === 'local' ? <p>A nuvem está indisponível agora. Seu progresso continua salvo neste dispositivo e esta opção aparecerá quando a conexão voltar.</p>
+            : <div className="account-form"><p>Vincular um e-mail mantém dinheiro, veículos, frota, corridas e conquistas. Uma cópia na nuvem é feita antes da mudança.</p><label>E-mail<input type="email" value={email} onChange={(event) => setEmail(event.target.value)} autoComplete="email" placeholder="voce@email.com" /></label><button className="primary-button" onClick={linkEmail} disabled={busy}>Criar conta sem perder progresso</button></div>}
+    {message && <small className="account-message" role="status">{message}</small>}
+  </section>;
 }
 
 function OnlineSettingsPanel({ hud }: { hud: HudSnapshot }) {

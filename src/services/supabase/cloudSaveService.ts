@@ -64,3 +64,20 @@ export async function syncCloudSave(localSave: PlayerSave): Promise<PlayerSave> 
   if (upsertError) throw upsertError;
   return next;
 }
+
+export async function forceCloudSave(localSave: PlayerSave): Promise<PlayerSave> {
+  if (!supabase) return localSave;
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return localSave;
+
+  const next = { ...localSave, updatedAt: new Date().toISOString() };
+  const { error } = await supabase.from('game_saves').upsert({
+    user_id: user.id,
+    save_version: next.saveVersion,
+    revision: next.revision,
+    save_data: next,
+    updated_at: next.updatedAt
+  });
+  if (error) throw error;
+  return next;
+}

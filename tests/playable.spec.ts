@@ -5,8 +5,16 @@ test('visitante entra e encontra a primeira corrida jogável', async ({ page }) 
   page.on('console', (message) => { if (message.type() === 'error') criticalErrors.push(message.text()); });
   page.on('pageerror', (error) => criticalErrors.push(error.message));
   await page.goto('./');
+  await expect(page.getByTestId('create-account-button')).toBeVisible();
+  await page.getByTestId('create-account-button').click();
+  await expect(page.getByRole('heading', { name: 'Criar sua conta' })).toBeVisible();
+  await page.getByRole('button', { name: 'Voltar' }).click();
   await page.getByTestId('guest-button').click();
   await expect(page.locator('[data-game-ready="true"]')).toBeVisible({ timeout: 25_000 });
+  await page.getByRole('button', { name: 'Configurações' }).click();
+  await expect(page.getByTestId('account-settings')).toBeVisible();
+  await expect(page.getByText('Proteja seu progresso', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Fechar' }).click();
   await expect(page.getByTestId('game-canvas')).toBeVisible();
   await expect(page.locator('[data-vehicle-name="Hatch 1998"]')).toBeVisible();
   await expect(page.getByTestId('ride-offer')).toContainText('garantido');
@@ -355,7 +363,9 @@ test('táxi oficial, funcionário e segundo veículo sobrevivem ao recarregament
   await page.getByRole('button', { name: 'Ir ao passageiro' }).click();
   await page.keyboard.press('Control+Shift+D');
   await expect(hud).toHaveAttribute('data-taxi-meter-state', /occupied|waiting/, { timeout: 5_000 });
-  await page.waitForTimeout(600);
+  await expect.poll(async () => Number(await page.getByTestId('taxi-meter').getAttribute('data-meter-fare')), { timeout: 5_000 }).toBeGreaterThan(0);
+  const fareBeforeWaiting = Number(await page.getByTestId('taxi-meter').getAttribute('data-meter-fare'));
+  await expect.poll(async () => Number(await page.getByTestId('taxi-meter').getAttribute('data-meter-fare')), { timeout: 5_000 }).toBeGreaterThan(fareBeforeWaiting);
   await page.keyboard.press('Control+Shift+D');
   await page.getByRole('button', { name: 'Ir ao destino' }).click();
   await page.keyboard.press('Control+Shift+D');

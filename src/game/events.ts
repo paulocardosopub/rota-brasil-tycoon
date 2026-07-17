@@ -1,4 +1,4 @@
-import type { CameraZoom, HudSnapshot, PlayerSave, Quality, ServiceCategory, TrafficDensity, VehicleUpgradeId } from '../types/game';
+import type { AccountLinkState, CameraZoom, HudSnapshot, PlayerSave, Quality, ServiceCategory, TrafficDensity, VehicleUpgradeId } from '../types/game';
 import type { WorkshopServiceId } from './economy/ExpenseCalculator';
 
 export type GameCommand =
@@ -12,6 +12,7 @@ export type GameCommand =
   | { type: 'set-traffic-density'; density: TrafficDensity }
   | { type: 'set-audio'; enabled: boolean; masterVolume?: number; engineVolume?: number; effectsVolume?: number }
   | { type: 'set-online-mode'; mode: 'online' | 'solo' }
+  | { type: 'set-account-link-state'; state: AccountLinkState }
   | { type: 'set-online-visibility'; setting: 'showPlayerNames' | 'showFleetNames' | 'showPlayersOnMap' | 'remoteSounds' | 'publicPresence'; enabled: boolean }
   | { type: 'set-online-visual-limit'; limit: number }
   | { type: 'cancel-ride' }
