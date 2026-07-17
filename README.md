@@ -1,6 +1,6 @@
-# Rota Brasil Tycoon — Playable 0.6.2
+# Rota Brasil Tycoon — Playable 0.7.0
 
-Jogo 2.5D de transporte brasileiro para navegador. Você começa com o Hatch 1998 no centro de Brasília, dirige corridas informais, regulariza-se como taxista, converte o carro sem perder seu histórico e monta a primeira frota com motorista e segundo veículo.
+Jogo 2.5D de transporte brasileiro para navegador. Você começa ao volante de um Hatch 1998 em Brasília, atende passageiros, torna-se taxista e monta uma frota com funcionários que percorrem a mesma cidade física do jogador.
 
 ## Jogar localmente
 
@@ -11,88 +11,69 @@ npm install
 npm run dev
 ```
 
-Abra o endereço exibido e escolha **Jogar como visitante**. Use `WASD` ou as setas para dirigir livremente, `Espaço` para o freio de mão, `H` para buzinar, segure `R` para reposicionar e use a roda do mouse para zoom. O botão **Piloto automático** segue o GPS, respeita ruas/sinais/trânsito e completa corridas. No celular, volante e pedais somem enquanto ele está ligado.
+Abra o endereço exibido e escolha **Jogar como visitante**. Use `WASD` ou as setas para dirigir livremente, `Espaço` para o freio de mão, `H` para buzinar e segure `R` para reposicionar. A roda do mouse controla o zoom. O botão **Piloto automático** segue o GPS, respeita mãos, sinais e trânsito, embarca e entrega passageiros e escolhe a próxima corrida.
 
-Os indicadores de combustível e condição são botões: quando clicados, escolhem o posto ou a oficina mais próxima, traçam o GPS e ligam o piloto. Nenhum serviço é comprado sem confirmação.
+## O que mudou na 0.7.0
 
-## O que está nesta versão
+- Brasília cresceu de cerca de 4 km² para **157 km²**, cobrindo Asa Norte, Asa Sul, Setores Centrais, Sudoeste, Cruzeiro, Noroeste, Vila Planalto e Universidade de Brasília;
+- 19.756 vias canônicas, 36.539 faixas detalhadas, 109.047 nós globais e 127.036 arestas dirigidas;
+- grafo único por faixa para jogador, piloto automático, 72 NPCs e funcionários, com mão correta, `oneway=-1`, níveis, retornos, cruzamentos e conectores;
+- 279 chunks de 800 m carregados em janela local, com cache limitado e atualização automática por região;
+- GPS do jogador preserva o sentido inicial, não duplica o destino e evita recálculos em avenidas conectadas;
+- piloto e funcionários recuperam bloqueios de trânsito, colisões, saída de rota, falta de progresso e órbitas sem permanecer girando;
+- viagens curtas, médias, longas e entre regiões, com região de origem/destino visível;
+- painel Cidade mostra região atual, regiões disponíveis e quantidade de trechos carregados;
+- save local **v5**, com versão do mapa, chunk, região, faixa, segmento, posição geográfica e última posição segura;
+- renderização com LOD espacial e escala adaptativa: 37 FPS medianos em 1440×900 e 51 FPS no mobile no benchmark local, mantendo 72 NPCs, 9 ônibus e 10 sombras aéreas;
+- PWA mantém apenas o núcleo no precache; chunks e grafo entram no cache sob demanda.
 
-- mapa vetorial de aproximadamente 2 × 2 km do centro de Brasília, com escala física de 1 unidade = 1 metro;
-- direção manual livre, piloto opcional, ré, freio, combustível, condição, colisões graduais e acostamento/calçada como redução de velocidade, não barreira invisível;
-- missões informais com preço garantido e corridas oficiais de táxi por ponto, chamada de rua ou central;
-- regularização simplificada, conversão preservando o Hatch e taxímetro compacto por distância/tempo reais após o embarque;
-- três pontos de táxi `amenity=taxi` reais do OpenStreetMap, com entrada roteável;
-- contratação de Bia, Léo ou Nara, limite inicial de um funcionário e dois veículos, Sedan 2012 e atribuição exclusiva;
-- turnos físicos perto do jogador, simplificados à média distância e econômicos longe/offline, com limite de oito horas e perda de eficiência;
-- funcionários identificados como **Motorista + nome**, com destinos estáveis e rotas distribuídas pela cidade sem movimento circular;
-- relatório de frota com receitas, combustível, comissão, manutenção, multas, ocorrências e lucro;
-- ledger auditável com contexto de proprietário, frota, veículo, motorista e viagem;
-- 72 NPCs terrestres por padrão (54 carros/táxis, 9 ônibus e 9 utilitários), 10 sombras aéreas e teto técnico 350;
-- trânsito pela direita, mãos corretas, semáforos, prevenção de colisões e convergência progressiva nas vias que estreitam;
-- HUD responsivo com **Dirigir, Corridas, Garagem, Minha Frota, Caixa e Cidade**;
-- save local v4, migração/backup e Supabase opcional com tabelas normalizadas, RLS e compra atômica/idempotente;
-- PWA instalável e publicação automática no GitHub Pages.
+Todos os sistemas anteriores continuam disponíveis: direção manual livre, combustível, oficina, colisões, serviços reais/adaptados, táxi oficial, taxímetro, regularização, segundo veículo, funcionários identificados como **Motorista + nome**, turnos e relatórios financeiros.
 
 ## Verificações
 
 ```bash
 npm run typecheck
-npm run lint
 npm test
 npm run test:e2e
 npm run map:validate
+npm run traffic:simulate
 npm run economy:simulate
-npm run performance:benchmark
+npm run performance:benchmark -- http://127.0.0.1:4174
 npm run build
 ```
 
-O painel de desenvolvimento só aparece em `npm run dev` e abre com `Ctrl + Shift + D`. Ele permite testar regularização, conversão, taxímetro, contratação, compra, atribuição, turnos, retorno offline, manutenção, combustível, colisões e trânsito.
+O painel de desenvolvimento só aparece em `npm run dev` e abre com `Ctrl + Shift + D`.
 
 ## Dados de Brasília
 
-O recorte processado está em `public/data/cities/brasilia/central/`. Todos os arquivos usados na partida são locais; nenhuma consulta ao OpenStreetMap/Overpass ocorre durante o jogo.
+O manifesto está em `public/data/cities/brasilia/manifest.json`; os chunks ficam em `public/data/cities/brasilia/chunks/` e o grafo global compactado em `lane-graph.json.gz`. Durante a partida não ocorre consulta ao OpenStreetMap.
 
-Fonte: OpenStreetMap contributors, ODbL 1.0. Caixa geográfica, data de importação, licença e atribuição estão em `metadata.json`, e o HUD mostra a atribuição permanentemente. Para reproduzir a importação e validar o grafo:
+Fonte: OpenStreetMap contributors, ODbL 1.0. A caixa geográfica, data de importação, licença e atribuição estão em `metadata.json`, e a atribuição permanece visível no HUD. A fonte bruta compactada e seus metadados ficam em `data/map-sources/brasilia/`; o cache temporário de download não entra no Git.
 
 ```bash
 npm run map:import
 npm run map:validate
 ```
 
-O importador preserva curvas, mão única, faixas e larguras disponíveis, aplica padrões quando faltam dados e gera arestas dirigidas/chunks de 400 m. Oficina e garagem adaptadas são identificadas como ficcionais; os três pontos de táxi não são adaptações.
-
-## Supabase opcional
-
-O jogo funciona integralmente sem backend. Para habilitar login/sincronização:
-
-1. Crie um projeto no Supabase.
-2. Aplique, na ordem, `supabase/migrations/202607160001_initial_schema.sql` e `supabase/migrations/202607160002_playable_060_fleet.sql`.
-3. Copie `.env.example` para `.env.local`.
-4. Preencha `VITE_SUPABASE_URL` e `VITE_SUPABASE_ANON_KEY`.
-5. Reinicie o jogo.
-
-Nunca use `service_role` no frontend. As tabelas expostas têm RLS limitada ao jogador autenticado. Consulte [SUPABASE.md](./SUPABASE.md).
-
 ## GitHub Pages
 
-O workflow `.github/workflows/web.yml` testa, compila e publica `main`. Em **Settings → Pages**, a origem deve ser **GitHub Actions**. O caminho base é calculado automaticamente pelo nome do repositório.
+O workflow `.github/workflows/web.yml` testa, compila e publica `main`. Em **Settings → Pages**, a origem deve ser **GitHub Actions**. O caminho base é calculado pelo nome do repositório.
 
-## Arquitetura e auditoria
+## Auditorias
 
-Phaser cuida da cidade e simulação; React, do HUD. Comandos/snapshots tipados ligam ambos. Economia, taxímetro, frota, missões, trânsito, física, rotas, persistência e backend são módulos separados.
-
+- [auditoria completa da 0.7.0](./docs/playable-0.7.0-audit.md)
+- [cobertura do mapa](./docs/map-coverage-brasilia-0.7.0.md)
+- [comparação 0.6 → 0.7](./docs/map-before-after-0.7.0.md)
+- [malha viária](./docs/road-network-audit-0.7.0.md)
+- [simulação de trânsito](./docs/traffic-simulation-0.7.0.md)
+- [desempenho e streaming](./docs/performance-map-0.7.0.md)
 - [arquitetura](./docs/ARCHITECTURE.md)
-- [hotfix 0.6.2 — recuperação de órbita da frota](./docs/playable-0.6.2-audit.md)
-- [ajuste 0.6.1 — rotas dos funcionários](./docs/playable-0.6.1-audit.md)
-- [auditoria 0.6.0](./docs/playable-0.6.0-audit.md)
 - [pontos de táxi reais](./docs/real-taxi-points-brasilia.md)
-- [simulação econômica](./docs/economy-simulation-0.6.0.md)
-- [benchmark de desempenho](./docs/performance-0.6.0.md)
 
 ## Limitações conhecidas
 
-- a frota distante é agregada por lotes; só veículos próximos recebem corpo físico detalhado;
-- o processo de licença e os valores do taxímetro são claramente rotulados como regras de gameplay;
+- a frota distante continua agregada por lotes; só a região acompanhada usa física visual detalhada;
+- o processo de licença e os valores do taxímetro são regras de gameplay;
 - colisões usam física arcade, sem deformação visual complexa;
-- autenticação por e-mail depende do provedor habilitado no projeto Supabase;
-- a câmera inclinada é uma projeção 2.5D estilizada, não renderização 3D.
+- autenticação por e-mail depende do Supabase opcional;
+- a câmera inclinada é uma projeção 2.5D estilizada.

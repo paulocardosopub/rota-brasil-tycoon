@@ -1,0 +1,20 @@
+{
+  "city": "Brasília",
+  "area": "Plano Piloto, Sudoeste, Cruzeiro, Noroeste e Vila Planalto",
+  "origin": {
+    "lat": -15.7942,
+    "lon": -47.8822
+  },
+  "bbox": {
+    "south": -15.84,
+    "west": -47.95,
+    "north": -15.73,
+    "east": -47.83
+  },
+  "importedAt": "2026-07-16T23:23:32.108Z",
+  "source": "OpenStreetMap",
+  "sourceUrl": "https://www.openstreetmap.org/copyright",
+  "license": "Open Database License (ODbL) 1.0",
+  "attribution": "© OpenStreetMap contributors",
+  "coordinateSystem": "Coordenadas locais em metros, projeção equiretangular centrada na origem declarada."
+}

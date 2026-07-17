@@ -31,7 +31,8 @@ const initialHud: HudSnapshot = {
   officialTaxiRides: 0, activeVehicleId: emptySave.activeVehicleId, fleet: emptySave.fleet,
   fleetVehicleVisible: false, fleetRouteTarget: null, fleetRouteRemaining: 0, fleetRoutePathRemaining: 0,
   fleetCompletedStops: 0, fleetRouteRecoveries: 0, fleetLastRecoveryReason: null,
-  fleetDriverIdentification: null, totalTerrestrialEntities: 1
+  fleetDriverIdentification: null, totalTerrestrialEntities: 1,
+  mapVersion: GAME_CONFIG.mapVersion, currentRegion: 'Setores Centrais', currentChunk: '0_0', loadedMapChunks: 0, mapRegions: []
 };
 
 type Panel = 'rides' | 'garage' | 'fleet' | 'city' | 'settings' | 'cash' | null;
@@ -91,10 +92,11 @@ export function Hud() {
       data-fleet-route-target={hud.fleetRouteTarget ? `${hud.fleetRouteTarget.x.toFixed(2)},${hud.fleetRouteTarget.y.toFixed(2)}` : 'none'}
       data-fleet-route-remaining={hud.fleetRouteRemaining.toFixed(2)} data-fleet-route-path-remaining={hud.fleetRoutePathRemaining.toFixed(2)}
       data-fleet-completed-stops={hud.fleetCompletedStops} data-fleet-route-recoveries={hud.fleetRouteRecoveries}
-      data-fleet-last-recovery={hud.fleetLastRecoveryReason ?? 'none'}
+      data-fleet-last-recovery={hud.fleetLastRecoveryReason ?? 'none'} data-map-version={hud.mapVersion}
+      data-current-region={hud.currentRegion} data-current-chunk={hud.currentChunk} data-loaded-map-chunks={hud.loadedMapChunks}
     >
       <header className="top-hud">
-        <div className="brand-chip"><span>RB</span><div><b>Brasília</b><small>Centro • Dia</small></div></div>
+        <div className="brand-chip"><span>RB</span><div><b>Brasília</b><small>{hud.currentRegion} • Dia</small></div></div>
         <div className="status-cluster">
           <button className="money" onClick={() => choosePanel('cash')}><small>CAIXA</small><strong>{formatCurrency(hud.money)}</strong>{hud.debts > 0 && <em>Dívida {formatCurrency(hud.debts)}</em>}</button>
           <div className="vehicle-vitals">
@@ -234,7 +236,7 @@ function FleetReport({ hud }: { hud: HudSnapshot }) {
 
 function ServicesPanel({ hud, confirm }: { hud: HudSnapshot; confirm: ConfirmFn }) {
   const nearby = hud.nearbyService;
-  return <><div className="panel-kicker">CIDADE E SERVIÇOS REAIS</div><h2>{nearby ? nearby.gameName : 'Escolha um destino'}</h2><div className="quick-service-buttons"><button onClick={() => gameEvents.emit('command', { type: 'navigate-nearest-service', category: 'fuel' })}>Posto mais próximo + piloto</button><button onClick={() => gameEvents.emit('command', { type: 'navigate-nearest-service', category: 'workshop' })}>Oficina mais próxima + piloto</button></div><div className="service-list">{hud.serviceLocations.map((service) => <button key={service.id} className={hud.selectedService?.id === service.id ? 'active' : ''} onClick={() => gameEvents.emit('command', { type: 'navigate-service', serviceId: service.id })}><b>{service.gameName}</b><small>{service.category === 'fuel' ? 'Posto' : service.category === 'workshop' ? 'Oficina' : 'Garagem'} • {service.address}</small></button>)}</div>
+  return <><div className="panel-kicker">CIDADE E SERVIÇOS REAIS</div><h2>{nearby ? nearby.gameName : hud.currentRegion}</h2><div className="map-region-summary"><b>Brasília expandida</b><small>{hud.mapRegions.length} regiões • {hud.loadedMapChunks} trechos carregados ao redor do veículo</small><div>{hud.mapRegions.map((region) => <span className={region === hud.currentRegion ? 'active' : ''} key={region}>{region}</span>)}</div></div><div className="quick-service-buttons"><button onClick={() => gameEvents.emit('command', { type: 'navigate-nearest-service', category: 'fuel' })}>Posto mais próximo + piloto</button><button onClick={() => gameEvents.emit('command', { type: 'navigate-nearest-service', category: 'workshop' })}>Oficina mais próxima + piloto</button></div><div className="service-list">{hud.serviceLocations.map((service) => <button key={service.id} className={hud.selectedService?.id === service.id ? 'active' : ''} onClick={() => gameEvents.emit('command', { type: 'navigate-service', serviceId: service.id })}><b>{service.gameName}</b><small>{service.category === 'fuel' ? 'Posto' : service.category === 'workshop' ? 'Oficina' : 'Garagem'} • {service.address}</small></button>)}</div>
     {nearby?.category === 'fuel' && <div className="service-actions"><h3>Abastecer • R$ 5,79/L</h3>{[5,10].map((liters) => <button key={liters} onClick={() => confirm(`${liters} L por ${formatCurrency(fuelPurchaseCost(liters))}`, { type: 'buy-fuel', liters, requestId: requestId('fuel') })}>{liters} L • {formatCurrency(fuelPurchaseCost(liters))}</button>)}<button onClick={() => confirm('completar o tanque', { type: 'buy-fuel', liters: 'full', requestId: requestId('fuel-full') })}>Completar tanque</button></div>}
     {nearby?.category === 'workshop' && <div className="service-actions"><h3>Serviços da oficina</h3>{(['diagnosis','quick','partial','full','preventive'] as WorkshopServiceId[]).map((service) => { const price = workshopPrice(service, hud.condition, hud.maintenanceWear); return <button key={service} onClick={() => confirm(`${workshopLabel(service)} por ${formatCurrency(price)}`, { type: 'workshop-service', service, requestId: requestId('repair') })}>{workshopLabel(service)} • {formatCurrency(price)}</button>; })}</div>}
     {hud.selectedService && <button className="ghost-button" onClick={() => gameEvents.emit('command', { type: 'clear-service-route' })}>Cancelar rota de serviço</button>}
@@ -268,7 +270,7 @@ function DevPanel({ hud, close }: { hud: HudSnapshot; close: () => void }) {
     ['traffic-ahead','NPC à frente'],['traffic-collision','NPC sobre o carro'],['traffic-head-on','NPC de frente'],['collision-light','Colisão leve'],['collision-moderate','Colisão moderada'],['collision-severe','Colisão severa'],
     ['traffic','Alternar trânsito'],['signals','Alternar semáforos'],['signal-phase','Avançar fase dos sinais'],['graph','Grafo de rotas'],['reset','Reiniciar save']
   ];
-  return <aside className="dev-panel"><button onClick={close}>×</button><h3>Painel de desenvolvimento 0.6.2</h3><p className="dev-metrics">{hud.fps} FPS • {hud.trafficVehicles}/{hud.trafficCapacity} NPCs • teto {hud.trafficHardCeiling}<br />Frota: {hud.fleet.vehicles.length} veículos • {hud.fleet.employees.length} motorista • vaga reservada {hud.trafficReservedSlots}</p><div>{actions.map(([action,label]) => <button key={action} onClick={() => gameEvents.emit('command', { type: 'dev', action })}>{label}</button>)}</div></aside>;
+  return <aside className="dev-panel"><button onClick={close}>×</button><h3>Painel de desenvolvimento 0.7.0</h3><p className="dev-metrics">{hud.fps} FPS • {hud.trafficVehicles}/{hud.trafficCapacity} NPCs • teto {hud.trafficHardCeiling}<br />Frota: {hud.fleet.vehicles.length} veículos • {hud.fleet.employees.length} motorista • vaga reservada {hud.trafficReservedSlots}</p><div>{actions.map(([action,label]) => <button key={action} onClick={() => gameEvents.emit('command', { type: 'dev', action })}>{label}</button>)}</div></aside>;
 }
 
 type ConfirmFn = (label: string, command: GameCommand) => void;

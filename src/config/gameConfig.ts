@@ -1,15 +1,16 @@
 import { COLLISION_PHYSICS, VEHICLE_PHYSICS } from './vehiclePhysics';
 
 export const GAME_CONFIG = {
-  version: '0.6.2',
-  saveVersion: 4,
+  version: '0.7.0',
+  saveVersion: 5,
+  mapVersion: 'brasilia-0.7.0',
   map: {
     city: 'Brasília',
     district: 'Rodoviária do Plano Piloto e Eixo Monumental',
-    worldSizeMeters: 2_200,
+    worldSizeMeters: 16_000,
     projectionYScale: 0.72,
     projectionSkew: 0.18,
-    chunkSizeMeters: 400
+    chunkSizeMeters: 800
   },
   vehicle: {
     name: 'Hatch 1998',
@@ -71,6 +72,7 @@ export const GAME_CONFIG = {
     collisionStunSeconds: COLLISION_PHYSICS.npcStunSeconds,
     autopilotCollisionGhostSeconds: COLLISION_PHYSICS.autopilotGhostSeconds,
     autopilotHeadOnDeadlockSeconds: 0.45,
+    autopilotFollowingDeadlockSeconds: 7,
     collisionCooldownSeconds: COLLISION_PHYSICS.cooldownSeconds,
     collision: COLLISION_PHYSICS,
     densityMultipliers: { low: 0.28, medium: 0.56, high: 1, automatic: 1 },

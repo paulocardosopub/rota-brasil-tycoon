@@ -27,6 +27,15 @@ export default defineConfig({
       },
       workbox: {
         globPatterns: ['**/*.{js,css,html,svg,json}'],
+        globIgnores: ['data/cities/brasilia/chunks/**'],
+        runtimeCaching: [{
+          urlPattern: /\/data\/cities\/brasilia\/(?:chunks\/|lane-graph\.json\.gz)/,
+          handler: 'CacheFirst',
+          options: {
+            cacheName: 'brasilia-map-0.7',
+            expiration: { maxEntries: 30, maxAgeSeconds: 30 * 24 * 60 * 60 }
+          }
+        }],
         navigateFallback: 'index.html'
       }
     })

@@ -6,7 +6,7 @@ const results = simulateAll(Number.isFinite(rides) && rides > 0 ? Math.floor(rid
 console.table(results);
 
 const playable060 = simulatePlayable060();
-console.log('\nCenários jogáveis, táxi e frota da 0.6.0:');
+console.log('\nCenários jogáveis, táxi e frota preservados na 0.7.0:');
 console.table(playable060.results);
 console.log('\nMarcos de progressão:');
 console.table([playable060.milestones]);
@@ -30,4 +30,4 @@ if (offline.netProfit >= employee.netProfit * 8) failures.push('renda offline cr
 if (failures.length) {
   console.error(`Falhas de balanceamento: ${failures.join('; ')}`);
   process.exitCode = 1;
-} else console.log('Balanceamento aprovado para os critérios automáticos da 0.6.0.');
+} else console.log('Balanceamento aprovado para os critérios automáticos da 0.7.0.');

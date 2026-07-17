@@ -2,6 +2,10 @@ import { GAME_CONFIG } from '../../config/gameConfig';
 import type { CameraZoom, ClockGuard, DriverGoals, FleetVehicle, LedgerTransaction, PlayerFleet, PlayerSave, PlayerSettings, Quality, TaxiLicense, TrafficDensity, UpgradeLevels } from '../../types/game';
 import { createFleetVehicle } from '../../game/fleet/FleetService';
 import { createTaxiMeter } from '../../game/taxi/TaxiMeter';
+import { localMetersToLatLon } from '../../map/projection/localMeters';
+
+const MAP_ORIGIN = { lat: -15.7942, lon: -47.8822 };
+const MAP_CHUNK_SIZE = 800;
 
 const DEFAULT_SETTINGS: PlayerSettings = {
   quality: 'automatic',
@@ -70,13 +74,23 @@ export function createNewSave(position = { x: 0, y: 0 }): PlayerSave {
       id: fleetId, ownerId, name: 'Minha Frota', garageServiceId: 'garage-shs-hatch',
       capacity: GAME_CONFIG.fleet.capacity, vehicles: [hatch], employees: [], activeShift: null, lastReport: null
     },
-    clockGuard: { lastSeenAt: now, lastTrustedAt: now, rollbackDetected: false, unvalidated: true }
+    clockGuard: { lastSeenAt: now, lastTrustedAt: now, rollbackDetected: false, unvalidated: true },
+    mapVersion: GAME_CONFIG.mapVersion,
+    currentChunk: chunkFor(position),
+    currentRegion: 'centro',
+    laneId: null,
+    roadSegmentId: null,
+    geographicPosition: localMetersToLatLon(position.x, position.y, MAP_ORIGIN),
+    localPosition: { ...position },
+    lastSafePosition: { ...position },
+    mapMigrationNotice: false
   };
 }
 
 export function migrateSave(input: unknown): PlayerSave {
   if (!input || typeof input !== 'object') return createNewSave();
   const raw = input as Partial<PlayerSave>;
+  const previousSaveVersion = Number.isFinite(raw.saveVersion) ? raw.saveVersion! : 1;
   const fresh = createNewSave(raw.position);
   const legacyCondition = finite(raw.condition, fresh.condition);
   const upgrades = migrateUpgrades(raw.upgrades);
@@ -115,7 +129,18 @@ export function migrateSave(input: unknown): PlayerSave {
     officialTaxiRides: Math.max(0, Math.floor(finite(raw.officialTaxiRides, 0))),
     activeVehicleId: typeof raw.activeVehicleId === 'string' ? raw.activeVehicleId : fresh.activeVehicleId,
     fleet: fresh.fleet,
-    clockGuard: migrateClockGuard(raw.clockGuard, fresh.clockGuard)
+    clockGuard: migrateClockGuard(raw.clockGuard, fresh.clockGuard),
+    mapVersion: GAME_CONFIG.mapVersion,
+    currentChunk: typeof raw.currentChunk === 'string' ? raw.currentChunk : chunkFor(raw.position ?? fresh.position),
+    currentRegion: typeof raw.currentRegion === 'string' ? raw.currentRegion : 'centro',
+    laneId: typeof raw.laneId === 'string' ? raw.laneId : null,
+    roadSegmentId: typeof raw.roadSegmentId === 'string' ? raw.roadSegmentId : null,
+    geographicPosition: validGeographicPosition(raw.geographicPosition)
+      ? raw.geographicPosition
+      : localMetersToLatLon((raw.position ?? fresh.position).x, (raw.position ?? fresh.position).y, MAP_ORIGIN),
+    localPosition: validPoint(raw.localPosition) ? raw.localPosition : { ...(raw.position ?? fresh.position) },
+    lastSafePosition: validPoint(raw.lastSafePosition) ? raw.lastSafePosition : { ...(raw.position ?? fresh.position) },
+    mapMigrationNotice: previousSaveVersion < 5
   };
   migrated.fleet = migrateFleet(raw.fleet, migrated);
   if (!migrated.fleet.vehicles.some((vehicle) => vehicle.id === migrated.activeVehicleId)) {
@@ -275,6 +300,22 @@ function migrateFleetVehicle(input: FleetVehicle, ownerId: string, fleetId: stri
 
 function validDate(value: unknown) {
   return typeof value === 'string' && Number.isFinite(Date.parse(value)) ? value : undefined;
+}
+
+function validPoint(value: unknown): value is { x: number; y: number } {
+  if (!value || typeof value !== 'object') return false;
+  const point = value as { x?: number; y?: number };
+  return Number.isFinite(point.x) && Number.isFinite(point.y);
+}
+
+function validGeographicPosition(value: unknown): value is { lat: number; lon: number } {
+  if (!value || typeof value !== 'object') return false;
+  const point = value as { lat?: number; lon?: number };
+  return Number.isFinite(point.lat) && Number.isFinite(point.lon);
+}
+
+function chunkFor(point: { x: number; y: number }) {
+  return `${Math.floor(point.x / MAP_CHUNK_SIZE)}_${Math.floor(point.y / MAP_CHUNK_SIZE)}`;
 }
 
 function finite(value: unknown, fallback: number) { return Number.isFinite(value) ? value as number : fallback; }

@@ -29,6 +29,11 @@ export class RoadSurfaceIndex {
   private readonly cellSize = 100;
 
   constructor(roads: RoadData[]) {
+    this.replaceRoads(roads);
+  }
+
+  replaceRoads(roads: RoadData[]) {
+    this.cells.clear();
     for (const road of roads) {
       if (!isDrivableRoad(road)) continue;
       for (let index = 1; index < road.points.length; index += 1) {
