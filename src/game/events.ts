@@ -32,6 +32,7 @@ export type GameCommand =
   | { type: 'convert-taxi'; requestId: string }
   | { type: 'hire-employee'; candidateId: string; requestId: string }
   | { type: 'buy-fleet-vehicle'; requestId: string }
+  | { type: 'buy-regional-garage'; serviceId: string; requestId: string }
   | { type: 'assign-employee'; employeeId: string; vehicleId: string }
   | { type: 'unassign-employee'; employeeId: string }
   | { type: 'start-fleet-shift'; employeeId: string; requestId: string }

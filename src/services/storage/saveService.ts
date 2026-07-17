@@ -80,7 +80,8 @@ export function createNewSave(position = { x: 0, y: 0 }): PlayerSave {
     activeVehicleId: hatch.id,
     fleet: {
       id: fleetId, ownerId, name: 'Minha Frota', garageServiceId: 'garage-shs-hatch',
-      capacity: GAME_CONFIG.fleet.capacity, vehicles: [hatch], employees: [], activeShift: null, lastReport: null
+      capacity: GAME_CONFIG.fleet.capacity, vehicles: [hatch], employees: [], activeShift: null, lastReport: null,
+      garages: [centralGarage(now)]
     },
     clockGuard: { lastSeenAt: now, lastTrustedAt: now, rollbackDetected: false, unvalidated: true },
     mapVersion: GAME_CONFIG.mapVersion,
@@ -327,14 +328,14 @@ function migrateFleet(input: Partial<PlayerFleet> | undefined, save: PlayerSave)
     taxiLicensed: save.professionalStatus === 'licensed-taxi'
   });
   const vehicles = Array.isArray(input?.vehicles) && input.vehicles.length
-    ? input.vehicles.slice(0, GAME_CONFIG.fleet.capacity).map((vehicle) => migrateFleetVehicle(vehicle, save.ownerId, fleetId))
+    ? input.vehicles.map((vehicle) => migrateFleetVehicle(vehicle, save.ownerId, fleetId))
     : [legacyVehicle];
   return {
     id: fleetId, ownerId: save.ownerId,
     name: typeof input?.name === 'string' ? input.name : 'Minha Frota',
     garageServiceId: 'garage-shs-hatch', capacity: GAME_CONFIG.fleet.capacity,
     vehicles,
-    employees: Array.isArray(input?.employees) ? input.employees.slice(0, GAME_CONFIG.fleet.maximumEmployees).map(migrateEmployee) : [],
+    employees: Array.isArray(input?.employees) ? input.employees.map(migrateEmployee) : [],
     activeShift: input?.activeShift && typeof input.activeShift === 'object' ? {
       ...input.activeShift,
       policy: {
@@ -342,7 +343,10 @@ function migrateFleet(input: Partial<PlayerFleet> | undefined, save: PlayerSave)
         regional: migrateEmployeeRegionalPreferences(input.activeShift.policy?.regional)
       }
     } : null,
-    lastReport: input?.lastReport && typeof input.lastReport === 'object' ? input.lastReport : null
+    lastReport: input?.lastReport && typeof input.lastReport === 'object' ? input.lastReport : null,
+    garages: Array.isArray(input?.garages) && input.garages.length
+      ? input.garages.map((garage) => ({ ...garage, vehicleCapacity: 5, employeeCapacity: 5 }))
+      : [centralGarage(save.updatedAt)]
   };
 }
 
@@ -356,7 +360,14 @@ function migrateFleetVehicle(input: FleetVehicle, ownerId: string, fleetId: stri
     position: input.position && Number.isFinite(input.position.x) && Number.isFinite(input.position.y) ? input.position : { x: 0, y: 0 },
     rotation: finite(input.rotation, 0), purchasePrice: finiteMoney(input.purchasePrice, 0), taxiLicensed: input.taxiLicensed === true
   });
-  return { ...base, ...input, ownerId, fleetId, upgrades: migrateUpgrades(input.upgrades) };
+  return { ...base, ...input, ownerId, fleetId, baseGarageId: typeof input.baseGarageId === 'string' ? input.baseGarageId : 'garage-shs-hatch', upgrades: migrateUpgrades(input.upgrades) };
+}
+
+function centralGarage(acquiredAt: string) {
+  return {
+    serviceId: 'garage-shs-hatch', regionId: 'centro', name: 'GARAGEM CENTRAL', acquiredAt,
+    purchasePrice: 0, operatingCost: 0, vehicleCapacity: 5, employeeCapacity: 5
+  };
 }
 
 function validDate(value: unknown) {
@@ -397,7 +408,7 @@ function normalizePublicName(value: unknown, fallback: string) {
 }
 
 function migrateEmployee(employee: FleetEmployee): FleetEmployee {
-  return { ...employee, regionalPreferences: migrateEmployeeRegionalPreferences(employee.regionalPreferences) };
+  return { ...employee, baseGarageId: typeof employee.baseGarageId === 'string' ? employee.baseGarageId : 'garage-shs-hatch', regionalPreferences: migrateEmployeeRegionalPreferences(employee.regionalPreferences) };
 }
 
 function migrateEmployeeRegionalPreferences(input: Partial<EmployeeRegionalPreferences> | undefined): EmployeeRegionalPreferences {

@@ -115,6 +115,9 @@ function cloudRow(userId: string, save: PlayerSave) {
 }
 
 function isPristine(save: PlayerSave) {
-  return save.completedRides === 0 && save.ledger.length === 0 && save.fleet.vehicles.length === 1
+  // An accepted/in-progress ride is progress even before it produces money.
+  // Treating it as a new save allowed the older cloud offer to replace it on
+  // reload, making the passenger disappear mid-trip.
+  return save.activeMission === null && save.completedRides === 0 && save.ledger.length === 0 && save.fleet.vehicles.length === 1
     && save.fleet.employees.length === 0 && Math.abs(save.money - 100) < 0.001;
 }

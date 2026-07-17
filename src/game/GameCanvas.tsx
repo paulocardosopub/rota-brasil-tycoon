@@ -17,7 +17,7 @@ export function GameCanvas({ save }: { save: PlayerSave }) {
       scene: [new MainScene(save)],
       // Em telas grandes a alta densidade do canvas já suaviza as bordas. Evitar
       // MSAA ali preserva nitidez e recupera GPU para mapa, trânsito e rotas.
-      render: { antialias: container.clientWidth < 1_000, pixelArt: false, roundPixels: false, powerPreference: 'high-performance' },
+      render: { antialias: true, pixelArt: false, roundPixels: false, powerPreference: 'high-performance' },
       scale: {
         mode: Phaser.Scale.FIT,
         autoCenter: Phaser.Scale.CENTER_BOTH,
@@ -48,10 +48,9 @@ export function GameCanvas({ save }: { save: PlayerSave }) {
 function scaledGameSize(container: HTMLDivElement) {
   // A folga de 5% em telas grandes recupera o orçamento de GPU sem repetir a
   // ampliação borrada de 20% que existia na 0.7.0.
-  const scale = container.clientWidth >= 1_000 ? 0.95 : 1;
   return {
-    width: Math.max(1, Math.round(container.clientWidth * scale)),
-    height: Math.max(1, Math.round(container.clientHeight * scale))
+    width: Math.max(1, Math.round(container.clientWidth)),
+    height: Math.max(1, Math.round(container.clientHeight))
   };
 }
 

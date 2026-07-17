@@ -1,5 +1,5 @@
 import { GAME_CONFIG } from '../../config/gameConfig';
-import type { EmployeeCandidate, EmployeeRegionalPreferences, FleetEmployee, FleetReport, FleetShift, FleetSimulationLevel, FleetVehicle, PlayerSave, Point, UpgradeLevels } from '../../types/game';
+import type { EmployeeCandidate, EmployeeRegionalPreferences, FleetEmployee, FleetReport, FleetShift, FleetSimulationLevel, FleetVehicle, MapServiceLocation, PlayerSave, Point, UpgradeLevels } from '../../types/game';
 import { EconomyService } from '../economy/EconomyService';
 import { roundMoney } from '../economy/TransactionLedger';
 import { DEFAULT_SHIFT_POLICY, EMPLOYEE_CANDIDATES } from './FleetConfig';
@@ -24,7 +24,8 @@ export function createFleetVehicle(input: {
     condition: input.condition, collisionDamage: input.collisionDamage, maintenanceWear: input.maintenanceWear,
     totalKm: input.totalKm, upgrades: { ...input.upgrades }, position: { ...input.position }, rotation: input.rotation,
     purchasePrice: input.purchasePrice, acquiredAt: now, grossRevenue: 0, expenses: 0,
-    nextMaintenanceKm: Math.ceil(input.totalKm / 100 + 1) * 100
+    nextMaintenanceKm: Math.ceil(input.totalKm / 100 + 1) * 100,
+    baseGarageId: 'garage-shs-hatch'
   };
 }
 
@@ -58,7 +59,8 @@ export function selectPlayerVehicle(save: PlayerSave, vehicleId: string) {
 
 export function hireEmployee(save: PlayerSave, candidateId: string, requestId: string) {
   if (save.professionalStatus !== 'licensed-taxi') return { applied: false, reason: 'not-licensed' as const };
-  if (save.fleet.employees.length >= GAME_CONFIG.fleet.maximumEmployees) return { applied: false, reason: 'capacity' as const };
+  const garageId = save.fleet.garageServiceId;
+  if (garageEmployeeCount(save, garageId) >= GAME_CONFIG.fleet.garageEmployeeCapacity) return { applied: false, reason: 'capacity' as const };
   if (save.fleet.employees.some((employee) => employee.id === candidateId)) return { applied: false, reason: 'duplicate' as const };
   const candidate = EMPLOYEE_CANDIDATES.find((item) => item.id === candidateId);
   if (!candidate) return { applied: false, reason: 'missing' as const };
@@ -68,21 +70,24 @@ export function hireEmployee(save: PlayerSave, candidateId: string, requestId: s
   const employee: FleetEmployee = {
     ...candidate, fleetId: save.fleet.id, ownerId: save.ownerId, state: 'waiting-vehicle',
     vehicleId: null, hiredAt: new Date().toISOString(), grossRevenue: 0, commissionPaid: 0, tripsCompleted: 0,
-    regionalPreferences: { ...DEFAULT_EMPLOYEE_REGIONAL_PREFERENCES, preferredRegionId: save.preferredRegionId }
+    regionalPreferences: { ...DEFAULT_EMPLOYEE_REGIONAL_PREFERENCES, preferredRegionId: save.preferredRegionId },
+    baseGarageId: garageId
   };
   save.fleet.employees.push(employee);
   return { applied: true, employee, transaction: result.transaction };
 }
 
-export function purchaseSecondVehicle(save: PlayerSave, requestId: string) {
+export function purchaseSecondVehicle(save: PlayerSave, requestId: string, garageService?: MapServiceLocation) {
   if (save.professionalStatus !== 'licensed-taxi') return { applied: false, reason: 'not-licensed' as const };
-  if (save.fleet.vehicles.length >= save.fleet.capacity) return { applied: false, reason: 'capacity' as const };
+  const garageId = garageService?.id ?? save.fleet.garageServiceId;
+  if (!save.fleet.garages.some((garage) => garage.serviceId === garageId)) return { applied: false, reason: 'garage' as const };
+  if (garageVehicleCount(save, garageId) >= GAME_CONFIG.fleet.garageVehicleCapacity) return { applied: false, reason: 'capacity' as const };
   const result = new EconomyService(save).expense(
     GAME_CONFIG.fleet.secondVehiclePrice, 'fleet-purchase', 'Classificados da frota • Sedan 2012', requestId, false,
     fleetContext(save, 'pending-sedan', 'none', 'none')
   );
   if (!result.applied) return result;
-  const garage = { x: -744.378, y: 57.827 };
+  const garage = garageService?.stopPoint ?? { x: -744.378, y: 57.827 };
   const vehicle = createFleetVehicle({
     ownerId: save.ownerId, fleetId: save.fleet.id, model: 'Sedan 2012', fuel: 26,
     condition: GAME_CONFIG.fleet.secondVehicleCondition, collisionDamage: 18, maintenanceWear: 4,
@@ -90,6 +95,7 @@ export function purchaseSecondVehicle(save: PlayerSave, requestId: string) {
     position: garage, rotation: 0, purchasePrice: GAME_CONFIG.fleet.secondVehiclePrice, taxiLicensed: true
   });
   vehicle.state = 'parked'; vehicle.controllerId = null; vehicle.simulationLevel = 'economic';
+  vehicle.baseGarageId = garageId;
   save.fleet.vehicles.push(vehicle);
   if (result.transaction) {
     result.transaction.vehicleId = vehicle.id;
@@ -127,6 +133,48 @@ export function unassignEmployee(save: PlayerSave, employeeId: string) {
   }
   employee.vehicleId = null; employee.state = 'waiting-vehicle';
   return { applied: true, employee, vehicle };
+}
+
+export function purchaseRegionalGarage(save: PlayerSave, service: MapServiceLocation, requestId: string) {
+  if (service.category !== 'garage') return { applied: false, reason: 'invalid' as const };
+  if (save.fleet.garages.some((garage) => garage.serviceId === service.id)) return { applied: false, reason: 'owned' as const };
+  const result = new EconomyService(save).expense(GAME_CONFIG.fleet.regionalGaragePrice, 'fleet-purchase', `Garagem regional • ${service.gameName}`, requestId, false, fleetContext(save, 'none', 'none', 'none'));
+  if (!result.applied) return result;
+  const garage = {
+    serviceId: service.id, regionId: service.regionId ?? 'centro', name: service.gameName,
+    acquiredAt: new Date().toISOString(), purchasePrice: GAME_CONFIG.fleet.regionalGaragePrice,
+    operatingCost: GAME_CONFIG.fleet.regionalGarageOperatingCost,
+    vehicleCapacity: GAME_CONFIG.fleet.garageVehicleCapacity,
+    employeeCapacity: GAME_CONFIG.fleet.garageEmployeeCapacity
+  };
+  save.fleet.garages.push(garage);
+  return { applied: true, garage, transaction: result.transaction };
+}
+
+export function transferFleetEntity(save: PlayerSave, kind: 'vehicle' | 'employee', entityId: string, targetGarageId: string, requestId: string) {
+  if (!save.fleet.garages.some((garage) => garage.serviceId === targetGarageId)) return { applied: false, reason: 'garage' as const };
+  if (kind === 'vehicle') {
+    const vehicle = save.fleet.vehicles.find((item) => item.id === entityId);
+    if (!vehicle || vehicle.id === save.activeVehicleId || vehicle.controllerType === 'EMPLOYEE' || save.fleet.activeShift?.vehicleId === vehicle.id) return { applied: false, reason: 'in-use' as const };
+    if (garageVehicleCount(save, targetGarageId) >= GAME_CONFIG.fleet.garageVehicleCapacity) return { applied: false, reason: 'capacity' as const };
+    const charge = new EconomyService(save).expense(GAME_CONFIG.fleet.vehicleTransferCost, 'reposition', 'Transferência entre garagens', requestId, false, fleetContext(save, vehicle.id, 'none', 'none'));
+    if (!charge.applied) return charge;
+    vehicle.baseGarageId = targetGarageId; vehicle.updatedAt = new Date().toISOString(); vehicle.stateVersion += 1;
+    return { applied: true, vehicle, transaction: charge.transaction };
+  }
+  const employee = save.fleet.employees.find((item) => item.id === entityId);
+  if (!employee || save.fleet.activeShift?.employeeId === employee.id) return { applied: false, reason: 'in-use' as const };
+  if (garageEmployeeCount(save, targetGarageId) >= GAME_CONFIG.fleet.garageEmployeeCapacity) return { applied: false, reason: 'capacity' as const };
+  employee.baseGarageId = targetGarageId;
+  return { applied: true, employee };
+}
+
+export function garageVehicleCount(save: PlayerSave, garageId: string) {
+  return save.fleet.vehicles.filter((vehicle) => vehicle.baseGarageId === garageId).length;
+}
+
+export function garageEmployeeCount(save: PlayerSave, garageId: string) {
+  return save.fleet.employees.filter((employee) => employee.baseGarageId === garageId).length;
 }
 
 export function updateEmployeeRegionalPreferences(

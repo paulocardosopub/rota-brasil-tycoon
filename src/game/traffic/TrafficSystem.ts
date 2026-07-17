@@ -792,7 +792,10 @@ export class TrafficSystem {
   private validEdges(node: GraphNode, majorOnly = false): GraphEdge[] {
     const valid = node.edges.filter((edge) => {
       const road = this.roads.get(edge.roadId);
-      if (this.laneGraph) return this.nodes.has(edge.to) && (!majorOnly || MAJOR_ROADS.has(edge.highway ?? ''));
+      // Synthetic graph connectors are useful to diagnose disconnected map
+      // components, but ambient traffic may only drive on a published road
+      // surface. This prevents NPCs from following connector chords on grass.
+      if (this.laneGraph) return road !== undefined && isDrivableRoad(road) && this.nodes.has(edge.to) && (!majorOnly || MAJOR_ROADS.has(edge.highway ?? road.highway));
       return road && isDrivableRoad(road) && this.nodes.has(edge.to) && (!majorOnly || MAJOR_ROADS.has(road.highway));
     });
     return valid.length || !majorOnly ? valid : this.validEdges(node, false);

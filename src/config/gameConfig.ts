@@ -1,8 +1,8 @@
 import { COLLISION_PHYSICS, VEHICLE_PHYSICS } from './vehiclePhysics';
 
 export const GAME_CONFIG = {
-  version: '0.8.2',
-  saveVersion: 7,
+  version: '0.8.3',
+  saveVersion: 8,
   mapVersion: 'brasilia-0.8.2',
   map: {
     city: 'Brasília',
@@ -126,8 +126,13 @@ export const GAME_CONFIG = {
     }
   },
   fleet: {
-    capacity: 2,
-    maximumEmployees: 1,
+    capacity: 5,
+    maximumEmployees: 5,
+    garageVehicleCapacity: 5,
+    garageEmployeeCapacity: 5,
+    regionalGaragePrice: 1_250,
+    regionalGarageOperatingCost: 8,
+    vehicleTransferCost: 35,
     secondVehiclePrice: 650,
     secondVehicleCondition: 78,
     offlineMaximumHours: 8,

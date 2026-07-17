@@ -412,6 +412,7 @@ export interface FleetVehicle {
   grossRevenue: number;
   expenses: number;
   nextMaintenanceKm: number;
+  baseGarageId: string;
 }
 
 export interface EmployeeCandidate {
@@ -438,6 +439,18 @@ export interface FleetEmployee extends EmployeeCandidate {
   commissionPaid: number;
   tripsCompleted: number;
   regionalPreferences: EmployeeRegionalPreferences;
+  baseGarageId: string;
+}
+
+export interface OwnedGarage {
+  serviceId: string;
+  regionId: string;
+  name: string;
+  acquiredAt: string;
+  purchasePrice: number;
+  operatingCost: number;
+  vehicleCapacity: number;
+  employeeCapacity: number;
 }
 
 export interface EmployeeRegionalPreferences {
@@ -517,6 +530,7 @@ export interface PlayerFleet {
   employees: FleetEmployee[];
   activeShift: FleetShift | null;
   lastReport: FleetReport | null;
+  garages: OwnedGarage[];
 }
 
 export interface ClockGuard {
