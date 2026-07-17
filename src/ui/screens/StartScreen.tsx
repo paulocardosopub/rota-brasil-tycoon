@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { GAME_CONFIG } from '../../config/gameConfig';
 import { forceCloudSave } from '../../services/supabase/cloudSaveService';
 import { getAccountStatus, finishPermanentAccount, registerPermanentAccount, signInPermanent, type AccountStatus } from '../../services/supabase/authService';
 import { isCloudEnabled, supabase } from '../../services/supabase/client';
@@ -163,7 +164,7 @@ export function StartScreen({ onContinue, onNewGame, onGuest }: Props) {
         <div className="hero-car"><i /><b /><em /></div>
       </div>
       <section className="start-card">
-        <div className="eyebrow">PLAYABLE 0.8.0 • ONLINE ALPHA</div>
+        <div className="eyebrow">PLAYABLE {GAME_CONFIG.version} • ONLINE ALPHA</div>
         <h1><span>Rota Brasil</span> Tycoon</h1>
         <p>Comece ao volante de um Hatch 1998. Busque passageiros e construa sua futura empresa de transporte.</p>
         {!authMode ? (
