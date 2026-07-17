@@ -721,6 +721,11 @@ export class TrafficSystem {
   }
 
   debugPlaceTrafficJam(position: Point, heading: number) {
+    // Keep the synthetic deadlock focused on traffic recovery. A red signal at
+    // the player's current node can otherwise keep the player correctly
+    // stopped after the four NPCs have escaped, making the diagnostic depend
+    // on the signal phase chosen for this particular map spawn.
+    this.signalOverride = 'green';
     for (const [offset, vehicle] of this.vehicles.slice(0, 4).entries()) {
       const distance = 10 + offset * 8;
       vehicle.position = {
