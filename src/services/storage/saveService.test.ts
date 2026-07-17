@@ -31,7 +31,7 @@ describe('save local versionado', () => {
       rotation: 1.2,
       settings: { quality: 'high', cameraMode: 'fixed', audio: true }
     });
-    expect(migrated.saveVersion).toBe(7);
+    expect(migrated.saveVersion).toBe(8);
     expect(migrated.money).toBe(432);
     expect(migrated.completedRides).toBe(3);
     expect(migrated.settings.cameraZoom).toBe('normal');
@@ -42,6 +42,7 @@ describe('save local versionado', () => {
     expect(migrated.maintenanceWear).toBe(0);
     expect(migrated.goals.firstRide).toBe(false);
     expect(migrated.mapVersion).toBe('brasilia-0.8.2');
+    expect(migrated.fleet.garages[0]).toMatchObject({ serviceId: 'garage-shs-hatch', purchasePrice: 0, vehicleCapacity: 5, employeeCapacity: 5 });
     expect(migrated.publicPlayerId).toMatch(/^rbp_/);
     expect(migrated.onlinePreference).toBe('online');
     expect(migrated.settings.showPlayerNames).toBe(true);
@@ -104,7 +105,7 @@ describe('save local versionado', () => {
 
     const migrated = loadSave();
 
-    expect(migrated.saveVersion).toBe(7);
+    expect(migrated.saveVersion).toBe(8);
     expect(migrated.money).toBe(321);
     expect(localStorage.getItem(GAME_CONFIG.storage.backupKey)).toBe(legacy);
   });

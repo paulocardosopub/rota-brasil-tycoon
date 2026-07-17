@@ -29,7 +29,7 @@ import { finishTaxiMeter, markTaxiBoarding, prepareTaxiMeter, resetTaxiMeter, st
 import { convertActiveVehicleToTaxi, regularizeTaxi } from '../progression/RegularizationService';
 import {
   acknowledgeFleetReport, advanceFleetShift, assignEmployee, dismissEmployee, endFleetShift,
-  hireEmployee, purchaseSecondVehicle, selectPlayerVehicle, simulateOfflineReturn,
+  hireEmployee, purchaseRegionalGarage, purchaseSecondVehicle, selectPlayerVehicle, simulateOfflineReturn,
   startFleetShift, syncActiveVehicleFromLegacy, unassignEmployee,
   updateEmployeeRegionalPreferences
 } from '../fleet/FleetService';
@@ -577,7 +577,10 @@ export class MainScene extends Phaser.Scene {
         GAME_CONFIG.vehicle.brakeMps2
       );
       if (this.vehicle.recoverAutopilotToLane(guidance.preferredRoadHeading)) {
-        this.mission.advanceRoute(this.vehicle.position);
+        // Re-anchor the graph after moving back to the lane. Advancing the old
+        // route here could keep its obsolete grass connection and retrigger
+        // recovery every few seconds without letting the car move.
+        this.recalculateActiveRoute();
         this.offRouteSeconds = 0;
       }
       this.autopilotStuckSeconds = 0;
@@ -1182,14 +1185,23 @@ export class MainScene extends Phaser.Scene {
     if (command.type === 'hire-employee') {
       const result = hireEmployee(this.save, command.candidateId, command.requestId);
       const employee = 'employee' in result ? result.employee : undefined;
-      this.emitToast(result.applied && employee ? `${employee.name} foi contratado para a sua frota.` : result.reason === 'not-licensed' ? 'Regularize-se antes de contratar.' : result.reason === 'capacity' ? 'A frota já atingiu o limite de motoristas.' : 'Não foi possível concluir a contratação.', result.applied ? 'success' : 'warning');
+      this.emitToast(result.applied && employee ? `${employee.name} foi contratado para a sua frota.` : result.reason === 'not-licensed' ? 'Regularize-se antes de contratar.' : result.reason === 'capacity' ? 'Esta garagem já possui 5 funcionários. Compre outra garagem ou transfira um funcionário.' : 'Não foi possível concluir a contratação.', result.applied ? 'success' : 'warning');
       if (result.applied) this.persist();
       return;
     }
     if (command.type === 'buy-fleet-vehicle') {
-      if (!this.activeNearbyService('garage')) return;
-      const result = purchaseSecondVehicle(this.save, command.requestId);
-      this.emitToast(result.applied ? 'Sedan 2012 adquirido, registrado e estacionado na garagem.' : result.reason === 'capacity' ? 'A garagem já está na capacidade máxima.' : result.reason === 'not-licensed' ? 'Regularize-se antes de adquirir o Sedan.' : 'Saldo insuficiente para a compra.', result.applied ? 'success' : 'warning');
+      const garage = this.activeNearbyService('garage');
+      if (!garage) return;
+      const result = purchaseSecondVehicle(this.save, command.requestId, garage);
+      this.emitToast(result.applied ? 'Sedan 2012 adquirido, registrado e estacionado na garagem.' : result.reason === 'capacity' ? 'Esta garagem já possui 5 veículos. Compre outra garagem ou transfira um veículo.' : result.reason === 'garage' ? 'Compre esta garagem antes de registrar veículos nela.' : result.reason === 'not-licensed' ? 'Regularize-se antes de adquirir o Sedan.' : 'Saldo insuficiente para a compra.', result.applied ? 'success' : 'warning');
+      if (result.applied) this.persist();
+      return;
+    }
+    if (command.type === 'buy-regional-garage') {
+      const service = this.activeNearbyService('garage');
+      if (!service || service.id !== command.serviceId) return;
+      const result = purchaseRegionalGarage(this.save, service, command.requestId);
+      this.emitToast(result.applied ? `${service.gameName} agora pertence à sua frota.` : result.reason === 'owned' ? 'Essa garagem já pertence à sua frota.' : 'Saldo insuficiente para comprar a garagem.', result.applied ? 'success' : 'warning');
       if (result.applied) this.persist();
       return;
     }

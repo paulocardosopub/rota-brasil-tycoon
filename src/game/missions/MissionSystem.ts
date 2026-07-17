@@ -84,11 +84,20 @@ export class MissionSystem {
     for (let offset = 0; offset < Math.min(36, pickupCandidates.length); offset += 1) {
       const candidate = pickupCandidates[(rideIndex * 7 + offset) % pickupCandidates.length];
       const testRoute = this.router.drivingRoute(start, candidate);
-      if (testRoute.length >= 2) { pickup = candidate; pickupRoute = testRoute; break; }
+      const distance = this.router.distance(testRoute);
+      if (testRoute.length >= 2 && distance >= 500 && distance <= 2_000) { pickup = candidate; pickupRoute = testRoute; break; }
     }
     if (pickupRoute.length < 2) for (const candidate of pool) {
       const testRoute = this.router.drivingRoute(start, candidate);
-      if (testRoute.length >= 2) { pickup = candidate; pickupRoute = testRoute; break; }
+      const distance = this.router.distance(testRoute);
+      if (testRoute.length >= 2 && distance >= 500 && distance <= 2_000) { pickup = candidate; pickupRoute = testRoute; break; }
+    }
+    if (pickupRoute.length < 2) for (const candidate of this.router.candidates(40)) {
+      const testRoute = this.router.drivingRoute(start, candidate);
+      const distance = this.router.distance(testRoute);
+      if (testRoute.length >= 2 && distance >= 500 && distance <= 2_000) {
+        pickup = candidate; pickupRoute = testRoute; break;
+      }
     }
     const bands = [
       { id: 'short', min: 300, max: 1_500 },

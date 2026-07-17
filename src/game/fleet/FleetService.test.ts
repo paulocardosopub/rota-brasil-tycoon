@@ -20,7 +20,10 @@ describe('primeira frota', () => {
     const { save, employee, sedan } = fleetReady();
     expect(assignEmployee(save, employee.id, sedan.id).applied).toBe(false);
     expect(hireEmployee(save, 'bia-rocha', 'hire-again').applied).toBe(false);
-    expect(purchaseSecondVehicle(save, 'sedan-again').applied).toBe(false);
+    expect(purchaseSecondVehicle(save, 'sedan-3').applied).toBe(true);
+    expect(purchaseSecondVehicle(save, 'sedan-4').applied).toBe(true);
+    expect(purchaseSecondVehicle(save, 'sedan-5').applied).toBe(true);
+    expect(purchaseSecondVehicle(save, 'sedan-6').applied).toBe(false);
   });
 
   it('opera turno com receita, custos, comissão e contexto completo no ledger', () => {

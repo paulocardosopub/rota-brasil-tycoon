@@ -28,7 +28,10 @@ export function guidanceForRoute(
 
   // A compact look-ahead starts the turn before the junction without aiming
   // across a whole block or cutting a long chord through the sidewalk.
-  const lookAhead = clamp(5.5 + Math.abs(speedMps) * 0.5, 5.5, 11.5);
+  const compactCurve = denseCurveAhead(activePath, 24);
+  const lookAhead = compactCurve
+    ? clamp(4.2 + Math.abs(speedMps) * 0.25, 4.2, 7.2)
+    : clamp(5.5 + Math.abs(speedMps) * 0.5, 5.5, 11.5);
   const upcomingCorner = firstSharpCorner(activePath, lookAhead + 5);
   // On a sharp corner, looking far down the next street creates a diagonal
   // chord across the sidewalk. Aim just beyond the apex until the car has
@@ -40,7 +43,7 @@ export function guidanceForRoute(
   const target = pointAtDistance(activePath, targetDistance);
   const desiredAngle = Math.atan2(target.y - position.y, target.x - position.x);
   const error = angleDelta(rotation, desiredAngle);
-  const responseAngle = 0.38 + Math.min(0.2, Math.abs(speedMps) * 0.01);
+  const responseAngle = compactCurve ? 0.31 : 0.38 + Math.min(0.2, Math.abs(speedMps) * 0.01);
   const headingTargetSpeed = Math.abs(error) > 0.22
     ? clamp(cruiseSpeedMps - (Math.abs(error) - 0.22) * 8.5, 3.2, cruiseSpeedMps)
     : cruiseSpeedMps;
@@ -58,9 +61,24 @@ export function guidanceForRoute(
     roadAnchor: location.point,
     targetSpeedMps: Math.min(
       headingTargetSpeed,
-      speedForUpcomingCurves(activePath, cruiseSpeedMps, brakingMps2)
+      speedForUpcomingCurves(activePath, compactCurve ? Math.min(cruiseSpeedMps, 5.55) : cruiseSpeedMps, brakingMps2)
     )
   };
+}
+
+function denseCurveAhead(path: Point[], maximumDistance: number) {
+  let travelled = 0;
+  let accumulatedTurn = 0;
+  let shortSegments = 0;
+  for (let index = 1; index < path.length - 1 && travelled <= maximumDistance; index += 1) {
+    const incomingLength = Math.hypot(path[index].x - path[index - 1].x, path[index].y - path[index - 1].y);
+    travelled += incomingLength;
+    if (incomingLength <= 12) shortSegments += 1;
+    const incoming = Math.atan2(path[index].y - path[index - 1].y, path[index].x - path[index - 1].x);
+    const outgoing = Math.atan2(path[index + 1].y - path[index].y, path[index + 1].x - path[index].x);
+    accumulatedTurn += Math.abs(angleDelta(incoming, outgoing));
+  }
+  return shortSegments >= 2 && accumulatedTurn >= 0.65;
 }
 
 export function steeringForRoute(position: Point, rotation: number, speedMps: number, route: Point[]) {
