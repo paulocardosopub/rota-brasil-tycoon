@@ -140,8 +140,13 @@ export class MainScene extends Phaser.Scene {
       const recoveryPosition = surface.distanceFromRoad(this.save.position) <= 12
         ? this.save.position
         : this.save.lastSafePosition;
-      if (surface.distanceFromRoad(recoveryPosition) > 12) {
-        this.save.position = { x: spawn.x, y: spawn.y };
+      const routeStart = this.router.routeStart(recoveryPosition, this.save.rotation);
+      if (surface.distanceFromRoad(recoveryPosition) > 12 || !routeStart) {
+        // Some OSM fragments are visually valid roads but are physically
+        // isolated from the city graph. Recover onto the closest published
+        // lane so GPS/autopilot never draw a shortcut across grass.
+        this.save.position = this.router.nearestRoutePoint(recoveryPosition);
+        spawn = this.router.nearest(this.save.position);
       } else {
         this.save.position = { ...recoveryPosition };
         spawn = this.router.nearest(recoveryPosition);

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import type { RoadData } from '../../types/game';
 import { GraphRouter } from './GraphRouter';
 
 describe('GraphRouter', () => {
@@ -46,5 +47,21 @@ describe('GraphRouter', () => {
 
     const route = laneRouter.drivingRoute({ x: 20, y: 0 }, { x: 150, y: 6 }, 0);
     expect(route[route.length - 1]).toEqual({ x: 150, y: 0 });
+  });
+
+  it('não liga uma rua fora do grafo a uma avenida paralela atravessando a grama', () => {
+    const roadPoint = (x: number, y: number, nodeId: string) => ({ x, y, lat: 0, lon: 0, nodeId });
+    const roads: RoadData[] = [
+      { id: 'local', name: 'Rua local', highway: 'residential', oneway: false, lanes: 2, width: 7, points: [roadPoint(0, 0, 'l0'), roadPoint(100, 0, 'l1')] },
+      { id: 'main', name: 'Avenida', highway: 'primary', oneway: true, lanes: 2, width: 7, points: [roadPoint(0, 10, 'm0'), roadPoint(100, 10, 'm1')] }
+    ];
+    const laneRouter = new GraphRouter({ kind: 'lane', nodes: [
+      { id: 'a', x: 0, y: 10, laneId: 'main', edges: [{ to: 'b', distance: 100, roadId: 'main', laneId: 'main' }] },
+      { id: 'b', x: 100, y: 10, laneId: 'main', edges: [] }
+    ] }, roads);
+
+    expect(laneRouter.drivingRoute({ x: 0, y: 0 }, { x: 90, y: 10 }, 0)).toEqual([]);
+    expect(laneRouter.routeStart({ x: 0, y: 0 }, 0)).toBeNull();
+    expect(laneRouter.nearestRoutePoint({ x: 0, y: 0 })).toEqual({ x: 0, y: 10 });
   });
 });

@@ -4,10 +4,10 @@ Simulação determinística sobre o mesmo grafo dirigido por faixa usado por jog
 
 | Veículos | Movimentos | Maior espera | Deadlocks | Colisões | Frente a frente | Loops |
 |---:|---:|---:|---:|---:|---:|---:|
-| 20 | 24000 | 0 ticks | 0 | 0 | 0 | 0 |
-| 40 | 48000 | 0 ticks | 0 | 0 | 0 | 0 |
-| 72 | 86395 | 2 ticks | 0 | 0 | 0 | 0 |
-| 100 | 119990 | 2 ticks | 0 | 0 | 0 | 0 |
+| 20 | 21679 | 0 ticks | 0 | 0 | 0 | 0 |
+| 40 | 44532 | 0 ticks | 0 | 0 | 0 | 0 |
+| 72 | 81759 | 0 ticks | 0 | 0 | 0 | 0 |
+| 100 | 114203 | 1 ticks | 0 | 0 | 0 | 0 |
 
 ## Cenários cobertos
 

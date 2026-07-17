@@ -1,5 +1,5 @@
 import type { GraphEdge, GraphNode, NavigationGraph, Point, RoadData } from '../../types/game';
-import { pointInTrafficLane } from './roadRules';
+import { isDrivableRoad, pointInTrafficLane, visibleRoadWidth } from './roadRules';
 
 type DirectedSegment = {
   from: GraphNode;
@@ -17,11 +17,14 @@ type LaneAnchor = DirectedSegment & {
   score: number;
 };
 
+type SurfaceSegment = { from: Point; to: Point; halfWidth: number };
+
 export class GraphRouter {
   private readonly nodes = new Map<string, GraphNode>();
   private readonly roads = new Map<string, RoadData>();
   private readonly spatialNodes = new Map<string, GraphNode[]>();
   private readonly spatialSegments = new Map<string, DirectedSegment[]>();
+  private readonly surfaceCells = new Map<string, SurfaceSegment[]>();
   private readonly incomingCount = new Map<string, number>();
   private readonly spatialCellSize = 120;
   private readonly laneGraph: boolean;
@@ -40,7 +43,10 @@ export class GraphRouter {
       const target = this.nodes.get(edge.to);
       if (this.laneGraph && target) this.indexSegment(node, target, edge);
     }
-    for (const road of roads) this.roads.set(road.id, road);
+    for (const road of roads) {
+      this.roads.set(road.id, road);
+      this.indexRoadSurface(road);
+    }
   }
 
   nearest(point: Point): GraphNode {
@@ -91,6 +97,23 @@ export class GraphRouter {
     return lanePoints;
   }
 
+  /** Returns a safe attachment to the navigable graph, or null when the
+   * current road is isolated from it. */
+  routeStart(point: Point, preferredHeading?: number): Point | null {
+    if (!this.laneGraph) return { ...this.nearest(point) };
+    const heading = Number.isFinite(preferredHeading) ? preferredHeading! : undefined;
+    const anchor = this.laneAnchors(point, heading)
+      .find((candidate) => this.safeStartConnection(point, candidate.point));
+    return anchor ? { ...anchor.point } : null;
+  }
+
+  /** Finds the closest real lane in the published navigation network. Used
+   * only to recover a save that is standing on an isolated imported road. */
+  nearestRoutePoint(point: Point): Point {
+    const anchor = this.laneGraph ? this.laneAnchors(point)[0] : undefined;
+    return anchor ? { ...anchor.point } : { ...this.nearest(point) };
+  }
+
   /**
    * Lane routes attach to the directed segment under the vehicle instead of
    * to an arbitrary nearby node. This prevents the first instruction from
@@ -101,11 +124,30 @@ export class GraphRouter {
     const starts = this.laneAnchors(from, heading);
     const goals = this.laneAnchors(to);
     if (!starts.length || !goals.length) {
+      if (this.roads.size) return [];
       const fallback = this.findRoute(from, to, preferredStartHeading, true);
       return fallback?.map(({ x, y }) => ({ x, y })) ?? [];
     }
 
+    const route = this.routeBetweenLaneAnchors(from, starts, goals);
+    if (route) return route;
+    // Region-level diagnostics do not have road surfaces available. Let them
+    // try the nearby routable core when the closest fragment is a one-way
+    // appendage. Runtime routing has surfaces and never makes this broad snap.
+    if (!this.roads.size) {
+      const broadRoute = this.routeBetweenLaneAnchors(
+        from,
+        this.laneAnchors(from, heading, true),
+        this.laneAnchors(to, undefined, true)
+      );
+      if (broadRoute) return broadRoute;
+    }
+    return [];
+  }
+
+  private routeBetweenLaneAnchors(from: Point, starts: LaneAnchor[], goals: LaneAnchor[]) {
     for (const start of starts) {
+      if (!this.safeStartConnection(from, start.point)) continue;
       const direct = goals.find((goal) => sameSegment(start, goal) && start.t <= goal.t + 0.001);
       if (direct) return compactRoute([from, start.point, direct.point]);
 
@@ -124,10 +166,10 @@ export class GraphRouter {
         goal.point
       ]);
     }
-    return [];
+    return null;
   }
 
-  private laneAnchors(point: Point, heading?: number) {
+  private laneAnchors(point: Point, heading?: number, broad = false) {
     const segments = this.nearbySegments(point);
     if (!segments.length) return [];
     const anchors = segments.map((segment): LaneAnchor => {
@@ -144,13 +186,15 @@ export class GraphRouter {
       };
     });
     const nearestDistance = Math.min(...anchors.map((anchor) => anchor.lateralDistance));
-    const nearest = anchors.filter((anchor) => anchor.lateralDistance <= nearestDistance + 2.5);
+    const nearest = anchors.filter((anchor) =>
+      anchor.lateralDistance <= nearestDistance + (broad ? 90 : 2.5)
+    );
     const directionallyValid = heading === undefined
       ? nearest
       : nearest.filter((anchor) => anchor.headingError <= 1.25);
     return (directionallyValid.length ? directionallyValid : nearest)
       .sort((a, b) => a.score - b.score)
-      .slice(0, 8);
+      .slice(0, broad ? 32 : 8);
   }
 
   private indexSegment(from: GraphNode, to: GraphNode, edge: GraphEdge) {
@@ -170,6 +214,69 @@ export class GraphRouter {
       values.push(segment);
       this.spatialSegments.set(key, values);
     }
+  }
+
+  private indexRoadSurface(road: RoadData) {
+    if (!isDrivableRoad(road)) return;
+    for (let index = 1; index < road.points.length; index += 1) {
+      const segment = {
+        from: road.points[index - 1],
+        to: road.points[index],
+        halfWidth: visibleRoadWidth(road) / 2
+      };
+      const minX = Math.floor((Math.min(segment.from.x, segment.to.x) - segment.halfWidth) / this.spatialCellSize);
+      const maxX = Math.floor((Math.max(segment.from.x, segment.to.x) + segment.halfWidth) / this.spatialCellSize);
+      const minY = Math.floor((Math.min(segment.from.y, segment.to.y) - segment.halfWidth) / this.spatialCellSize);
+      const maxY = Math.floor((Math.max(segment.from.y, segment.to.y) + segment.halfWidth) / this.spatialCellSize);
+      for (let x = minX; x <= maxX; x += 1) for (let y = minY; y <= maxY; y += 1) {
+        const key = `${x}:${y}`;
+        const values = this.surfaceCells.get(key) ?? [];
+        values.push(segment);
+        this.surfaceCells.set(key, values);
+      }
+    }
+  }
+
+  private safeStartConnection(from: Point, to: Point) {
+    if (!this.roads.size) return true;
+    const length = Math.hypot(to.x - from.x, to.y - from.y);
+    if (length <= 0.5) return true;
+    const steps = Math.max(1, Math.ceil(length));
+    const insets: number[] = [];
+    for (let step = 0; step <= steps; step += 1) {
+      const progress = step / steps;
+      const point = { x: from.x + (to.x - from.x) * progress, y: from.y + (to.y - from.y) * progress };
+      insets.push(this.roadInset(point));
+    }
+    if (insets.every((inset) => inset >= 0.91)) return true;
+    // A short monotonic recovery from grass/sidewalk onto the nearest lane is
+    // allowed. A connection that starts on asphalt, crosses a gap and reaches
+    // another road is never allowed, even when the gap is shorter than 12 m.
+    if (length > 12 || insets[0] >= 0.91) return false;
+    let previous = insets[0];
+    let reachedRoad = false;
+    for (const inset of insets.slice(1)) {
+      if (reachedRoad) {
+        if (inset < 0.91) return false;
+      } else if (inset >= 0.91) {
+        reachedRoad = true;
+      } else if (Number.isFinite(previous) && inset < previous - 0.2) {
+        return false;
+      }
+      previous = inset;
+    }
+    return reachedRoad;
+  }
+
+  private roadInset(point: Point) {
+    const cellX = Math.floor(point.x / this.spatialCellSize);
+    const cellY = Math.floor(point.y / this.spatialCellSize);
+    let inset = Number.NEGATIVE_INFINITY;
+    for (const segment of this.surfaceCells.get(`${cellX}:${cellY}`) ?? []) {
+      const projection = projectOnSegment(point, segment.from, segment.to).point;
+      inset = Math.max(inset, segment.halfWidth - Math.hypot(point.x - projection.x, point.y - projection.y));
+    }
+    return inset;
   }
 
   private nearbySegments(point: Point) {
