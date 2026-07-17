@@ -45,11 +45,11 @@ export class MissionSystem {
     return Array.from({ length: count }, (_, index) => distributed[Math.floor(index * distributed.length / count)].node);
   }
 
-  private createMission(start: Point, rideIndex: number, forceOfficial = false): MissionSnapshot {
+  private createMission(start: Point, rideIndex: number): MissionSnapshot {
     const pool = this.candidateNodes.length >= 8 ? this.candidateNodes : this.router.candidates(40);
     const nearbyCount = Math.max(1, Math.min(24, pool.length));
     const taxiPoints = this.vehicleContext.taxiPoints ?? [];
-    const official = Boolean(this.vehicleContext.taxiLicensed && taxiPoints.length && (forceOfficial || rideIndex % 3 !== 0));
+    const official = isOfficialTaxiRide(this.vehicleContext.taxiLicensed === true, taxiPoints.length);
     const requestTypes = ['taxi-rank', 'street-hail', 'dispatch'] as const;
     const taxiRequestType = requestTypes[rideIndex % requestTypes.length];
     const taxiPoint = official && taxiRequestType === 'taxi-rank' ? taxiPoints[rideIndex % taxiPoints.length] : undefined;
@@ -184,7 +184,7 @@ export class MissionSystem {
 
   nextOfficial(position: Point, completedRides: number) {
     this.receipt = null;
-    this.mission = this.createMission(position, completedRides, true);
+    this.mission = this.createMission(position, completedRides);
   }
 
   updateVehicleContext(context: Partial<MissionVehicleContext>) {
@@ -259,6 +259,10 @@ export class MissionSystem {
     return mission;
   }
 
+}
+
+export function isOfficialTaxiRide(taxiLicensed: boolean, taxiPointCount: number) {
+  return taxiLicensed && taxiPointCount > 0;
 }
 
 function categoryForRide(index: number): RideCategory {

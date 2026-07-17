@@ -1030,6 +1030,12 @@ export class MainScene extends Phaser.Scene {
       this.persist();
       return;
     }
+    if (command.type === 'set-account-link-state') {
+      this.save.accountLinkState = command.state;
+      this.persist();
+      this.emitHud();
+      return;
+    }
     if (command.type === 'set-online-visibility') {
       this.save.settings[command.setting] = command.enabled;
       this.persist();
@@ -1321,7 +1327,11 @@ export class MainScene extends Phaser.Scene {
   }
 
   private prepareAcceptedTaxiRide() {
-    if (!this.mission || this.mission.mission.rideMode !== 'official-taxi') return;
+    if (!this.mission) return;
+    if (this.mission.mission.rideMode !== 'official-taxi') {
+      resetTaxiMeter(this.save.taxiMeter);
+      return;
+    }
     const demand = this.mission.mission.quote?.demandMultiplier ?? 1;
     prepareTaxiMeter(
       this.save.taxiMeter,

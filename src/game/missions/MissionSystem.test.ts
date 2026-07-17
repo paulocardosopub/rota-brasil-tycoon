@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { MissionSystem } from './MissionSystem';
+import { isOfficialTaxiRide, MissionSystem } from './MissionSystem';
 
 function missionWithRoute(route: { x: number; y: number }[]) {
   const mission = Object.create(MissionSystem.prototype) as MissionSystem;
@@ -8,6 +8,12 @@ function missionWithRoute(route: { x: number; y: number }[]) {
 }
 
 describe('progresso da rota', () => {
+  it('mantém todas as corridas do veículo licenciado no modo oficial', () => {
+    expect(isOfficialTaxiRide(true, 3)).toBe(true);
+    expect(isOfficialTaxiRide(true, 1)).toBe(true);
+    expect(isOfficialTaxiRide(false, 3)).toBe(false);
+  });
+
   it('mantém o trecho inicial ao cruzar uma parte futura da rota', () => {
     const mission = missionWithRoute([
       { x: 0, y: 0 },

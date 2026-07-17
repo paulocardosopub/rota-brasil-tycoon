@@ -2,6 +2,7 @@ import type { RealtimeChannel, SupabaseClient } from '@supabase/supabase-js';
 import { GAME_CONFIG } from '../config/gameConfig';
 import type { FleetVehicle, OnlineConnectionState, OnlineHudSnapshot, PlayerSave, Point } from '../types/game';
 import { isCloudEnabled, supabase } from '../services/supabase/client';
+import { accountLinkStateForUser } from '../services/supabase/authService';
 import { movementRateHz, shouldSendMovement } from './adaptiveRate';
 import { desiredChunkTopics } from './chunkHandoff';
 import { deserializeMovement, localPositionForChunk, movementPayloadBytes, serializeMovement, type MovementSnapshot, type OnlineControllerType, type TurnSignal } from './protocol';
@@ -243,7 +244,7 @@ export class OnlineWorldClient {
         session = result.data.session;
         this.save.accountLinkState = 'anonymous';
       } else {
-        this.save.accountLinkState = session.user.is_anonymous ? 'anonymous' : 'permanent';
+        this.save.accountLinkState = accountLinkStateForUser(session.user);
       }
       if (!session) throw new Error('AUTH_SESSION_MISSING');
       await this.client.realtime.setAuth(session.access_token);
