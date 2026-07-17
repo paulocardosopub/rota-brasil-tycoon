@@ -64,6 +64,28 @@ export async function signInPermanent(email: string, password: string) {
   if (error) throw error;
 }
 
+export async function requestPasswordRecovery(email: string) {
+  if (!supabase) throw new Error('CLOUD_NOT_CONFIGURED');
+  const { error } = await supabase.auth.resetPasswordForEmail(email.trim().toLowerCase(), {
+    redirectTo: accountRedirectUrl()
+  });
+  if (error) throw error;
+}
+
+export function onPasswordRecovery(listener: () => void) {
+  if (!supabase) return () => undefined;
+  const { data } = supabase.auth.onAuthStateChange((event) => {
+    if (event === 'PASSWORD_RECOVERY') listener();
+  });
+  return () => data.subscription.unsubscribe();
+}
+
+export async function updateRecoveredPassword(password: string) {
+  if (!supabase) throw new Error('CLOUD_NOT_CONFIGURED');
+  const { error } = await supabase.auth.updateUser({ password });
+  if (error) throw error;
+}
+
 export async function registerPermanentAccount(email: string, password: string) {
   if (!supabase) throw new Error('CLOUD_NOT_CONFIGURED');
   const normalizedEmail = email.trim().toLowerCase();

@@ -1,8 +1,10 @@
 import { GAME_CONFIG } from '../../config/gameConfig';
-import type { EmployeeCandidate, FleetEmployee, FleetReport, FleetShift, FleetSimulationLevel, FleetVehicle, PlayerSave, Point, UpgradeLevels } from '../../types/game';
+import type { EmployeeCandidate, EmployeeRegionalPreferences, FleetEmployee, FleetReport, FleetShift, FleetSimulationLevel, FleetVehicle, PlayerSave, Point, UpgradeLevels } from '../../types/game';
 import { EconomyService } from '../economy/EconomyService';
 import { roundMoney } from '../economy/TransactionLedger';
 import { DEFAULT_SHIFT_POLICY, EMPLOYEE_CANDIDATES } from './FleetConfig';
+import { DEFAULT_EMPLOYEE_REGIONAL_PREFERENCES } from '../regions/RegionalDefaults';
+import { ECONOMY_CONFIG } from '../economy/EconomyConfig';
 
 export function createFleetVehicle(input: {
   id?: string; ownerId: string; fleetId: string; model: FleetVehicle['model'];
@@ -14,7 +16,7 @@ export function createFleetVehicle(input: {
   return {
     id: input.id ?? entityId('vehicle'), ownerId: input.ownerId, fleetId: input.fleetId,
     model: input.model, controllerType: 'PLAYER', controllerId: input.ownerId, authority: 'local',
-    state: 'player-driving', simulationLevel: 'detailed', currentRegion: 'brasilia-central', currentChunk: 'active',
+    state: 'player-driving', simulationLevel: 'detailed', currentRegion: 'centro', currentChunk: 'active',
     stateVersion: 1, updatedAt: now, leaseExpiresAt: null,
     taxiLicensed: input.taxiLicensed ?? false, taxiVisualEnabled: input.taxiLicensed ?? false,
     taxiRegistrationId: input.taxiLicensed ? `taxi-${input.id ?? 'vehicle'}` : null,
@@ -65,7 +67,8 @@ export function hireEmployee(save: PlayerSave, candidateId: string, requestId: s
   if (!result.applied) return result;
   const employee: FleetEmployee = {
     ...candidate, fleetId: save.fleet.id, ownerId: save.ownerId, state: 'waiting-vehicle',
-    vehicleId: null, hiredAt: new Date().toISOString(), grossRevenue: 0, commissionPaid: 0, tripsCompleted: 0
+    vehicleId: null, hiredAt: new Date().toISOString(), grossRevenue: 0, commissionPaid: 0, tripsCompleted: 0,
+    regionalPreferences: { ...DEFAULT_EMPLOYEE_REGIONAL_PREFERENCES, preferredRegionId: save.preferredRegionId }
   };
   save.fleet.employees.push(employee);
   return { applied: true, employee, transaction: result.transaction };
@@ -126,6 +129,23 @@ export function unassignEmployee(save: PlayerSave, employeeId: string) {
   return { applied: true, employee, vehicle };
 }
 
+export function updateEmployeeRegionalPreferences(
+  save: PlayerSave,
+  employeeId: string,
+  patch: Partial<EmployeeRegionalPreferences>
+) {
+  if (save.fleet.activeShift?.employeeId === employeeId) return { applied: false, reason: 'shift-active' as const };
+  const employee = save.fleet.employees.find((item) => item.id === employeeId);
+  if (!employee) return { applied: false, reason: 'missing' as const };
+  const next = { ...employee.regionalPreferences, ...patch };
+  next.allowedRegionIds = [...new Set(next.allowedRegionIds)].filter(Boolean);
+  next.maximumDistanceKm = Math.max(2, Math.min(30, Number(next.maximumDistanceKm) || 12));
+  next.minimumCondition = Math.max(20, Math.min(90, Number(next.minimumCondition) || 45));
+  next.minimumFuelPercent = Math.max(10, Math.min(80, Number(next.minimumFuelPercent) || 25));
+  employee.regionalPreferences = next;
+  return { applied: true, employee };
+}
+
 export function dismissEmployee(save: PlayerSave, employeeId: string) {
   if (save.fleet.activeShift?.employeeId === employeeId) return { applied: false, reason: 'shift-active' as const };
   const index = save.fleet.employees.findIndex((item) => item.id === employeeId);
@@ -150,7 +170,11 @@ export function startFleetShift(save: PlayerSave, employeeId: string, requestId:
     id: entityId('shift'), fleetId: save.fleet.id, ownerId: save.ownerId, employeeId, vehicleId: vehicle.id,
     state: 'starting-shift', simulationLevel: 'detailed', startedAt, lastSimulatedAt: startedAt,
     scheduledEndAt: new Date(now.getTime() + DEFAULT_SHIFT_POLICY.durationMinutes * 60_000).toISOString(),
-    tripId: null, routeProgress: 0, policy: { ...DEFAULT_SHIFT_POLICY, categories: [...DEFAULT_SHIFT_POLICY.categories] },
+    tripId: null, routeProgress: 0, policy: {
+      ...DEFAULT_SHIFT_POLICY,
+      categories: [...DEFAULT_SHIFT_POLICY.categories],
+      regional: { ...employee.regionalPreferences, allowedRegionIds: [...employee.regionalPreferences.allowedRegionIds] }
+    },
     rides: 0, kilometers: 0, grossRevenue: 0, fuelCost: 0, commission: 0,
     maintenanceCost: 0, fines: 0, netProfit: 0
   };
@@ -258,14 +282,19 @@ export function acknowledgeFleetReport(save: PlayerSave) {
 function settleFleetBatch(save: PlayerSave, shift: FleetShift, employee: FleetEmployee, vehicle: FleetVehicle, rides: number, offline: boolean) {
   const startRide = shift.rides;
   const distancePerRide = vehicle.model === 'Sedan 2012' ? 1.55 : 1.35;
-  const grossPerRide = 12.8 + employee.service * 0.045 + employee.efficiency * 0.026 + (vehicle.model === 'Sedan 2012' ? 1.4 : 0);
+  const grossPerRide = ECONOMY_CONFIG.fleet.grossBasePerRide
+    + employee.service * ECONOMY_CONFIG.fleet.serviceFactor
+    + employee.efficiency * ECONOMY_CONFIG.fleet.efficiencyFactor
+    + (vehicle.model === 'Sedan 2012' ? ECONOMY_CONFIG.fleet.sedanBonus : 0);
   const gross = roundMoney(grossPerRide * rides);
   const commission = roundMoney(gross * employee.commissionPercent / 100);
   const kilometers = distancePerRide * rides;
   const kmPerLiter = (vehicle.model === 'Sedan 2012' ? 9.7 : 8.8) * (0.9 + employee.efficiency / 1_000);
   const liters = Math.min(vehicle.fuel, kilometers / kmPerLiter);
   const fuelCost = roundMoney(liters * GAME_CONFIG.services.fuelPricePerLiter);
-  const maintenance = roundMoney(kilometers * (vehicle.model === 'Sedan 2012' ? 0.24 : 0.18));
+  const maintenance = roundMoney(kilometers * (vehicle.model === 'Sedan 2012'
+    ? ECONOMY_CONFIG.fleet.sedanMaintenancePerKilometer
+    : ECONOMY_CONFIG.fleet.hatchMaintenancePerKilometer));
   const fineCount = employee.safety < 75 ? Math.floor((startRide + rides) / 8) - Math.floor(startRide / 8) : 0;
   const fines = fineCount * 4;
   const tripId = `${shift.id}-batch-${startRide + 1}-${startRide + rides}`;
@@ -284,7 +313,7 @@ function settleFleetBatch(save: PlayerSave, shift: FleetShift, employee: FleetEm
   employee.tripsCompleted += rides; employee.grossRevenue = roundMoney(employee.grossRevenue + gross);
   employee.commissionPaid = roundMoney(employee.commissionPaid + commission);
   vehicle.fuel = Math.max(0, vehicle.fuel - liters); vehicle.totalKm += kilometers;
-  vehicle.maintenanceWear = Math.min(100, vehicle.maintenanceWear + kilometers * 0.022);
+  vehicle.maintenanceWear = Math.min(100, vehicle.maintenanceWear + kilometers * ECONOMY_CONFIG.fleet.wearPerKilometer);
   vehicle.condition = Math.max(0, 100 - vehicle.collisionDamage - vehicle.maintenanceWear * 0.45);
   vehicle.grossRevenue = roundMoney(vehicle.grossRevenue + gross);
   vehicle.expenses = roundMoney(vehicle.expenses + commission + fuelCost + maintenance + fines);

@@ -19,6 +19,7 @@ type TrafficVehicle = {
   target: GraphNode;
   edge: GraphEdge;
   previousId: string;
+  recentNodeIds: string[];
   speed: number;
   heading: number;
   index: number;
@@ -169,6 +170,7 @@ export class TrafficSystem {
         target,
         edge,
         previousId: current.id,
+        recentNodeIds: [current.id],
         speed: 0,
         heading: Math.atan2(targetPosition.y - position.y, targetPosition.x - position.x),
         index,
@@ -208,6 +210,7 @@ export class TrafficSystem {
       vehicle.target = target;
       vehicle.edge = edge;
       vehicle.previousId = current.id;
+      vehicle.recentNodeIds = [current.id];
       vehicle.position = this.laneGraph ? { x: current.x, y: current.y } : pointInTrafficLane(current, current, target, this.roads.get(edge.roadId), vehicle.laneIndex);
       vehicle.targetPosition = this.laneGraph ? { x: target.x, y: target.y } : pointInTrafficLane(target, current, target, this.roads.get(edge.roadId), vehicle.laneIndex);
       vehicle.heading = Math.atan2(vehicle.targetPosition.y - vehicle.position.y, vehicle.targetPosition.x - vehicle.position.x);
@@ -795,9 +798,17 @@ export class TrafficSystem {
     vehicle.mergeWaitSeconds = 0;
     const previousId = vehicle.current.id;
     vehicle.current = vehicle.target;
+    vehicle.recentNodeIds.push(vehicle.current.id);
+    if (vehicle.recentNodeIds.length > 12) vehicle.recentNodeIds.shift();
+    if (vehicle.recentNodeIds.length === 12 && new Set(vehicle.recentNodeIds).size <= 3) {
+      vehicle.recentNodeIds = [];
+      if (vehicle.recovery.start()) this.activateVehicleRecovery(vehicle, true);
+    }
     const preferred = this.validEdges(vehicle.current, vehicle.kind === 'bus');
     const forward = preferred.filter((edge) => edge.to !== previousId);
-    const choices = forward.length ? forward : preferred;
+    const unexplored = forward.filter((edge) => !vehicle.recentNodeIds.includes(edge.to));
+    const exits = unexplored.filter((edge) => !edge.connector);
+    const choices = exits.length ? exits : unexplored.length ? unexplored : forward.length ? forward : preferred;
     if (!choices.length) {
       vehicle.speed = 0;
       return;

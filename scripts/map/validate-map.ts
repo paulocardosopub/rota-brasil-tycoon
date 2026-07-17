@@ -7,6 +7,7 @@ import type {
   MapServiceLocation, NavigationGraph, RoadData, TaxiPoint
 } from '../../src/types/game';
 import { GraphRouter } from '../../src/map/routing/GraphRouter';
+import { pointInPolygon } from '../../src/map/regions/RegionCatalog';
 
 const root = path.resolve('public/data/cities/brasilia');
 const docs = path.resolve('docs');
@@ -32,7 +33,7 @@ let totalChunkBytes = 0;
 let signalCount = 0;
 let stopCount = 0;
 
-if (manifest.mapVersion !== 'brasilia-0.7.0') errors.push('Versão do mapa divergente da 0.7.0.');
+if (manifest.mapVersion !== 'brasilia-0.8.2') errors.push('Versão do mapa divergente da 0.8.2.');
 if (metadata.license !== 'Open Database License (ODbL) 1.0') errors.push('Licença ODbL ausente.');
 if (new Set(manifest.chunks.map((chunk) => chunk.id)).size !== manifest.chunks.length) errors.push('IDs de chunk duplicados.');
 for (const entry of manifest.chunks) {
@@ -100,16 +101,36 @@ for (const corridor of corridors.values()) {
 if (abruptWidthWarnings) warnings.push(`${abruptWidthWarnings} corredores possuem variação real/explicitada acima de 25% e exigem inspeção visual.`);
 
 const router = new GraphRouter(graph);
+const regionalCore = largestStrongComponent(graph);
+const regionalAnchors = new Map(manifest.regions.map((region) => {
+  const inside = graph.nodes.filter((node) => regionalCore.has(node.id) && pointInPolygon(node, region.polygon));
+  const candidates = inside.length ? inside : graph.nodes.filter((node) => regionalCore.has(node.id));
+  const anchor = candidates.reduce((best, node) =>
+    Math.hypot(node.x - region.center.x, node.y - region.center.y) < Math.hypot(best.x - region.center.x, best.y - region.center.y) ? node : best
+  );
+  return [region.id, anchor] as const;
+}));
 const routeResults: string[] = [];
 for (let index = 0; index < manifest.regions.length; index += 1) {
   const from = manifest.regions[index];
   const to = manifest.regions[(index + 1) % manifest.regions.length];
-  const route = router.drivingRoute(from.center, to.center);
+  const route = router.drivingRoute(regionalAnchors.get(from.id)!, regionalAnchors.get(to.id)!);
   const distance = router.distance(route);
   routeResults.push(`${from.name} → ${to.name}: ${(distance / 1_000).toFixed(1)} km`);
   if (route.length < 2 || distance < 300) errors.push(`Rota entre regiões indisponível: ${from.name} → ${to.name}.`);
 }
-for (const service of [...fuel, ...workshops, ...garages]) {
+const allServices = [...fuel, ...workshops, ...garages];
+if (fuel.length < 7 || workshops.length < 5 || garages.length < 4) errors.push('Cobertura mínima de postos, oficinas e garagens não foi atingida.');
+for (const priorityRegion of ['lago-sul', 'jardim-botanico']) for (const category of ['fuel', 'workshop', 'garage']) {
+  if (!allServices.some((service) => service.regionId === priorityRegion && service.category === category)) {
+    errors.push(`Cobertura ${category} ausente em ${priorityRegion}.`);
+  }
+}
+for (const service of allServices) {
+  if (!service.sourceUrl?.startsWith('https://www.openstreetmap.org/')) errors.push(`Fonte aberta ausente: ${service.id}.`);
+  if (!service.regionId || !manifest.regions.some((region) => region.id === service.regionId)) errors.push(`Região inválida no serviço: ${service.id}.`);
+  if (service.functionFictional && !service.functionNote) errors.push(`Adaptação fictícia sem declaração: ${service.id}.`);
+  if (Math.hypot(service.entrance.x - service.stopPoint.x, service.entrance.y - service.stopPoint.y) > 80) errors.push(`Acesso ao lote excessivamente distante: ${service.id}.`);
   if (router.drivingRoute({ x: 0, y: 0 }, service.entrance).length < 2) errors.push(`Serviço sem acesso global: ${service.id}.`);
 }
 for (const taxi of taxiPoints) if (router.drivingRoute({ x: 0, y: 0 }, taxi.entrance).length < 2) errors.push(`Ponto de táxi sem acesso: ${taxi.id}.`);
@@ -121,7 +142,7 @@ if (areaKm2 < 16) errors.push(`Área publicada insuficiente: ${areaKm2.toFixed(1
 if (manifest.regions.length < 7) errors.push('Cobertura regional insuficiente.');
 if (roads.size < 5_000 || graph.nodes.length < 20_000 || manifest.chunks.length < 20) errors.push('Malha 0.7 abaixo do volume mínimo.');
 
-const report = `# Auditoria da malha viária — 0.7.0
+const report = `# Auditoria da malha viária — 0.8.2
 
 - Área do bounding box: **${areaKm2.toFixed(1)} km²**;
 - Chunks publicados: **${manifest.chunks.length}**;
@@ -129,10 +150,12 @@ const report = `# Auditoria da malha viária — 0.7.0
 - Faixas detalhadas: **${lanes.size}**;
 - Faixas no grafo global: **${graphLaneIds.size}**;
 - Nós globais: **${graph.nodes.length}**;
+- Nós no núcleo regional bidirecional: **${regionalCore.size}**;
 - Arestas dirigidas: **${edgeCount}** (${connectorCount} conectores de junção);
 - Edifícios em LOD: **${buildings.size}**;
 - Semáforos nos chunks: **${signalCount}**;
 - Pontos de ônibus nos chunks: **${stopCount}**;
+- Serviços publicados: **${fuel.length} postos, ${workshops.length} oficinas e ${garages.length} garagens**;
 - Dados locais de chunks: **${(totalChunkBytes / 1_048_576).toFixed(1)} MB**, carregados por janela.
 
 ## Rotas entre regiões
@@ -147,13 +170,56 @@ ${warnings.length ? warnings.map((warning) => `- ${warning}`).join('\n') : '- Ne
 
 ${errors.length ? `Falhou com ${errors.length} erro(s).` : 'Aprovada sem erros estruturais.'}
 `;
-await writeFile(path.join(docs, 'road-network-audit-0.7.0.md'), report);
+await writeFile(path.join(docs, 'road-network-audit-0.8.2.md'), report);
 
 if (errors.length) {
   console.error(errors.slice(0, 80).join('\n'));
   process.exitCode = 1;
 } else {
-  console.log(`Mapa 0.7 validado: ${roads.size} vias, ${lanes.size} faixas, ${graph.nodes.length} nós, ${manifest.chunks.length} chunks, ${areaKm2.toFixed(1)} km².`);
+  console.log(`Mapa 0.8.2 validado: ${roads.size} vias, ${lanes.size} faixas, ${graph.nodes.length} nós, ${manifest.chunks.length} chunks, ${areaKm2.toFixed(1)} km².`);
+}
+
+function largestStrongComponent(graph: NavigationGraph) {
+  const index = new Map(graph.nodes.map((node, nodeIndex) => [node.id, nodeIndex]));
+  const forward = graph.nodes.map((node) => node.edges.flatMap((edge) => {
+    const target = index.get(edge.to);
+    return target === undefined ? [] : [target];
+  }));
+  const reverse = graph.nodes.map(() => [] as number[]);
+  forward.forEach((targets, from) => targets.forEach((to) => reverse[to].push(from)));
+  const seen = new Uint8Array(graph.nodes.length);
+  const order: number[] = [];
+  for (let start = 0; start < graph.nodes.length; start += 1) {
+    if (seen[start]) continue;
+    const stack: [number, number][] = [[start, 0]];
+    seen[start] = 1;
+    while (stack.length) {
+      const frame = stack[stack.length - 1];
+      const target = forward[frame[0]][frame[1]++];
+      if (target !== undefined) {
+        if (!seen[target]) { seen[target] = 1; stack.push([target, 0]); }
+      } else {
+        order.push(frame[0]);
+        stack.pop();
+      }
+    }
+  }
+  seen.fill(0);
+  let largest: number[] = [];
+  for (let cursor = order.length - 1; cursor >= 0; cursor -= 1) {
+    const start = order[cursor];
+    if (seen[start]) continue;
+    const component: number[] = [];
+    const stack = [start];
+    seen[start] = 1;
+    while (stack.length) {
+      const node = stack.pop()!;
+      component.push(node);
+      for (const target of reverse[node]) if (!seen[target]) { seen[target] = 1; stack.push(target); }
+    }
+    if (component.length > largest.length) largest = component;
+  }
+  return new Set(largest.map((nodeIndex) => graph.nodes[nodeIndex].id));
 }
 
 function groupBy<T>(values: T[], keyFor: (value: T) => string) {

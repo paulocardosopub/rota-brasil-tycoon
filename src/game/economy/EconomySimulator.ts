@@ -76,7 +76,7 @@ export function simulateEconomy(scenario: SimulationScenario, rideCount = 30): S
       if (result.applied) { save.upgrades.engine = 1; firstPurchaseMinute = Math.round(minutes); }
     }
     if (save.condition < 62 && firstRepairMinute === null) {
-      const result = new EconomyService(save).expense(105, 'repair', 'Reparo parcial', `${scenario}-repair-1`, true);
+      const result = new EconomyService(save).expense(ECONOMY_CONFIG.workshop.partial, 'repair', 'Reparo parcial', `${scenario}-repair-1`, true);
       if (result.applied) { save.collisionDamage = Math.max(0, save.collisionDamage - 22); save.condition = Math.max(0, 100 - save.collisionDamage); firstRepairMinute = Math.round(minutes); }
     }
     refreshProgression(save);

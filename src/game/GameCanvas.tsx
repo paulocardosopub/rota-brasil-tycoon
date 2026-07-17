@@ -15,7 +15,9 @@ export function GameCanvas({ save }: { save: PlayerSave }) {
       parent: container,
       backgroundColor: '#8fb878',
       scene: [new MainScene(save)],
-      render: { antialias: true, pixelArt: false, roundPixels: false, powerPreference: 'high-performance' },
+      // Em telas grandes a alta densidade do canvas já suaviza as bordas. Evitar
+      // MSAA ali preserva nitidez e recupera GPU para mapa, trânsito e rotas.
+      render: { antialias: container.clientWidth < 1_000, pixelArt: false, roundPixels: false, powerPreference: 'high-performance' },
       scale: {
         mode: Phaser.Scale.FIT,
         autoCenter: Phaser.Scale.CENTER_BOTH,

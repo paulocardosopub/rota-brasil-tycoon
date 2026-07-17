@@ -1,12 +1,14 @@
 import { useEffect, useState } from 'react';
 import { GameCanvas } from './game/GameCanvas';
 import { gameEvents } from './game/events';
-import { createNewSave, deleteSave, loadSave } from './services/storage/saveService';
+import { createNewSave, deleteSave, loadSave, replaceSave } from './services/storage/saveService';
 import { findCloudSaveConflict, resolveCloudSaveConflict, syncCloudSave, type CloudSaveConflict } from './services/supabase/cloudSaveService';
 import type { PlayerSave } from './types/game';
 import { Hud } from './ui/hud/Hud';
 import { StartScreen } from './ui/screens/StartScreen';
 import { ensureGuestSession } from './services/supabase/authService';
+
+let cloudSyncQueue: Promise<void> = Promise.resolve();
 
 export default function App() {
   const [playing, setPlaying] = useState(false);
@@ -14,7 +16,15 @@ export default function App() {
   const [cloudConflict, setCloudConflict] = useState<CloudSaveConflict | null>(null);
 
   useEffect(() => gameEvents.on('save', (next) => {
-    void syncCloudSave(next).catch((error) => console.warn('Sincronização adiada:', error));
+    cloudSyncQueue = cloudSyncQueue.then(async () => {
+      const current = loadSave();
+      const candidate = current.cloudLineageId === next.cloudLineageId && current.revision >= next.revision ? current : next;
+      const synced = await syncCloudSave(candidate);
+      const latest = loadSave();
+      if (latest.cloudLineageId === synced.cloudLineageId && latest.revision >= synced.revision) {
+        replaceSave({ ...latest, lastCloudRevision: Math.max(latest.lastCloudRevision, synced.lastCloudRevision) });
+      }
+    }).catch((error) => console.warn('Sincronização adiada:', error));
   }), []);
 
   const continueGame = async () => {
@@ -22,6 +32,7 @@ export default function App() {
     const conflict = await findCloudSaveConflict(local).catch(() => null);
     if (conflict) { setCloudConflict(conflict); return; }
     const synced = await syncCloudSave(local).catch(() => local);
+    replaceSave(synced);
     setSave(synced);
     setPlaying(true);
   };

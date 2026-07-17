@@ -6,6 +6,9 @@ export type TransactionCategory =
   | 'license' | 'commission' | 'fleet-purchase' | 'fleet-revenue' | 'fleet-maintenance';
 export type VehicleUpgradeId = 'engine' | 'brakes' | 'tires' | 'suspension' | 'economy' | 'comfort';
 export type ServiceCategory = 'fuel' | 'workshop' | 'garage';
+export type RegionPreference = 'any' | string;
+export type RegionDemandLevel = 'low' | 'medium' | 'high';
+export type RegionFamiliarityLevel = 'new' | 'known' | 'favorite';
 export type ProfessionalStatus = 'clandestine' | 'licensed-taxi';
 export type RideMode = 'informal' | 'official-taxi';
 export type TaxiRequestType = 'taxi-rank' | 'street-hail' | 'dispatch';
@@ -126,6 +129,29 @@ export interface MapRegion {
   name: string;
   center: Point;
   bounds: { minX: number; minY: number; maxX: number; maxY: number };
+  polygon: Point[];
+  neighbors: string[];
+  color: string;
+  predominantType: 'central' | 'residential' | 'mixed' | 'commercial' | 'airport' | 'university';
+  demandLevel: RegionDemandLevel;
+  servicesAvailable: ServiceCategory[];
+  chunkIds: string[];
+  playable: boolean;
+  priority: number;
+  source: { name: string; url: string; objectId: string; note?: string };
+}
+
+export interface RegionalFamiliarity {
+  regionId: string;
+  completedRides: number;
+  kilometers: number;
+  pickupIds: string[];
+  destinationIds: string[];
+  corridorIds: Record<string, number>;
+  workSeconds: number;
+  ratingTotal: number;
+  ratingCount: number;
+  recurringClients: number;
 }
 
 export interface CityMapManifest {
@@ -234,6 +260,9 @@ export interface MapServiceLocation {
   sideOfRoad: string;
   confidence: 'high' | 'medium';
   functionFictional: boolean;
+  regionId?: string;
+  sourceUrl?: string;
+  functionNote?: string;
 }
 
 export interface FareQuote {
@@ -282,6 +311,13 @@ export interface MissionSnapshot {
   taxiRequestType?: TaxiRequestType;
   taxiPointId?: string;
   distanceBand?: 'short' | 'medium' | 'long' | 'inter-region';
+  pickupRegionId?: string;
+  destinationRegionId?: string;
+  regionalCategory?: 'within-region' | 'neighbor-region' | 'between-sectors' | 'long' | 'return' | 'comfort' | 'urgent' | 'taxi';
+  demandLevel?: RegionDemandLevel;
+  familiarityLevel?: RegionFamiliarityLevel;
+  recommendedFuelLiters?: number;
+  routeDistanceMeters?: number;
 }
 
 export interface Receipt {
@@ -401,6 +437,20 @@ export interface FleetEmployee extends EmployeeCandidate {
   grossRevenue: number;
   commissionPaid: number;
   tripsCompleted: number;
+  regionalPreferences: EmployeeRegionalPreferences;
+}
+
+export interface EmployeeRegionalPreferences {
+  preferredRegionId: RegionPreference;
+  allowedRegionIds: string[];
+  maximumDistanceKm: number;
+  acceptLongTrips: boolean;
+  returnToPreferredRegion: boolean;
+  returnToGarage: boolean;
+  preferredFuelServiceId: string | null;
+  preferredWorkshopServiceId: string | null;
+  minimumCondition: number;
+  minimumFuelPercent: number;
 }
 
 export interface ShiftPolicy {
@@ -411,6 +461,7 @@ export interface ShiftPolicy {
   durationMinutes: number;
   returnToGarage: boolean;
   pauseOnLoss: boolean;
+  regional: EmployeeRegionalPreferences;
 }
 
 export interface FleetShift {
@@ -542,6 +593,7 @@ export interface PlayerSave {
   mapVersion: string;
   currentChunk: string;
   currentRegion: string;
+  currentRegionId: string;
   laneId: string | null;
   roadSegmentId: string | null;
   geographicPosition: { lat: number; lon: number } | null;
@@ -557,6 +609,12 @@ export interface PlayerSave {
   lastOnlineChunk: string;
   lastPublicSessionId: string | null;
   accountLinkState: AccountLinkState;
+  preferredRegionId: RegionPreference;
+  regionalFamiliarity: Record<string, RegionalFamiliarity>;
+  favoriteServiceIds: string[];
+  regionalBaseServiceId: string | null;
+  lastCloudRevision: number;
+  cloudLineageId: string;
 }
 
 export type Quality = 'automatic' | 'low' | 'medium' | 'high';
@@ -686,5 +744,9 @@ export interface HudSnapshot {
   currentChunk: string;
   loadedMapChunks: number;
   mapRegions: string[];
+  regionCatalog: MapRegion[];
+  preferredRegionId: RegionPreference;
+  currentRegionId: string;
+  regionalFamiliarity: Record<string, RegionalFamiliarity>;
   online: OnlineHudSnapshot;
 }

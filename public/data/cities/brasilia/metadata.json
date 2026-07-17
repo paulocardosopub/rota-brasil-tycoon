@@ -1,17 +1,17 @@
 {
   "city": "Brasília",
-  "area": "Plano Piloto, Sudoeste, Cruzeiro, Noroeste e Vila Planalto",
+  "area": "Plano Piloto, Lagos Norte e Sul, Jardim Botânico e Aeroporto",
   "origin": {
     "lat": -15.7942,
     "lon": -47.8822
   },
   "bbox": {
-    "south": -15.84,
+    "south": -15.9,
     "west": -47.95,
-    "north": -15.73,
-    "east": -47.83
+    "north": -15.68,
+    "east": -47.74
   },
-  "importedAt": "2026-07-16T23:23:32.108Z",
+  "importedAt": "2026-07-17T16:43:53.718Z",
   "source": "OpenStreetMap",
   "sourceUrl": "https://www.openstreetmap.org/copyright",
   "license": "Open Database License (ODbL) 1.0",

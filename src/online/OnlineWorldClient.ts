@@ -15,6 +15,7 @@ export interface PublicPresence {
   fleetPublicId: string | null;
   fleetName: string | null;
   fleetColor: string | null;
+  regionId: string;
   chunkId: string;
   vehicleId: string;
   vehicleModel: FleetVehicle['model'];
@@ -158,7 +159,7 @@ export class OnlineWorldClient {
     const shift = this.save.fleet.activeShift;
     await this.client.functions.invoke('create-fleet-deployment', { body: {
       version: 1, shiftId: shift.id, vehicleId: shift.vehicleId, driverId: shift.employeeId,
-      region: this.save.currentRegion, chunkId: this.save.currentChunk,
+      region: this.save.currentRegionId, chunkId: this.save.currentChunk,
       startsAt: shift.startedAt, endsAt: shift.scheduledEndAt
     }}).catch(() => undefined);
   }
@@ -407,7 +408,7 @@ export class OnlineWorldClient {
       version: 1,
       sessionId: this.sessionId,
       chunkId: this.currentChunk,
-      region: this.save.currentRegion,
+      region: this.save.currentRegionId,
       localX: Math.max(-margin, Math.min(GAME_CONFIG.map.chunkSizeMeters + margin, local.x)),
       localY: Math.max(-margin, Math.min(GAME_CONFIG.map.chunkSizeMeters + margin, local.y)),
       layer: this.lastVehicle.layer ?? 0,
@@ -490,7 +491,7 @@ export class OnlineWorldClient {
       sessionId: this.sessionId!, publicPlayerId: this.save.publicPlayerId, driverName: this.save.publicDriverName,
       avatarId: this.save.publicAvatarId, fleetPublicId: this.save.fleetPublicProfile.fleetPublicId,
       fleetName: this.save.settings.showFleetNames ? this.save.fleetPublicProfile.name : null,
-      fleetColor: this.save.fleetPublicProfile.color, chunkId: this.currentChunk,
+      fleetColor: this.save.fleetPublicProfile.color, regionId: this.save.currentRegionId, chunkId: this.currentChunk,
       vehicleId: this.publicVehicleId(active?.id ?? this.save.activeVehicleId), vehicleModel: active?.model ?? 'Hatch 1998',
       controllerType: 'PLAYER', status: Math.abs(this.lastVehicle?.speed ?? 0) > 0.2 ? 'driving' : 'idle',
       joinedAt: new Date().toISOString()

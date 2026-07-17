@@ -123,7 +123,7 @@ export class RemoteVehicleSystem {
       layer: 0, heading: 0, speed: 0, acceleration: 0, vehicleState: 'stopped', autopilot: false,
       turnSignal: 'none', braking: true, controllerType: 'PLAYER', vehicleModel: index % 2 ? 'Hatch 1998' : 'Sedan 2012',
       colorId: index % 2 ? 'violet' : 'blue', fleetPublicId: null
-    }, { sessionId: `rbs_fake${String(index).padStart(4, '0')}`, publicPlayerId, driverName: `Jogador ${index}`, avatarId: 'driver-violet', fleetPublicId: null, fleetName: null, fleetColor: null, chunkId: `${chunkX}_${chunkY}`, vehicleId: `${publicPlayerId}__vehicle-fake`, vehicleModel: index % 2 ? 'Hatch 1998' : 'Sedan 2012', controllerType: 'PLAYER', status: 'idle', joinedAt: new Date().toISOString() });
+    }, { sessionId: `rbs_fake${String(index).padStart(4, '0')}`, publicPlayerId, driverName: `Jogador ${index}`, avatarId: 'driver-violet', fleetPublicId: null, fleetName: null, fleetColor: null, regionId: 'centro', chunkId: `${chunkX}_${chunkY}`, vehicleId: `${publicPlayerId}__vehicle-fake`, vehicleModel: index % 2 ? 'Hatch 1998' : 'Sedan 2012', controllerType: 'PLAYER', status: 'idle', joinedAt: new Date().toISOString() });
   }
 
   clear() {

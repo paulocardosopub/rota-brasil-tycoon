@@ -1,8 +1,9 @@
 import { GAME_CONFIG } from '../../config/gameConfig';
-import type { CameraZoom, ClockGuard, DriverGoals, FleetVehicle, LedgerTransaction, PlayerFleet, PlayerSave, PlayerSettings, Quality, TaxiLicense, TrafficDensity, UpgradeLevels } from '../../types/game';
+import type { CameraZoom, ClockGuard, DriverGoals, EmployeeRegionalPreferences, FleetEmployee, FleetVehicle, LedgerTransaction, PlayerFleet, PlayerSave, PlayerSettings, Quality, RegionalFamiliarity, TaxiLicense, TrafficDensity, UpgradeLevels } from '../../types/game';
 import { createFleetVehicle } from '../../game/fleet/FleetService';
 import { createTaxiMeter } from '../../game/taxi/TaxiMeter';
 import { localMetersToLatLon } from '../../map/projection/localMeters';
+import { DEFAULT_EMPLOYEE_REGIONAL_PREFERENCES } from '../../game/regions/RegionalDefaults';
 
 const MAP_ORIGIN = { lat: -15.7942, lon: -47.8822 };
 const MAP_CHUNK_SIZE = 800;
@@ -84,7 +85,8 @@ export function createNewSave(position = { x: 0, y: 0 }): PlayerSave {
     clockGuard: { lastSeenAt: now, lastTrustedAt: now, rollbackDetected: false, unvalidated: true },
     mapVersion: GAME_CONFIG.mapVersion,
     currentChunk: chunkFor(position),
-    currentRegion: 'centro',
+    currentRegion: 'Setores Centrais',
+    currentRegionId: 'centro',
     laneId: null,
     roadSegmentId: null,
     geographicPosition: localMetersToLatLon(position.x, position.y, MAP_ORIGIN),
@@ -102,7 +104,13 @@ export function createNewSave(position = { x: 0, y: 0 }): PlayerSave {
     lastOnlineWorld: GAME_CONFIG.online.worldId,
     lastOnlineChunk: chunkFor(position),
     lastPublicSessionId: null,
-    accountLinkState: 'local'
+    accountLinkState: 'local',
+    preferredRegionId: 'any',
+    regionalFamiliarity: {},
+    favoriteServiceIds: [],
+    regionalBaseServiceId: null,
+    lastCloudRevision: 0,
+    cloudLineageId: createLineageId()
   };
 }
 
@@ -151,7 +159,8 @@ export function migrateSave(input: unknown): PlayerSave {
     clockGuard: migrateClockGuard(raw.clockGuard, fresh.clockGuard),
     mapVersion: GAME_CONFIG.mapVersion,
     currentChunk: typeof raw.currentChunk === 'string' ? raw.currentChunk : chunkFor(raw.position ?? fresh.position),
-    currentRegion: typeof raw.currentRegion === 'string' ? raw.currentRegion : 'centro',
+    currentRegion: typeof raw.currentRegion === 'string' ? raw.currentRegion : 'Setores Centrais',
+    currentRegionId: typeof raw.currentRegionId === 'string' ? raw.currentRegionId : legacyRegionId(raw.currentRegion),
     laneId: typeof raw.laneId === 'string' ? raw.laneId : null,
     roadSegmentId: typeof raw.roadSegmentId === 'string' ? raw.roadSegmentId : null,
     geographicPosition: validGeographicPosition(raw.geographicPosition)
@@ -168,7 +177,13 @@ export function migrateSave(input: unknown): PlayerSave {
     lastOnlineWorld: typeof raw.lastOnlineWorld === 'string' ? raw.lastOnlineWorld : GAME_CONFIG.online.worldId,
     lastOnlineChunk: typeof raw.lastOnlineChunk === 'string' ? raw.lastOnlineChunk : (typeof raw.currentChunk === 'string' ? raw.currentChunk : fresh.currentChunk),
     lastPublicSessionId: typeof raw.lastPublicSessionId === 'string' ? raw.lastPublicSessionId : null,
-    accountLinkState: validChoice(raw.accountLinkState, ['local', 'anonymous', 'pending-email', 'permanent']) ?? 'local'
+    accountLinkState: validChoice(raw.accountLinkState, ['local', 'anonymous', 'pending-email', 'permanent']) ?? 'local',
+    preferredRegionId: typeof raw.preferredRegionId === 'string' && raw.preferredRegionId ? raw.preferredRegionId : 'any',
+    regionalFamiliarity: migrateRegionalFamiliarity(raw.regionalFamiliarity),
+    favoriteServiceIds: Array.isArray(raw.favoriteServiceIds) ? [...new Set(raw.favoriteServiceIds.filter((id): id is string => typeof id === 'string'))].slice(0, 24) : [],
+    regionalBaseServiceId: typeof raw.regionalBaseServiceId === 'string' ? raw.regionalBaseServiceId : null,
+    lastCloudRevision: Math.max(0, Math.floor(finite(raw.lastCloudRevision, 0))),
+    cloudLineageId: validLineageId(raw.cloudLineageId) ? raw.cloudLineageId! : fresh.cloudLineageId
   };
   migrated.fleet = migrateFleet(raw.fleet, migrated);
   if (!migrated.fleet.vehicles.some((vehicle) => vehicle.id === migrated.activeVehicleId)) {
@@ -200,6 +215,12 @@ export function writeSave(save: PlayerSave) {
     revision: save.revision + 1,
     updatedAt: now
   };
+  return replaceSave(updated);
+}
+
+/** Persiste um snapshot completo sem criar uma revisão artificial. Usado
+ * ao confirmar exatamente a revisão recebida ou enviada para a nuvem. */
+export function replaceSave(save: PlayerSave) {
   const current = localStorage.getItem(GAME_CONFIG.storage.key);
   if (current) {
     try {
@@ -209,8 +230,8 @@ export function writeSave(save: PlayerSave) {
       localStorage.setItem(GAME_CONFIG.storage.corruptKey, current);
     }
   }
-  localStorage.setItem(GAME_CONFIG.storage.key, JSON.stringify(updated));
-  return updated;
+  localStorage.setItem(GAME_CONFIG.storage.key, JSON.stringify(save));
+  return save;
 }
 
 export function deleteSave() {
@@ -313,8 +334,14 @@ function migrateFleet(input: Partial<PlayerFleet> | undefined, save: PlayerSave)
     name: typeof input?.name === 'string' ? input.name : 'Minha Frota',
     garageServiceId: 'garage-shs-hatch', capacity: GAME_CONFIG.fleet.capacity,
     vehicles,
-    employees: Array.isArray(input?.employees) ? input.employees.slice(0, GAME_CONFIG.fleet.maximumEmployees) : [],
-    activeShift: input?.activeShift && typeof input.activeShift === 'object' ? input.activeShift : null,
+    employees: Array.isArray(input?.employees) ? input.employees.slice(0, GAME_CONFIG.fleet.maximumEmployees).map(migrateEmployee) : [],
+    activeShift: input?.activeShift && typeof input.activeShift === 'object' ? {
+      ...input.activeShift,
+      policy: {
+        ...input.activeShift.policy,
+        regional: migrateEmployeeRegionalPreferences(input.activeShift.policy?.regional)
+      }
+    } : null,
     lastReport: input?.lastReport && typeof input.lastReport === 'object' ? input.lastReport : null
   };
 }
@@ -367,6 +394,65 @@ function normalizePublicName(value: unknown, fallback: string) {
   if (typeof value !== 'string') return fallback;
   const normalized = value.normalize('NFKC').replace(/[\u0000-\u001f\u007f-\u009f\u200b-\u200f\u202a-\u202e\u2060\ufeff]/g, '').replace(/[<>]/g, '').replace(/\s+/g, ' ').trim();
   return normalized.length >= 3 && normalized.length <= 20 ? normalized : fallback;
+}
+
+function migrateEmployee(employee: FleetEmployee): FleetEmployee {
+  return { ...employee, regionalPreferences: migrateEmployeeRegionalPreferences(employee.regionalPreferences) };
+}
+
+function migrateEmployeeRegionalPreferences(input: Partial<EmployeeRegionalPreferences> | undefined): EmployeeRegionalPreferences {
+  return {
+    preferredRegionId: typeof input?.preferredRegionId === 'string' && input.preferredRegionId ? input.preferredRegionId : 'any',
+    allowedRegionIds: Array.isArray(input?.allowedRegionIds) ? [...new Set(input.allowedRegionIds.filter((id): id is string => typeof id === 'string'))].slice(0, 16) : [],
+    maximumDistanceKm: clamp(finite(input?.maximumDistanceKm, DEFAULT_EMPLOYEE_REGIONAL_PREFERENCES.maximumDistanceKm), 1, 50),
+    acceptLongTrips: input?.acceptLongTrips !== false,
+    returnToPreferredRegion: input?.returnToPreferredRegion !== false,
+    returnToGarage: input?.returnToGarage !== false,
+    preferredFuelServiceId: typeof input?.preferredFuelServiceId === 'string' ? input.preferredFuelServiceId : null,
+    preferredWorkshopServiceId: typeof input?.preferredWorkshopServiceId === 'string' ? input.preferredWorkshopServiceId : null,
+    minimumCondition: clamp(finite(input?.minimumCondition, DEFAULT_EMPLOYEE_REGIONAL_PREFERENCES.minimumCondition), 10, 95),
+    minimumFuelPercent: clamp(finite(input?.minimumFuelPercent, DEFAULT_EMPLOYEE_REGIONAL_PREFERENCES.minimumFuelPercent), 5, 80)
+  };
+}
+
+function migrateRegionalFamiliarity(input: Record<string, RegionalFamiliarity> | undefined) {
+  if (!input || typeof input !== 'object') return {};
+  return Object.fromEntries(Object.entries(input).slice(0, 32).flatMap(([regionId, value]) => {
+    if (!value || typeof value !== 'object') return [];
+    return [[regionId, {
+      regionId,
+      completedRides: Math.max(0, Math.floor(finite(value.completedRides, 0))),
+      kilometers: Math.max(0, finite(value.kilometers, 0)),
+      pickupIds: Array.isArray(value.pickupIds) ? [...new Set(value.pickupIds.filter((id): id is string => typeof id === 'string'))].slice(-24) : [],
+      destinationIds: Array.isArray(value.destinationIds) ? [...new Set(value.destinationIds.filter((id): id is string => typeof id === 'string'))].slice(-24) : [],
+      corridorIds: value.corridorIds && typeof value.corridorIds === 'object' ? Object.fromEntries(Object.entries(value.corridorIds).filter(([, count]) => Number.isFinite(count)).slice(-32)) : {},
+      workSeconds: Math.max(0, finite(value.workSeconds, 0)),
+      ratingTotal: Math.max(0, finite(value.ratingTotal, 0)),
+      ratingCount: Math.max(0, Math.floor(finite(value.ratingCount, 0))),
+      recurringClients: Math.max(0, Math.floor(finite(value.recurringClients, 0)))
+    } satisfies RegionalFamiliarity]];
+  })) as Record<string, RegionalFamiliarity>;
+}
+
+function createLineageId() {
+  const value = globalThis.crypto?.randomUUID?.().replaceAll('-', '') ?? `${Date.now().toString(36)}${Math.random().toString(36).slice(2)}`;
+  return `rbl_${value.slice(0, 24)}`;
+}
+
+function validLineageId(value: unknown) {
+  return typeof value === 'string' && /^rbl_[a-z0-9]{8,32}$/i.test(value);
+}
+
+function legacyRegionId(value: unknown) {
+  if (typeof value !== 'string') return 'centro';
+  const normalized = value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  const aliases: Record<string, string> = {
+    'setores centrais': 'centro', centro: 'centro', 'asa sul': 'asa-sul', 'asa norte': 'asa-norte',
+    sudoeste: 'sudoeste', cruzeiro: 'cruzeiro', noroeste: 'noroeste', 'vila planalto': 'vila-planalto',
+    'universidade de brasilia': 'unb', 'lago sul': 'lago-sul', 'lago norte': 'lago-norte',
+    'jardim botanico': 'jardim-botanico', aeroporto: 'aeroporto'
+  };
+  return aliases[normalized] ?? 'centro';
 }
 
 function migrateFleetPublicProfile(input: Partial<PlayerSave['fleetPublicProfile']> | undefined, fallback: PlayerSave['fleetPublicProfile']): PlayerSave['fleetPublicProfile'] {

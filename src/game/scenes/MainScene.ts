@@ -20,6 +20,7 @@ import { EconomyService } from '../economy/EconomyService';
 import { fuelPurchaseCost, upgradeEffects, upgradePrice, workshopPrice, type WorkshopServiceId } from '../economy/ExpenseCalculator';
 import { ECONOMY_CONFIG } from '../economy/EconomyConfig';
 import { serviceAccessDistance, ServiceSystem } from '../services/ServiceSystem';
+import { updateServiceNavigation } from '../services/ServiceNavigation';
 import { AirTrafficSystem } from '../environment/AirTrafficSystem';
 import { refreshProgression } from '../progression/DriverProgression';
 import { simulateEconomy } from '../economy/EconomySimulator';
@@ -29,9 +30,12 @@ import { convertActiveVehicleToTaxi, regularizeTaxi } from '../progression/Regul
 import {
   acknowledgeFleetReport, advanceFleetShift, assignEmployee, dismissEmployee, endFleetShift,
   hireEmployee, purchaseSecondVehicle, selectPlayerVehicle, simulateOfflineReturn,
-  startFleetShift, syncActiveVehicleFromLegacy, unassignEmployee
+  startFleetShift, syncActiveVehicleFromLegacy, unassignEmployee,
+  updateEmployeeRegionalPreferences
 } from '../fleet/FleetService';
 import { FleetVehicleSystem } from '../fleet/FleetVehicleSystem';
+import { recordRegionalRide } from '../regions/FamiliarityService';
+import { createRegionalFamiliarity } from '../regions/RegionalDefaults';
 import { roundMoney } from '../economy/TransactionLedger';
 import { OnlineWorldClient, type LocalMovementState } from '../../online/OnlineWorldClient';
 import { RemoteVehicleSystem } from '../../online/RemoteVehicleSystem';
@@ -62,6 +66,7 @@ export class MainScene extends Phaser.Scene {
   private passengerVisual?: Phaser.GameObjects.Container;
   private destinationVisual?: Phaser.GameObjects.Container;
   private graphGraphics?: Phaser.GameObjects.Graphics;
+  private regionGraphics?: Phaser.GameObjects.Graphics;
   private signalVisuals: SignalVisual[] = [];
   private keys?: Record<string, Phaser.Input.Keyboard.Key>;
   private mobileInput: VehicleInput = { throttle: 0, steering: 0, handbrake: false };
@@ -73,6 +78,7 @@ export class MainScene extends Phaser.Scene {
   private lastRouteUpdate = 0;
   private offRouteSeconds = 0;
   private routeRecalculations = 0;
+  private serviceOffRouteSeconds = 0;
   private lastSignalUpdate = 0;
   private collisionEvents = 0;
   private collisionSeverity: CollisionSeverity | null = null;
@@ -90,6 +96,7 @@ export class MainScene extends Phaser.Scene {
   private cameraMode: 'follow' | 'fixed';
   private cameraRotation = 0;
   private showGraph = false;
+  private showRegions = false;
   private readonly audio = new GameAudio();
   private repositionProgress = 0;
   private repositionConsumed = false;
@@ -186,7 +193,11 @@ export class MainScene extends Phaser.Scene {
         rating: this.save.rating,
         taxiLicensed: this.activeFleetVehicle()?.taxiLicensed === true,
         taxiPoints: this.map.taxiPoints,
-        regions: this.map.manifest?.regions
+        regions: this.map.manifest?.regions,
+        preferredRegionId: this.save.preferredRegionId,
+        regionalFamiliarity: this.save.regionalFamiliarity,
+        services: this.map.services,
+        fuelLiters: this.save.fuel
       });
       if (this.mission.mission.phase === 'pickup' || this.mission.mission.phase === 'passenger-on-board') {
         this.mission.recalculate(this.vehicle.position, this.vehicle.rotation);
@@ -194,7 +205,7 @@ export class MainScene extends Phaser.Scene {
       this.services = new ServiceSystem(this, this.map.services, this.project);
       this.taxiPoints = new TaxiPointSystem(this, this.map.taxiPoints, this.project);
       const garage = this.map.services.find((service) => service.id === this.save.fleet.garageServiceId)?.entrance ?? { x: -744.43, y: 55.13 };
-      this.fleetVehicles = new FleetVehicleSystem(this, this.router, surface, this.traffic, this.project, this.map.taxiPoints, garage);
+      this.fleetVehicles = new FleetVehicleSystem(this, this.router, surface, this.traffic, this.project, this.map.taxiPoints, garage, this.map.manifest?.regions ?? []);
       this.online = new OnlineWorldClient(this.save);
       this.remoteVehicles = new RemoteVehicleSystem(this, this.traffic, this.project);
       this.onlineUnsubscribers.push(
@@ -215,6 +226,7 @@ export class MainScene extends Phaser.Scene {
       const mapLocation = this.mapStream.location(this.vehicle.position);
       this.save.currentChunk = mapLocation.chunkId;
       this.save.currentRegion = mapLocation.region.name;
+      this.save.currentRegionId = mapLocation.region.id;
       void this.online.start(mapLocation.chunkId, this.adjacentChunks(mapLocation.chunkId));
       if (this.save.mapMigrationNotice) {
         this.save.mapMigrationNotice = false;
@@ -337,7 +349,7 @@ export class MainScene extends Phaser.Scene {
         GAME_CONFIG.vehicle.brakeMps2
       );
       this.vehicle.recoverAutopilotToLane(guidance.preferredRoadHeading);
-      this.mission.recalculate(this.vehicle.position, this.vehicle.rotation);
+      this.recalculateActiveRoute();
       this.syncMissionVisuals();
       this.autopilotCollisionRecoveryUntil = this.simulationSeconds + GAME_CONFIG.traffic.stuckRecoveryMaximumSeconds;
       this.emitToast('Destravamento automático: saindo da fila com prioridade temporária.', 'warning');
@@ -382,7 +394,7 @@ export class MainScene extends Phaser.Scene {
     );
     if (trafficUpdate.autopilotDeadlockRecovery) {
       this.vehicle.recoverAutopilotToLane(input.assistanceHeading);
-      this.mission.recalculate(this.vehicle.position, this.vehicle.rotation);
+      this.recalculateActiveRoute();
       this.syncMissionVisuals();
       this.autopilotCollisionRecoveryUntil = this.simulationSeconds + GAME_CONFIG.traffic.autopilotCollisionGhostSeconds;
     }
@@ -395,7 +407,7 @@ export class MainScene extends Phaser.Scene {
     );
     if (collision.autopilotRecovery) {
       this.vehicle.recoverAutopilotToLane(input.assistanceHeading);
-      this.mission.recalculate(this.vehicle.position, this.vehicle.rotation);
+      this.recalculateActiveRoute();
       this.syncMissionVisuals();
       this.autopilotCollisionRecoveryUntil = this.simulationSeconds + GAME_CONFIG.traffic.autopilotCollisionGhostSeconds;
     }
@@ -479,6 +491,7 @@ export class MainScene extends Phaser.Scene {
         distanceKm: receipt.distanceKm,
         completedAt: new Date().toISOString()
       }, ...this.save.rideHistory].slice(0, GAME_CONFIG.storage.rideHistoryLimit);
+      recordRegionalRide(this.save, this.mission.mission, receipt);
       if ((this.mission.mission.quality?.collisions ?? 0) === 0) this.save.goals.collisionFreeRide = true;
       refreshProgression(this.save);
       this.traffic.clearPlayerDrivingAdvice();
@@ -520,9 +533,25 @@ export class MainScene extends Phaser.Scene {
 
     if (this.services?.selected && this.serviceRoute.length) {
       const serviceDistance = serviceAccessDistance(this.services.selected, this.vehicle.position);
-      this.serviceRoute = advanceActiveRoute(this.serviceRoute, this.vehicle.position, 28).route;
+      const serviceProgress = updateServiceNavigation(
+        this.serviceRoute,
+        this.vehicle.position,
+        dt,
+        this.serviceOffRouteSeconds,
+        serviceDistance,
+        GAME_CONFIG.services.interactionRadiusMeters
+      );
+      this.serviceRoute = serviceProgress.route;
+      this.serviceOffRouteSeconds = serviceProgress.offRouteSeconds;
+      if (serviceProgress.shouldRecalculate) {
+        this.recalculateServiceRoute();
+        this.routeRecalculations += 1;
+        this.serviceOffRouteSeconds = 0;
+        this.emitToast('Rota do serviço recalculada automaticamente.', 'info');
+      }
       if (serviceDistance <= GAME_CONFIG.services.interactionRadiusMeters && Math.abs(this.vehicle.speed) * 3.6 <= GAME_CONFIG.services.maximumInteractionSpeedKmh) {
         this.serviceRoute = [];
+        this.serviceOffRouteSeconds = 0;
         if (!this.serviceArrived) {
           this.serviceArrived = true;
           this.emitToast(`Chegou a ${this.services.selected.gameName}. Escolha e confirme o serviço.`, 'success');
@@ -725,9 +754,11 @@ export class MainScene extends Phaser.Scene {
     this.mapVisuals.push(ground);
     ground.fillStyle(0x8fb878).fillRect(-20_000, -20_000, 40_000, 40_000);
     ground.fillStyle(0x7da66d, 0.55);
-    for (let index = 0; index < 130; index += 1) {
+    const vegetationSamples = this.save.settings.quality === 'high' ? 130 : this.save.settings.quality === 'low' ? 55 : 90;
+    for (let index = 0; index < vegetationSamples; index += 1) {
       const x = ((index * 173) % 2_100) - 1_050;
       const y = ((index * 347) % 2_050) - 1_025;
+      if (Math.hypot(x - renderCenter.x, y - renderCenter.y) > renderRadius + 60) continue;
       const p = this.project({ x, y });
       ground.fillCircle(p.x, p.y, 2.1);
       ground.fillStyle(index % 3 ? 0x3d7848 : 0x557d3a, 0.7).fillCircle(p.x, p.y - 1.7, 3.1);
@@ -761,7 +792,9 @@ export class MainScene extends Phaser.Scene {
       const width = visibleRoadWidth(road);
       roads.lineStyle(width, road.highway === 'service' ? 0x5d6570 : 0x454e59, 1);
       this.strokeRoad(roads, road.points);
-      const renderLaneMarkings = this.save.settings.quality === 'high' || DETAILED_ROAD_MARKINGS.has(road.highway);
+      const markingRadius = this.save.settings.quality === 'high' ? renderRadius : 240;
+      const renderLaneMarkings = (this.save.settings.quality === 'high' || DETAILED_ROAD_MARKINGS.has(road.highway))
+        && pointsNear(road.points, renderCenter, markingRadius);
       if (renderLaneMarkings && road.lanes >= 2 && road.points.length > 1) {
         if (!road.oneway) {
           roads.lineStyle(0.38, 0xf8d96a, 0.9);
@@ -1046,6 +1079,21 @@ export class MainScene extends Phaser.Scene {
       this.persist();
       return;
     }
+    if (command.type === 'set-preferred-region') {
+      const valid = command.regionId === 'any' || this.map?.manifest?.regions.some((region) => region.id === command.regionId && region.playable);
+      if (!valid) return;
+      this.save.preferredRegionId = command.regionId;
+      this.updateMissionVehicleContext();
+      this.persist();
+      this.emitToast(command.regionId === 'any' ? 'Ofertas liberadas em qualquer região.' : `Região preferida: ${this.map?.manifest?.regions.find((region) => region.id === command.regionId)?.name}.`, 'success');
+      return;
+    }
+    if (command.type === 'set-employee-regional-preferences') {
+      const result = updateEmployeeRegionalPreferences(this.save, command.employeeId, command.preferences);
+      this.emitToast(result.applied ? 'Preferências regionais do motorista atualizadas.' : result.reason === 'shift-active' ? 'Encerre o turno para alterar a região.' : 'Motorista não encontrado.', result.applied ? 'success' : 'warning');
+      if (result.applied) this.persist();
+      return;
+    }
     if (command.type === 'cancel-ride' && this.mission) {
       const penalized = this.mission.cancel();
       if (penalized) new EconomyService(this.save).expense(
@@ -1200,11 +1248,26 @@ export class MainScene extends Phaser.Scene {
     if (!this.services || !this.router || !this.vehicle) return;
     const location = this.services.select(serviceId);
     if (!location) return;
-    const toEntrance = this.router.drivingRoute(this.vehicle.position, location.entrance, this.vehicle.rotation);
-    this.serviceRoute = [...toEntrance, location.stopPoint];
+    this.recalculateServiceRoute();
     this.serviceArrived = false;
     this.drawRoute();
     this.emitToast(`Rota traçada até ${location.gameName}. O piloto pode levar você, mas não compra serviços.`, 'info');
+  }
+
+  private recalculateServiceRoute() {
+    if (!this.services?.selected || !this.router || !this.vehicle) return;
+    const location = this.services.selected;
+    const toEntrance = this.router.drivingRoute(this.vehicle.position, location.entrance, this.vehicle.rotation);
+    this.serviceRoute = toEntrance.length >= 2 ? [...toEntrance, location.stopPoint] : [];
+    this.serviceArrived = false;
+    this.serviceOffRouteSeconds = 0;
+    this.drawRoute();
+  }
+
+  private recalculateActiveRoute() {
+    if (!this.vehicle) return;
+    if (this.services?.selected) this.recalculateServiceRoute();
+    else this.mission?.recalculate(this.vehicle.position, this.vehicle.rotation);
   }
 
   private activeNearbyService(category: MapServiceLocation['category']) {
@@ -1279,6 +1342,7 @@ export class MainScene extends Phaser.Scene {
     this.services?.clearSelection();
     this.serviceRoute = [];
     this.serviceArrived = false;
+    this.serviceOffRouteSeconds = 0;
     if (this.vehicle && this.mission) {
       if (this.autopilotEnabled && this.mission.mission.phase === 'offered') this.mission.accept(this.vehicle.position, this.vehicle.rotation);
       this.mission.recalculate(this.vehicle.position, this.vehicle.rotation);
@@ -1322,7 +1386,11 @@ export class MainScene extends Phaser.Scene {
       rating: this.save.rating,
       taxiLicensed: this.activeFleetVehicle()?.taxiLicensed === true,
       taxiPoints: this.map?.taxiPoints ?? [],
-      regions: this.map?.manifest?.regions ?? []
+      regions: this.map?.manifest?.regions ?? [],
+      preferredRegionId: this.save.preferredRegionId,
+      regionalFamiliarity: this.save.regionalFamiliarity,
+      services: this.map?.services ?? [],
+      fuelLiters: this.save.fuel
     });
   }
 
@@ -1419,6 +1487,46 @@ export class MainScene extends Phaser.Scene {
     if (action === 'generate') {
       this.mission.next(this.vehicle.position, this.save.completedRides + 1);
       this.syncMissionVisuals();
+    }
+    if (action === 'regional-ride') {
+      this.mission.next(this.vehicle.position, this.save.completedRides + 2);
+      this.syncMissionVisuals();
+    }
+    if (action === 'long-ride') {
+      let rideIndex = this.save.completedRides + 1;
+      while (Math.abs(rideIndex * 37) % 100 < 90) rideIndex += 1;
+      this.mission.next(this.vehicle.position, rideIndex);
+      this.syncMissionVisuals();
+    }
+    if (action === 'prefer-lago-sul') this.save.preferredRegionId = 'lago-sul';
+    if (action === 'prefer-jardim-botanico') this.save.preferredRegionId = 'jardim-botanico';
+    if (action === 'familiarity-add') {
+      const regionId = this.save.currentRegionId;
+      const familiarity = this.save.regionalFamiliarity[regionId] ?? createRegionalFamiliarity(regionId);
+      familiarity.completedRides += 4;
+      familiarity.kilometers += 12;
+      this.save.regionalFamiliarity[regionId] = familiarity;
+    }
+    if (action === 'familiarity-clear') this.save.regionalFamiliarity = {};
+    if (action === 'teleport-lago-sul' || action === 'teleport-jardim-botanico') {
+      const id = action === 'teleport-lago-sul' ? 'lago-sul' : 'jardim-botanico';
+      const region = this.map?.manifest?.regions.find((candidate) => candidate.id === id);
+      if (region && this.router) this.vehicle.teleport(this.router.nearestRoutePoint(region.center));
+    }
+    if (action === 'regional-employee' && this.save.fleet.employees[0]) {
+      updateEmployeeRegionalPreferences(this.save, this.save.fleet.employees[0].id, {
+        preferredRegionId: this.save.currentRegionId,
+        allowedRegionIds: [this.save.currentRegionId],
+        maximumDistanceKm: 12
+      });
+    }
+    if (action === 'economy-compare') {
+      const result = simulateEconomy('average', 30);
+      this.emitToast(`Economia 0.8.2: lucro médio ${this.formatMoney(result.profit)} em ${result.minutes} min.`, 'info');
+    }
+    if (action === 'service-coverage') {
+      const counts = this.map?.services.reduce((total, service) => ({ ...total, [service.category]: (total[service.category] ?? 0) + 1 }), {} as Record<string, number>) ?? {};
+      this.emitToast(`Cobertura: ${counts.fuel ?? 0} postos, ${counts.workshop ?? 0} oficinas e ${counts.garage ?? 0} garagens.`, 'info');
     }
     if (action === 'offer-urgent') {
       this.mission.next(this.vehicle.position, this.save.completedRides + 1);
@@ -1520,6 +1628,10 @@ export class MainScene extends Phaser.Scene {
       this.showGraph = !this.showGraph;
       this.renderDebugGraph();
     }
+    if (action === 'regions') {
+      this.showRegions = !this.showRegions;
+      this.renderRegionDebug();
+    }
     if (action === 'colliders') this.emitToast('Colisores de pista: limite claro das vias.', 'info');
     if (action === 'reset') localStorage.clear();
     refreshProgression(this.save);
@@ -1542,6 +1654,22 @@ export class MainScene extends Phaser.Scene {
         }
       }
     }
+  }
+
+  private renderRegionDebug() {
+    this.regionGraphics?.destroy();
+    if (!this.showRegions || !this.map) return;
+    const graphics = this.add.graphics().setDepth(46);
+    for (const region of this.map.manifest?.regions ?? []) {
+      const color = Number.parseInt(region.color.slice(1), 16);
+      graphics.lineStyle(region.id === this.save.currentRegionId ? 2 : 1, color, 0.75);
+      const points = region.polygon.map((point) => {
+        const projected = this.project(point);
+        return new Phaser.Math.Vector2(projected.x, projected.y);
+      });
+      if (points.length) graphics.strokePoints(points, true);
+    }
+    this.regionGraphics = graphics;
   }
 
   private emitHud(time = 0) {
@@ -1676,6 +1804,10 @@ export class MainScene extends Phaser.Scene {
       currentChunk: this.save.currentChunk,
       loadedMapChunks: this.map?.loadedChunkIds?.length ?? 0,
       mapRegions: this.map?.manifest?.regions.map((region) => region.name) ?? [],
+      regionCatalog: this.map?.manifest?.regions ?? [],
+      preferredRegionId: this.save.preferredRegionId,
+      currentRegionId: this.save.currentRegionId,
+      regionalFamiliarity: structuredClone(this.save.regionalFamiliarity),
       online: onlineTelemetry
     };
     gameEvents.emit('hud', snapshot);
@@ -1722,6 +1854,7 @@ export class MainScene extends Phaser.Scene {
       const location = this.mapStream.location(this.vehicle.position);
       this.save.currentChunk = location.chunkId;
       this.save.currentRegion = location.region.name;
+      this.save.currentRegionId = location.region.id;
     }
     const nearestLaneNode = this.router?.nearest(this.vehicle.position);
     this.save.laneId = nearestLaneNode?.laneId ?? null;

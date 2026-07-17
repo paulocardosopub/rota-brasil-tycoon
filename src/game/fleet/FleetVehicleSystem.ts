@@ -1,7 +1,8 @@
 import Phaser from 'phaser';
 import { GAME_CONFIG } from '../../config/gameConfig';
 import { GraphRouter } from '../../map/routing/GraphRouter';
-import type { FleetEmployee, FleetVehicle, PlayerSave, Point, TaxiPoint } from '../../types/game';
+import { regionAt } from '../../map/regions/RegionCatalog';
+import type { FleetEmployee, FleetVehicle, MapRegion, PlayerSave, Point, TaxiPoint } from '../../types/game';
 import { createCarVisual } from '../entities/VehicleVisual';
 import { automaticThrottle, missionApproachTargetSpeed } from '../systems/Autopilot';
 import { RoadSurfaceIndex } from '../systems/RoadSurfaceIndex';
@@ -45,7 +46,8 @@ export class FleetVehicleSystem {
   private followEnabled = false;
   private playerContact = false;
   private readonly parkedVisuals = new Map<string, Phaser.GameObjects.Container>();
-  private readonly waypoints: Point[];
+  private readonly cityWaypoints: Point[];
+  private waypoints: Point[];
 
   constructor(
     private readonly scene: Phaser.Scene,
@@ -54,13 +56,16 @@ export class FleetVehicleSystem {
     private readonly traffic: TrafficSystem,
     private readonly project: Project,
     taxiPoints: TaxiPoint[],
-    garage: Point
+    garage: Point,
+    private readonly regions: MapRegion[] = []
   ) {
-    this.waypoints = buildFleetWaypoints(
+    this.cityWaypoints = buildFleetWaypoints(
       router.candidates(100),
       taxiPoints.map((point) => point.entrance),
-      garage
+      garage,
+      60
     );
+    this.waypoints = this.cityWaypoints;
   }
 
   update(save: PlayerSave, playerPosition: Point, deltaSeconds: number) {
@@ -83,6 +88,7 @@ export class FleetVehicleSystem {
 
     if (this.activeShiftId !== shift.id) {
       this.activeShiftId = shift.id;
+      this.waypoints = this.regionalWaypoints(employee);
       this.routePlan.reset();
       this.route = [];
       this.completedStops = 0;
@@ -105,6 +111,28 @@ export class FleetVehicleSystem {
       this.traffic.setPriorityVehicles([]);
       if (level === 'simplified') this.updateSimplified(vehicle, employee, deltaSeconds);
     }
+  }
+
+  private regionalWaypoints(employee: FleetEmployee) {
+    const preferences = employee.regionalPreferences;
+    if (!this.regions.length || preferences.preferredRegionId === 'any') return this.cityWaypoints;
+    const preferred = this.regions.find((region) => region.id === preferences.preferredRegionId);
+    if (!preferred) return this.cityWaypoints;
+    const allowed = new Set(preferences.allowedRegionIds.length
+      ? preferences.allowedRegionIds
+      : [preferred.id, ...preferred.neighbors]);
+    const maximumMeters = preferences.maximumDistanceKm * 1_000;
+    const filtered = this.cityWaypoints.filter((point, index) => {
+      if (index === 0) return true;
+      const region = regionAt(point, this.regions);
+      if (!allowed.has(region.id)) return false;
+      if (!preferences.acceptLongTrips && region.id !== preferred.id) return false;
+      return Math.hypot(point.x - preferred.center.x, point.y - preferred.center.y) <= maximumMeters;
+    });
+    const preferredStops = filtered.filter((point, index) => index === 0 || regionAt(point, this.regions).id === preferred.id);
+    const nearbyStops = filtered.filter((point, index) => index > 0 && regionAt(point, this.regions).id !== preferred.id);
+    const weighted = [filtered[0], ...preferredStops.slice(1), ...preferredStops.slice(1), ...nearbyStops].filter(Boolean);
+    return weighted.length >= 3 ? weighted : this.cityWaypoints;
   }
 
   isVisible() {
@@ -321,10 +349,12 @@ export class FleetVehicleSystem {
     if (this.route.length >= 2 || !this.waypoints.length) return;
     for (let attempt = 0; attempt < this.waypoints.length; attempt += 1) {
       const target = this.routePlan.current(this.waypoints)!;
-      this.route = this.router.drivingRoute(position, target, preferredHeading);
-      if (this.route.length >= 2) break;
-      if (Math.hypot(position.x - target.x, position.y - target.y) <= 15) {
-        this.route = [{ ...position }, { ...target }];
+      const candidate = this.router.drivingRoute(position, target, preferredHeading);
+      const candidateDistance = routeRemainingDistance(candidate, position);
+      const directDistance = Math.hypot(position.x - target.x, position.y - target.y);
+      const usefulRoute = candidateDistance >= 120 && directDistance >= 120;
+      if (candidate.length >= 2 && (usefulRoute || this.waypoints.length === 1)) {
+        this.route = candidate;
         break;
       }
       this.routePlan.skipUnreachable(this.waypoints.length);

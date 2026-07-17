@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { createNewSave } from '../../services/storage/saveService';
 import { regularizeTaxi } from '../progression/RegularizationService';
-import { advanceFleetShift, assignEmployee, fleetOperationalState, fleetSimulationLevel, hireEmployee, purchaseSecondVehicle, simulateOfflineReturn, startFleetShift } from './FleetService';
+import { advanceFleetShift, assignEmployee, fleetOperationalState, fleetSimulationLevel, hireEmployee, purchaseSecondVehicle, simulateOfflineReturn, startFleetShift, updateEmployeeRegionalPreferences } from './FleetService';
 
 function fleetReady() {
   const save = createNewSave();
@@ -67,5 +67,23 @@ describe('primeira frota', () => {
     expect(fleetOperationalState(20, 300)).toBe('seeking-trip');
     expect(fleetOperationalState(150, 300)).toBe('with-passenger');
     expect(fleetOperationalState(0, 0)).toBe('seeking-trip');
+  });
+
+  it('preserva a política regional no turno e bloqueia alteração durante a operação', () => {
+    const { save, employee } = fleetReady();
+    expect(updateEmployeeRegionalPreferences(save, employee.id, {
+      preferredRegionId: 'lago-sul',
+      allowedRegionIds: ['lago-sul', 'jardim-botanico'],
+      maximumDistanceKm: 12,
+      acceptLongTrips: false
+    }).applied).toBe(true);
+    expect(startFleetShift(save, employee.id, 'regional-shift').applied).toBe(true);
+    expect(save.fleet.activeShift?.policy.regional).toMatchObject({
+      preferredRegionId: 'lago-sul',
+      allowedRegionIds: ['lago-sul', 'jardim-botanico'],
+      maximumDistanceKm: 12,
+      acceptLongTrips: false
+    });
+    expect(updateEmployeeRegionalPreferences(save, employee.id, { maximumDistanceKm: 25 }).applied).toBe(false);
   });
 });
