@@ -307,7 +307,7 @@ function DevPanel({ hud, close }: { hud: HudSnapshot; close: () => void }) {
     ['rating','Avaliação 5'],['xp','+ 500 XP'],['goals','Concluir metas'],['regularization','Cumprir requisitos'],['regularize-now','Regularizar'],['remove-regularization','Remover regularização'],['convert-taxi','Converter Hatch'],
     ['hire-bia','Contratar Bia'],['hire-leo','Contratar Léo'],['hire-nara','Contratar Nara'],['dismiss-employee','Demitir'],['buy-sedan','Comprar Sedan'],['assign-first','Atribuir motorista'],['start-shift','Iniciar turno'],['end-shift','Encerrar turno'],
     ['fleet-hour','Simular 1 hora'],['fleet-eight-hours','Simular 8 horas'],['follow-fleet','Acompanhar frota'],['force-fuel','Forçar abastecimento'],['force-maintenance','Forçar manutenção'],
-    ['traffic-ahead','NPC à frente'],['traffic-collision','NPC sobre o carro'],['traffic-head-on','NPC de frente'],['collision-light','Colisão leve'],['collision-moderate','Colisão moderada'],['collision-severe','Colisão severa'],
+    ['traffic-ahead','NPC à frente'],['traffic-jam','Engarrafamento travado'],['traffic-collision','NPC sobre o carro'],['traffic-head-on','NPC de frente'],['collision-light','Colisão leve'],['collision-moderate','Colisão moderada'],['collision-severe','Colisão severa'],
     ['traffic','Alternar trânsito'],['signals','Alternar semáforos'],['signal-phase','Avançar fase dos sinais'],['graph','Grafo de rotas'],
     ['online-latency','Latência online'],['online-loss','Perda online'],['online-disconnect','Forçar reconexão'],['online-fake','Criar remoto fictício'],['online-clear','Limpar remotos'],['reset','Reiniciar save']
   ];

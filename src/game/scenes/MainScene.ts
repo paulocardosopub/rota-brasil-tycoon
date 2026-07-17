@@ -308,8 +308,46 @@ export class MainScene extends Phaser.Scene {
     this.save.maintenanceWear = Math.min(100, this.save.maintenanceWear
       + travelled / 1000 * ECONOMY_CONFIG.wear.perKilometer * (aggressive ? ECONOMY_CONFIG.wear.aggressiveMultiplier : 1));
     this.save.condition = vehicleCondition(this.save.collisionDamage, this.save.maintenanceWear);
+    const recoveryRoute = this.activeRoute();
+    const recoveryArrivalRadius = this.services?.selected
+      ? GAME_CONFIG.services.interactionRadiusMeters
+      : GAME_CONFIG.mission.autopilotInteractionRadiusMeters;
+    const blockedForRecklessRecovery = this.autopilotEnabled
+      && recoveryRoute.length >= 2
+      && this.navigationDistance() > recoveryArrivalRadius + 2
+      && this.save.fuel > 0
+      && Math.abs(this.vehicle.speed) < 1.2
+      && travelled < 0.015
+      && this.traffic.stats().brakeReason !== 'red-signal'
+      && this.simulationSeconds >= this.autopilotCollisionRecoveryUntil;
+    const playerRecovery = this.traffic.updatePlayerRecovery(
+      dt,
+      blockedForRecklessRecovery,
+      travelled,
+      this.vehicle.position,
+      this.vehicle.rotation
+    );
+    if (playerRecovery.started) {
+      const guidance = guidanceForRoute(
+        this.vehicle.position,
+        this.vehicle.rotation,
+        this.vehicle.speed,
+        recoveryRoute,
+        GAME_CONFIG.vehicle.autopilotCruiseSpeedMps,
+        GAME_CONFIG.vehicle.brakeMps2
+      );
+      this.vehicle.recoverAutopilotToLane(guidance.preferredRoadHeading);
+      this.mission.recalculate(this.vehicle.position, this.vehicle.rotation);
+      this.syncMissionVisuals();
+      this.autopilotCollisionRecoveryUntil = this.simulationSeconds + GAME_CONFIG.traffic.stuckRecoveryMaximumSeconds;
+      this.emitToast('Destravamento automático: saindo da fila com prioridade temporária.', 'warning');
+    }
     this.fleetVehicles?.update(this.save, this.vehicle.position, dt);
-    const fleetCollision = this.fleetVehicles?.handlePlayerCollision(this.vehicle.position, this.vehicle.speed);
+    const fleetCollision = this.fleetVehicles?.handlePlayerCollision(
+      this.vehicle.position,
+      this.vehicle.speed,
+      this.autopilotEnabled && this.traffic.playerRecoveryActive()
+    );
     if (fleetCollision?.impact) {
       this.vehicle.speed *= 0.45;
       this.save.collisionDamage = Math.min(100, this.save.collisionDamage + Math.min(1.4, fleetCollision.relativeSpeedKmh / 45));
@@ -317,7 +355,7 @@ export class MainScene extends Phaser.Scene {
       this.mission.recordCollision();
       this.emitToast('Contato com o veículo da frota. Ambos reduziram para se separar.', 'warning');
     }
-    const remoteCollision = this.remoteVehicles?.count()
+    const remoteCollision = !this.traffic.playerRecoveryActive() && this.remoteVehicles?.count()
       ? this.remoteVehicles.handlePlayerCollision(this.vehicle.position, this.vehicle.speed)
       : undefined;
     if (remoteCollision?.impact) {
@@ -535,6 +573,7 @@ export class MainScene extends Phaser.Scene {
       this.autopilotTargetSpeedKmh = 0;
       this.autopilotNextMissionAt = 0;
       this.autopilotStuckSeconds = 0;
+      this.traffic?.resetPlayerRecovery();
       this.traffic?.clearPlayerDrivingAdvice();
       this.emitToast('Piloto desligado: controle manual assumido.', 'info');
     }
@@ -914,6 +953,7 @@ export class MainScene extends Phaser.Scene {
       this.autopilotEnabled = !this.autopilotEnabled;
       this.autopilotState = this.autopilotEnabled ? 'cruising' : 'off';
       this.autopilotStuckSeconds = 0;
+      if (!this.autopilotEnabled) this.traffic?.resetPlayerRecovery();
       if (this.autopilotEnabled) {
         this.mobileInput = { throttle: 0, steering: 0, handbrake: false };
         if (this.vehicle && this.mission?.mission.phase === 'offered' && !this.services?.selected && this.mission.accept(this.vehicle.position, this.vehicle.rotation)) this.prepareAcceptedTaxiRide();
@@ -1449,6 +1489,7 @@ export class MainScene extends Phaser.Scene {
     if (action === 'signals') this.traffic.signalsEnabled = !this.traffic.signalsEnabled;
     if (action === 'signal-phase') this.emitToast(`Fase dos sinais: ${this.traffic.cycleSignalOverride()}.`, 'info');
     if (action === 'traffic-ahead') this.traffic.debugPlaceVehicle(this.vehicle.position, this.vehicle.rotation, 16);
+    if (action === 'traffic-jam') this.traffic.debugPlaceTrafficJam(this.vehicle.position, this.vehicle.rotation);
     if (action === 'traffic-collision') this.traffic.debugPlaceVehicle(this.vehicle.position, this.vehicle.rotation, 0);
     if (action === 'collision-light') {
       this.vehicle.speed = 3;

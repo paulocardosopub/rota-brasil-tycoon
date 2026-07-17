@@ -8,6 +8,7 @@ import { RoadSurfaceIndex } from '../systems/RoadSurfaceIndex';
 import { advanceActiveRoute, pointAlongRoute, routeRemainingDistance } from '../systems/RouteProgress';
 import { guidanceForRoute } from '../systems/RouteSteeringAssist';
 import { VehicleController } from '../systems/VehicleController';
+import { RecklessRecovery } from '../traffic/RecklessRecovery';
 import { TrafficSystem } from '../traffic/TrafficSystem';
 import { fleetSimulationLevel } from './FleetService';
 import { FleetRouteHealth, type FleetRecoveryRequest } from './FleetRouteHealth';
@@ -36,7 +37,11 @@ export class FleetVehicleSystem {
   private lastRecoveryReason: string | null = null;
   private identification: string | null = null;
   private stuckSeconds = 0;
-  private trafficStuckSeconds = 0;
+  private readonly trafficRecovery = new RecklessRecovery({
+    thresholdSeconds: GAME_CONFIG.traffic.autopilotFollowingDeadlockSeconds,
+    maximumSeconds: GAME_CONFIG.traffic.stuckRecoveryMaximumSeconds,
+    escapeDistanceMeters: GAME_CONFIG.traffic.stuckRecoveryEscapeDistanceMeters
+  });
   private followEnabled = false;
   private playerContact = false;
   private readonly parkedVisuals = new Map<string, Phaser.GameObjects.Container>();
@@ -71,6 +76,7 @@ export class FleetVehicleSystem {
       this.destinationRemaining = 0;
       this.routeRemaining = 0;
       this.routeHealth.reset();
+      this.trafficRecovery.reset();
       this.releaseActiveVehicle();
       return;
     }
@@ -83,6 +89,7 @@ export class FleetVehicleSystem {
       this.routeRecoveries = 0;
       this.lastRecoveryReason = null;
       this.routeHealth.reset();
+      this.trafficRecovery.reset();
     }
     this.identification = employeeIdentification(employee.name);
 
@@ -93,6 +100,7 @@ export class FleetVehicleSystem {
     if (level === 'detailed') this.updateDetailed(vehicle, employee, deltaSeconds);
     else {
       this.hideDetailedVehicle();
+      this.trafficRecovery.reset();
       this.traffic.setReservedSlots(0);
       this.traffic.setPriorityVehicles([]);
       if (level === 'simplified') this.updateSimplified(vehicle, employee, deltaSeconds);
@@ -144,8 +152,12 @@ export class FleetVehicleSystem {
     };
   }
 
-  handlePlayerCollision(playerPosition: Point, playerSpeed: number) {
+  handlePlayerCollision(playerPosition: Point, playerSpeed: number, nonSolidPlayer = false) {
     if (!this.controller || !this.visual?.visible) {
+      this.playerContact = false;
+      return { impact: false, relativeSpeedKmh: 0 };
+    }
+    if (this.trafficRecovery.active || nonSolidPlayer) {
       this.playerContact = false;
       return { impact: false, relativeSpeedKmh: 0 };
     }
@@ -182,13 +194,15 @@ export class FleetVehicleSystem {
       GAME_CONFIG.vehicle.autopilotCruiseSpeedMps * 0.88,
       GAME_CONFIG.vehicle.brakeMps2
     );
+    const recklessRecovery = this.trafficRecovery.active;
     const trafficAdvice = this.traffic.playerDrivingAdvice(
       this.controller.position,
       this.controller.rotation,
       Math.abs(this.controller.speed),
       route,
       false,
-      vehicle.id
+      vehicle.id,
+      recklessRecovery
     );
     const distance = Math.hypot(this.controller.position.x - target.x, this.controller.position.y - target.y);
     const approach = missionApproachTargetSpeed(
@@ -197,7 +211,10 @@ export class FleetVehicleSystem {
       GAME_CONFIG.vehicle.brakeMps2,
       GAME_CONFIG.vehicle.autopilotCruiseSpeedMps * 0.88
     );
-    const targetSpeed = Math.max(0, Math.min(guidance.targetSpeedMps, trafficAdvice.targetSpeed, approach));
+    const trafficTargetSpeed = recklessRecovery
+      ? GAME_CONFIG.traffic.stuckRecoverySpeedMps
+      : trafficAdvice.targetSpeed;
+    const targetSpeed = Math.max(0, Math.min(guidance.targetSpeedMps, trafficTargetSpeed, approach));
     const travelled = this.controller.update({
       throttle: automaticThrottle(Math.abs(this.controller.speed), targetSpeed),
       steering: distance > 9 ? guidance.steering : 0,
@@ -213,17 +230,20 @@ export class FleetVehicleSystem {
     this.stuckSeconds = targetSpeed > 1.5 && travelled < 0.01 && Math.abs(this.controller.speed) < 0.8
       ? this.stuckSeconds + deltaSeconds
       : 0;
-    this.trafficStuckSeconds = trafficAdvice.reason === 'traffic'
-      && targetSpeed < 0.6
-      && Math.abs(this.controller.speed) < 0.8
-      && distance > 12
-      ? this.trafficStuckSeconds + deltaSeconds
-      : 0;
-    if (this.trafficStuckSeconds >= GAME_CONFIG.traffic.autopilotFollowingDeadlockSeconds) {
-      if (this.traffic.releaseBlockingVehicle(this.controller.position, this.controller.rotation)) {
-        this.recoverRoute(target, { reason: 'no-progress', repositionAhead: false });
-      }
-      this.trafficStuckSeconds = 0;
+    const recoveryUpdate = this.trafficRecovery.update({
+      deltaSeconds,
+      blocked: distance > 12
+        && approach > 1.5
+        && Math.abs(this.controller.speed) < 0.8
+        && travelled < 0.01
+        && trafficAdvice.reason !== 'red-signal',
+      travelledMeters: travelled
+    });
+    if (recoveryUpdate.started) {
+      this.traffic.releaseBlockingVehicle(this.controller.position, this.controller.rotation);
+      this.controller.recoverAutopilotToLane(guidance.preferredRoadHeading);
+      this.routeRecoveries += 1;
+      this.lastRecoveryReason = 'no-progress';
     }
     if (this.stuckSeconds > 2.5) {
       this.recoverRoute(target, { reason: 'no-progress', repositionAhead: false });
@@ -251,7 +271,8 @@ export class FleetVehicleSystem {
       id: vehicle.id,
       position: vehicle.position,
       heading: vehicle.rotation,
-      speed: Math.abs(this.controller.speed)
+      speed: Math.abs(this.controller.speed),
+      reckless: this.trafficRecovery.active
     }]);
   }
 
@@ -352,7 +373,7 @@ export class FleetVehicleSystem {
     this.routeRemaining = 0;
     this.routeHealth.reset();
     this.stuckSeconds = 0;
-    this.trafficStuckSeconds = 0;
+    this.trafficRecovery.reset();
     employee.state = nextStage === 'to-destination' ? 'with-passenger' : 'seeking-trip';
     vehicle.state = nextStage === 'to-destination' ? 'on-trip' : 'employee-driving';
   }
@@ -419,6 +440,7 @@ export class FleetVehicleSystem {
   private releaseActiveVehicle() {
     this.traffic.setReservedSlots(0);
     this.traffic.setPriorityVehicles([]);
+    this.trafficRecovery.reset();
     this.controller = undefined;
     this.visual?.destroy();
     this.driverLabel?.destroy();

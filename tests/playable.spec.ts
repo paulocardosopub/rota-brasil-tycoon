@@ -169,6 +169,24 @@ test('piloto automático freia para tráfego à frente sem bater', async ({ page
   expect(Number(await hud.getAttribute('data-collision-events'))).toBe(0);
 });
 
+test('jogador e toda a fila saem de um engarrafamento travado após dez segundos', async ({ page }) => {
+  await page.goto('./');
+  await page.getByTestId('guest-button').click();
+  const hud = page.locator('[data-game-ready="true"]');
+  await expect(hud).toBeVisible({ timeout: 25_000 });
+  await page.keyboard.press('Control+Shift+D');
+  await page.getByTestId('autopilot-button').click();
+  await page.getByRole('button', { name: 'Engarrafamento travado' }).click();
+
+  await expect.poll(async () => await hud.getAttribute('data-auto-brake-reason'), { timeout: 5_000 }).toBe('traffic');
+  await expect.poll(
+    async () => Number(await hud.getAttribute('data-autopilot-deadlock-recoveries')),
+    { timeout: 15_000 }
+  ).toBeGreaterThanOrEqual(4);
+  await expect.poll(async () => Number(await hud.getAttribute('data-speed-kmh')), { timeout: 8_000 }).toBeGreaterThan(5);
+  expect(Number(await hud.getAttribute('data-collision-events'))).toBe(0);
+});
+
 test('piloto automático se solta depois de uma colisão sem repetir impactos', async ({ page }) => {
   await page.goto('./');
   await page.getByTestId('guest-button').click();
