@@ -7,8 +7,10 @@ import type { PlayerSave } from './types/game';
 import { Hud } from './ui/hud/Hud';
 import { StartScreen } from './ui/screens/StartScreen';
 import { ensureGuestSession } from './services/supabase/authService';
+import { CloudSyncAcknowledgement } from './services/supabase/CloudSyncAcknowledgement';
 
 let cloudSyncQueue: Promise<void> = Promise.resolve();
+const cloudSyncAcknowledgement = new CloudSyncAcknowledgement();
 
 export default function App() {
   const [playing, setPlaying] = useState(false);
@@ -18,9 +20,12 @@ export default function App() {
   useEffect(() => gameEvents.on('save', (next) => {
     cloudSyncQueue = cloudSyncQueue.then(async () => {
       const current = loadSave();
-      const candidate = current.cloudLineageId === next.cloudLineageId && current.revision >= next.revision ? current : next;
+      const candidate = cloudSyncAcknowledgement.merge(
+        current.cloudLineageId === next.cloudLineageId && current.revision >= next.revision ? current : next
+      );
       const synced = await syncCloudSave(candidate);
-      const latest = loadSave();
+      cloudSyncAcknowledgement.remember(synced);
+      const latest = cloudSyncAcknowledgement.merge(loadSave());
       if (latest.cloudLineageId === synced.cloudLineageId && latest.revision >= synced.revision) {
         replaceSave({ ...latest, lastCloudRevision: Math.max(latest.lastCloudRevision, synced.lastCloudRevision) });
       }
@@ -32,6 +37,7 @@ export default function App() {
     const conflict = await findCloudSaveConflict(local).catch(() => null);
     if (conflict) { setCloudConflict(conflict); return; }
     const synced = await syncCloudSave(local).catch(() => local);
+    cloudSyncAcknowledgement.remember(synced);
     replaceSave(synced);
     setSave(synced);
     setPlaying(true);
@@ -49,6 +55,7 @@ export default function App() {
   const chooseConflict = async (choice: 'local' | 'cloud') => {
     if (!cloudConflict) return;
     const selected = await resolveCloudSaveConflict(cloudConflict, choice).catch(() => choice === 'cloud' ? cloudConflict.remote : cloudConflict.local);
+    cloudSyncAcknowledgement.remember(selected);
     setCloudConflict(null);
     setSave(selected);
     setPlaying(true);
