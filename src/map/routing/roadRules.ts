@@ -18,14 +18,6 @@ export function directionalLaneCount(road: Pick<RoadData, 'lanes' | 'oneway'> | 
 /** Distance from the centerline to the right-hand traffic lane. */
 export function rightHandLaneOffset(road: Pick<RoadData, 'lanes' | 'oneway' | 'width'>, laneIndex = 0) {
   const width = visibleRoadWidth(road);
-  if (!road.oneway) {
-    if (road.lanes < 2) return 0;
-    const lanesPerDirection = Math.max(1, Math.floor(road.lanes / 2));
-    const laneWidth = width / Math.max(2, road.lanes);
-    const slot = Math.abs(laneIndex) % lanesPerDirection;
-    return laneWidth * (lanesPerDirection - slot - 0.5);
-  }
-
   const laneCount = Math.max(1, road.lanes);
   const laneWidth = width / laneCount;
   const slot = Math.abs(laneIndex) % laneCount;

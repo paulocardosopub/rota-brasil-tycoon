@@ -1,5 +1,5 @@
 import type { LaneData, NavigationGraph, RoadData, RoadPoint } from '../../types/game';
-import { offsetToRightOfTravel } from '../routing/roadRules';
+import { offsetToRightOfTravel, rightHandLaneOffset, visibleRoadWidth } from '../routing/roadRules';
 
 export interface RawRoadSpec {
   id: string;
@@ -120,8 +120,13 @@ export function buildLaneGraph(roads: RoadData[], chunkSizeMeters = 800): { lane
       points: [...road.points].reverse()
     });
     for (const direction of directions) for (let laneIndex = 0; laneIndex < direction.count; laneIndex += 1) {
-      const laneWidth = Math.min(4.2, Math.max(2.7, road.width / Math.max(1, road.lanes)));
-      const offset = laneWidth * (direction.count - laneIndex - 0.5);
+      const laneWidth = Math.min(4.2, Math.max(2.7, visibleRoadWidth(road) / Math.max(1, road.lanes)));
+      // The OSM polyline is the centre of the whole carriageway. Offsetting by
+      // the number of lanes in one direction placed the first lane of a
+      // one-way avenue beyond the road edge (8.4 m on a 10 m, three-lane road).
+      // Share the lane-centre rule used by vehicle physics so every graph lane
+      // remains inside the rendered asphalt.
+      const offset = rightHandLaneOffset(road, laneIndex);
       const points = direction.points.map((point, index, all) => {
         const from = all[Math.max(0, index - 1)];
         const to = all[Math.min(all.length - 1, index + 1)];
@@ -172,10 +177,22 @@ export function buildLaneGraph(roads: RoadData[], chunkSizeMeters = 800): { lane
   for (const [sourceNodeId, incoming] of arrivals) {
     const outgoing = departures.get(sourceNodeId) ?? [];
     for (const arrival of incoming) {
+      const hasAlternativeRoad = outgoing.some((departure) =>
+        departure.lane.layer === arrival.lane.layer
+        && departure.lane.roadSegmentId !== arrival.lane.roadSegmentId
+      );
       const legal = outgoing.filter((departure) => {
         if (departure.lane.id === arrival.lane.id) return false;
         if (departure.lane.layer !== arrival.lane.layer) return false;
-        if (departure.lane.roadSegmentId === arrival.lane.roadSegmentId && departure.lane.direction !== arrival.lane.direction) return false;
+        if (departure.lane.roadSegmentId === arrival.lane.roadSegmentId && departure.lane.direction !== arrival.lane.direction) {
+          // At a real dead end, connect the two directions so the street can
+          // join the global component without inventing a shortcut over grass.
+          // Intersections keep using their outgoing roads and do not gain a
+          // free U-turn across traffic.
+          const actualRoadEnd = arrival.nodeId === arrival.lane.endNodeId
+            && departure.nodeId === departure.lane.startNodeId;
+          return actualRoadEnd && !hasAlternativeRoad;
+        }
         return Math.abs(angleDelta(arrival.heading, departure.heading)) < Math.PI * 0.86;
       });
       const byRoad = groupBy(legal, (departure) => departure.lane.roadSegmentId);
@@ -203,7 +220,11 @@ export function buildLaneGraph(roads: RoadData[], chunkSizeMeters = 800): { lane
   const routingNodes = [...graphNodes.values()].filter((node) => node.laneId && routingLaneIds.has(node.laneId));
   const routingNodeIds = new Set(routingNodes.map((node) => node.id));
   for (const node of routingNodes) node.edges = node.edges.filter((edge) => routingNodeIds.has(edge.to));
-  const coreNodeIds = largestStrongComponent(routingNodes);
+  // Keep the complete connected street network, including legitimate one-way
+  // feeders and local access roads. Restricting the graph to its largest
+  // strongly connected core discarded those roads and forced the GPS to join
+  // a parallel avenue with a straight chord across grass or sidewalks.
+  const coreNodeIds = largestWeakComponent(routingNodes);
   const coreNodes = routingNodes.filter((node) => coreNodeIds.has(node.id));
   for (const node of coreNodes) node.edges = node.edges.filter((edge) => coreNodeIds.has(edge.to));
   return { lanes, graph: { kind: 'lane', version: '0.7.0', nodes: coreNodes } };
@@ -273,42 +294,23 @@ function roadFor(roads: RoadData[], id: string) {
   return roads.find((road) => road.id === id);
 }
 
-function largestStrongComponent(nodes: NavigationGraph['nodes']) {
-  const forward = new Map(nodes.map((node) => [node.id, node.edges.map((edge) => edge.to)]));
-  const reverse = new Map(nodes.map((node) => [node.id, [] as string[]]));
-  for (const node of nodes) for (const edge of node.edges) reverse.get(edge.to)?.push(node.id);
-  const visited = new Set<string>();
-  const order: string[] = [];
-  for (const node of nodes) {
-    if (visited.has(node.id)) continue;
-    visited.add(node.id);
-    const stack: Array<{ id: string; index: number }> = [{ id: node.id, index: 0 }];
-    while (stack.length) {
-      const frame = stack[stack.length - 1];
-      const neighbors = forward.get(frame.id) ?? [];
-      if (frame.index < neighbors.length) {
-        const neighbor = neighbors[frame.index++];
-        if (!visited.has(neighbor)) {
-          visited.add(neighbor);
-          stack.push({ id: neighbor, index: 0 });
-        }
-      } else {
-        order.push(frame.id);
-        stack.pop();
-      }
-    }
+function largestWeakComponent(nodes: NavigationGraph['nodes']) {
+  const adjacency = new Map(nodes.map((node) => [node.id, [] as string[]]));
+  for (const node of nodes) for (const edge of node.edges) if (adjacency.has(edge.to)) {
+    adjacency.get(node.id)!.push(edge.to);
+    adjacency.get(edge.to)!.push(node.id);
   }
-  visited.clear();
+  const visited = new Set<string>();
   let largest = new Set<string>();
-  for (let index = order.length - 1; index >= 0; index -= 1) {
-    const start = order[index];
+  for (const node of nodes) {
+    const start = node.id;
     if (visited.has(start)) continue;
     const component = new Set<string>([start]);
     const pending = [start];
     visited.add(start);
     while (pending.length) {
       const id = pending.pop()!;
-      for (const neighbor of reverse.get(id) ?? []) if (!visited.has(neighbor)) {
+      for (const neighbor of adjacency.get(id) ?? []) if (!visited.has(neighbor)) {
         visited.add(neighbor);
         component.add(neighbor);
         pending.push(neighbor);

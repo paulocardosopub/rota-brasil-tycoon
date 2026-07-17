@@ -24,8 +24,18 @@ describe('regras viárias', () => {
 
   it('distribui veículos em faixas distintas de uma mão única', () => {
     const avenue = road({ oneway: true, lanes: 3, width: 12 });
+    expect(rightHandLaneOffset(avenue, 0)).toBe(4);
+    expect(rightHandLaneOffset(avenue, 1)).toBe(0);
+    expect(rightHandLaneOffset(avenue, 2)).toBe(-4);
     expect(rightHandLaneOffset(avenue, 0)).toBeGreaterThan(rightHandLaneOffset(avenue, 1));
     expect(rightHandLaneOffset(avenue, 1)).toBeGreaterThan(rightHandLaneOffset(avenue, 2));
+  });
+
+  it('mantém as faixas de uma via assimétrica dentro da largura total', () => {
+    const avenue = road({ lanes: 5, width: 15, lanesForward: 3, lanesBackward: 2 });
+    expect(rightHandLaneOffset(avenue, 0)).toBe(6);
+    expect(rightHandLaneOffset(avenue, 1)).toBe(3);
+    expect(rightHandLaneOffset(avenue, 2)).toBe(0);
   });
 
   it('remove vias de pedestres do grafo de veículos', () => {
