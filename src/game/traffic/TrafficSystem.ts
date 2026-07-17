@@ -327,12 +327,16 @@ export class TrafficSystem {
         vehicle.stopReason = 'collision';
       }
 
-      const headOnGap = distanceAhead(playerPosition, playerHeading, vehicle.position, 2.8);
+      const headOnGap = distanceAhead(playerPosition, playerHeading, vehicle.position, 4.2);
+      const headOnDistance = Math.hypot(
+        vehicle.position.x - playerPosition.x,
+        vehicle.position.y - playerPosition.y
+      );
       const headOnDeadlock = autopilotEnabled
         && !ghostingPlayer
-        && headOnGap !== null
-        && headOnGap < 14
-        && Math.cos(vehicle.heading - playerHeading) < -0.6;
+        && headOnDistance < 14
+        && (headOnGap !== null || headOnDistance < 11)
+        && Math.cos(vehicle.heading - playerHeading) < -0.25;
       vehicle.headOnDeadlockSeconds = headOnDeadlock ? vehicle.headOnDeadlockSeconds + deltaSeconds : 0;
       if (vehicle.headOnDeadlockSeconds >= GAME_CONFIG.traffic.autopilotHeadOnDeadlockSeconds) {
         vehicle.headOnDeadlockSeconds = 0;

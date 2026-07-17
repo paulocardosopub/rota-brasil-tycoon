@@ -67,7 +67,8 @@ describe('funcionário no mapa real', () => {
           steering: targetDistance > 9 ? guidance.steering : 0,
           handbrake: false,
           assistanceEnabled: true,
-          assistanceHeading: guidance.preferredRoadHeading
+          assistanceHeading: guidance.preferredRoadHeading,
+          assistanceRoadAnchor: guidance.roadAnchor
         }, 1 / 30, 18);
 
         const progress = advanceActiveRoute(route, vehicle.position);

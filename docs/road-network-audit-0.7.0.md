@@ -15,10 +15,10 @@
 ## Rotas entre regiões
 
 - Asa Norte → Asa Sul: 11.8 km
-- Asa Sul → Setores Centrais: 6.1 km
-- Setores Centrais → Sudoeste: 7.2 km
+- Asa Sul → Setores Centrais: 6.4 km
+- Setores Centrais → Sudoeste: 7.6 km
 - Sudoeste → Cruzeiro: 4.6 km
-- Cruzeiro → Noroeste: 7.4 km
+- Cruzeiro → Noroeste: 7.5 km
 - Noroeste → Vila Planalto: 12.5 km
 - Vila Planalto → Universidade de Brasília: 4.5 km
 - Universidade de Brasília → Asa Norte: 3.0 km

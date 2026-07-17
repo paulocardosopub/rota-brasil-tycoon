@@ -5,6 +5,13 @@ test('auditoria visual desktop', async ({ page }, testInfo) => {
   await page.goto('./');
   await page.getByTestId('guest-button').click();
   await expect(page.locator('[data-game-ready="true"]')).toBeVisible({ timeout: 25_000 });
+  const renderSize = await page.getByTestId('game-canvas').evaluate((element) => {
+    const canvas = element as HTMLCanvasElement;
+    const bounds = canvas.getBoundingClientRect();
+    return { pixelsWide: canvas.width, pixelsHigh: canvas.height, cssWide: bounds.width, cssHigh: bounds.height };
+  });
+  expect(renderSize.pixelsWide).toBeGreaterThanOrEqual(Math.floor(renderSize.cssWide * 0.94));
+  expect(renderSize.pixelsHigh).toBeGreaterThanOrEqual(Math.floor(renderSize.cssHigh * 0.94));
   await expect(page.getByTestId('objective-card')).toBeInViewport();
   await expect(page.getByTestId('autopilot-button')).toBeInViewport();
   if (testInfo.config.workers !== 1) {

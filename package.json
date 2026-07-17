@@ -1,7 +1,7 @@
 {
   "name": "rota-brasil-tycoon",
   "private": true,
-  "version": "0.7.0",
+  "version": "0.7.1",
   "type": "module",
   "scripts": {
     "dev": "vite --host 0.0.0.0",
@@ -15,6 +15,7 @@
     "map:import": "tsx scripts/map/import-osm.ts",
     "map:graph": "tsx scripts/map/import-osm.ts --from-source",
     "map:validate": "tsx scripts/map/validate-map.ts",
+    "navigation:simulate": "tsx scripts/navigation/simulate.ts",
     "traffic:simulate": "tsx scripts/traffic/simulate.ts",
     "economy:simulate": "tsx scripts/economy/simulate.ts",
     "performance:benchmark": "tsx scripts/performance/benchmark.ts"

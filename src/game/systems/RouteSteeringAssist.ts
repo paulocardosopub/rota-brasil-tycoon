@@ -3,6 +3,7 @@ import type { Point } from '../../types/game';
 export interface RouteGuidance {
   steering: number;
   preferredRoadHeading: number;
+  roadAnchor: Point;
   targetSpeedMps: number;
 }
 
@@ -15,20 +16,27 @@ export function guidanceForRoute(
   brakingMps2 = 10
 ): RouteGuidance {
   if (route.length < 2) {
-    return { steering: 0, preferredRoadHeading: rotation, targetSpeedMps: 0 };
+    return { steering: 0, preferredRoadHeading: rotation, roadAnchor: { ...position }, targetSpeedMps: 0 };
   }
 
   const location = locateOnActiveRoute(position, route);
   const activePath = [location.point, ...route.slice(location.segmentIndex + 1)];
   const totalLength = pathLength(activePath);
   if (totalLength < 0.05) {
-    return { steering: 0, preferredRoadHeading: rotation, targetSpeedMps: 0 };
+    return { steering: 0, preferredRoadHeading: rotation, roadAnchor: location.point, targetSpeedMps: 0 };
   }
 
   // A compact look-ahead starts the turn before the junction without aiming
   // across a whole block or cutting a long chord through the sidewalk.
-  const lookAhead = clamp(6 + Math.abs(speedMps) * 0.58, 6, 13);
-  const targetDistance = Math.min(totalLength, lookAhead);
+  const lookAhead = clamp(5.5 + Math.abs(speedMps) * 0.5, 5.5, 11.5);
+  const upcomingCorner = firstSharpCorner(activePath, lookAhead + 5);
+  // On a sharp corner, looking far down the next street creates a diagonal
+  // chord across the sidewalk. Aim just beyond the apex until the car has
+  // entered the turn, keeping the requested trajectory on the asphalt.
+  const cornerSafeLookAhead = upcomingCorner
+    ? upcomingCorner.distance + Math.min(2.5, Math.max(0, lookAhead - upcomingCorner.distance))
+    : lookAhead;
+  const targetDistance = Math.min(totalLength, lookAhead, cornerSafeLookAhead);
   const target = pointAtDistance(activePath, targetDistance);
   const desiredAngle = Math.atan2(target.y - position.y, target.x - position.x);
   const error = angleDelta(rotation, desiredAngle);
@@ -47,6 +55,7 @@ export function guidanceForRoute(
   return {
     steering: clamp(error / responseAngle, -1, 1),
     preferredRoadHeading,
+    roadAnchor: location.point,
     targetSpeedMps: Math.min(
       headingTargetSpeed,
       speedForUpcomingCurves(activePath, cruiseSpeedMps, brakingMps2)
@@ -101,6 +110,19 @@ function speedForUpcomingCurves(path: Point[], cruiseSpeedMps: number, brakingMp
   }
 
   return targetSpeed;
+}
+
+function firstSharpCorner(path: Point[], maximumDistance: number) {
+  let travelled = 0;
+  for (let index = 1; index < path.length - 1; index += 1) {
+    travelled += Math.hypot(path[index].x - path[index - 1].x, path[index].y - path[index - 1].y);
+    if (travelled > maximumDistance) break;
+    const incoming = Math.atan2(path[index].y - path[index - 1].y, path[index].x - path[index - 1].x);
+    const outgoing = Math.atan2(path[index + 1].y - path[index].y, path[index + 1].x - path[index].x);
+    const turn = Math.abs(angleDelta(incoming, outgoing));
+    if (turn >= 0.48) return { distance: travelled, turn };
+  }
+  return null;
 }
 
 function pointAtDistance(path: Point[], distance: number): Point {
