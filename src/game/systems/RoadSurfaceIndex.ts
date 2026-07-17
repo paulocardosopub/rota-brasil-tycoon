@@ -92,9 +92,16 @@ export class RoadSurfaceIndex {
         };
         // In junctions, prefer the road aligned with the vehicle. The union
         // distance remains independent so crossing asphalt never becomes a wall.
+        const headingDifference = preferredHeading === undefined
+          ? 0
+          : angleDelta(preferredHeading, tangentAngle);
         const headingPenalty = preferredHeading === undefined
           ? 0
-          : Math.abs(Math.sin(angleDelta(preferredHeading, tangentAngle))) * 9;
+          : segment.oneway
+            // sin(π) is zero, so the former score considered an opposite
+            // one-way carriageway perfectly aligned. Penalize its direction.
+            ? (1 - Math.cos(headingDifference)) * 42
+            : Math.abs(Math.sin(headingDifference)) * 9;
         const score = centerDistance + Math.max(0, surfaceDistance) * 4 + headingPenalty;
         if (!best || score < bestScore || (score === bestScore && surfaceDistance < best.surfaceDistance)) {
           best = candidate;

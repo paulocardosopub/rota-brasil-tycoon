@@ -1,4 +1,4 @@
-# Rota Brasil Tycoon — Playable 0.7.0
+# Rota Brasil Tycoon — Playable 0.7.1
 
 Jogo 2.5D de transporte brasileiro para navegador. Você começa ao volante de um Hatch 1998 em Brasília, atende passageiros, torna-se taxista e monta uma frota com funcionários que percorrem a mesma cidade física do jogador.
 
@@ -12,6 +12,13 @@ npm run dev
 ```
 
 Abra o endereço exibido e escolha **Jogar como visitante**. Use `WASD` ou as setas para dirigir livremente, `Espaço` para o freio de mão, `H` para buzinar e segure `R` para reposicionar. A roda do mouse controla o zoom. O botão **Piloto automático** segue o GPS, respeita mãos, sinais e trânsito, embarca e entrega passageiros e escolhe a próxima corrida.
+
+## Correções da 0.7.1
+
+- canvas mobile em resolução nativa e desktop a 95%, substituindo a antiga ampliação borrada de 20%;
+- GPS ancorado ao segmento dirigido sob o veículo, sem saltar para vias paralelas;
+- progresso de rota sequencial, sem pular instruções em alças ou cruzamentos próximos;
+- piloto automático mantido no asfalto inclusive em curvas fechadas e pequenas falhas do mapa.
 
 ## O que mudou na 0.7.0
 

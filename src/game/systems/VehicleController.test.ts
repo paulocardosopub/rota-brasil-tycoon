@@ -86,6 +86,26 @@ describe('VehicleController', () => {
     expect(vehicle.rotation).toBeCloseTo(0.2);
   });
 
+  it('distingue o sentido de avenidas paralelas de mão única', () => {
+    const eastbound: RoadData = {
+      ...road, id: 'eastbound', oneway: true, lanes: 1, width: 4.5,
+      points: [
+        { x: -100, y: 0, lat: 0, lon: 0, nodeId: 'e0' },
+        { x: 100, y: 0, lat: 0, lon: 0, nodeId: 'e1' }
+      ]
+    };
+    const westbound: RoadData = {
+      ...road, id: 'westbound', oneway: true, lanes: 1, width: 4.5,
+      points: [
+        { x: 100, y: 6, lat: 0, lon: 0, nodeId: 'w0' },
+        { x: -100, y: 6, lat: 0, lon: 0, nodeId: 'w1' }
+      ]
+    };
+    const surface = new RoadSurfaceIndex([eastbound, westbound]);
+    expect(surface.nearestRoad({ x: 0, y: 3 }, 0)?.roadId).toBe('eastbound');
+    expect(surface.nearestRoad({ x: 0, y: 3 }, Math.PI)?.roadId).toBe('westbound');
+  });
+
   it('recoloca o carro na faixa ao ligar o piloto automático', () => {
     const surface = new RoadSurfaceIndex([road]);
     const vehicle = new VehicleController({ x: 0, y: 7 }, 0, surface);
@@ -134,7 +154,8 @@ describe('VehicleController', () => {
         steering: guidance.steering,
         handbrake: false,
         assistanceEnabled: true,
-        assistanceHeading: guidance.preferredRoadHeading
+        assistanceHeading: guidance.preferredRoadHeading,
+        assistanceRoadAnchor: guidance.roadAnchor
       }, 1 / 60, 18);
       progress.advanceRoute(vehicle.position);
       minimumClearance = Math.min(minimumClearance, vehicle.roadEdgeClearance());
@@ -144,7 +165,7 @@ describe('VehicleController', () => {
     expect(vehicle.minimumAutopilotRoadClearance).toBeGreaterThan(-2.5);
   });
 
-  it('atravessa uma pequena falha de asfalto e volta para a rua preferida', () => {
+  it('atravessa uma pequena falha do mapa mantendo o corredor da rota', () => {
     const approach: RoadData = {
       ...road,
       id: 'approach',
@@ -173,7 +194,8 @@ describe('VehicleController', () => {
         steering: guidance.steering,
         handbrake: false,
         assistanceEnabled: true,
-        assistanceHeading: guidance.preferredRoadHeading
+        assistanceHeading: guidance.preferredRoadHeading,
+        assistanceRoadAnchor: guidance.roadAnchor
       }, 1 / 60, 18);
       progress.advanceRoute(vehicle.position);
       leftAsphalt ||= vehicle.roadEdgeClearance(guidance.preferredRoadHeading) < 0;

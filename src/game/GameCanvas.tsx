@@ -15,11 +15,11 @@ export function GameCanvas({ save }: { save: PlayerSave }) {
       parent: container,
       backgroundColor: '#8fb878',
       scene: [new MainScene(save)],
-      render: { antialias: false, pixelArt: false, roundPixels: true, powerPreference: 'high-performance' },
+      render: { antialias: true, pixelArt: false, roundPixels: false, powerPreference: 'high-performance' },
       scale: {
         mode: Phaser.Scale.FIT,
         autoCenter: Phaser.Scale.CENTER_BOTH,
-        autoRound: true,
+        autoRound: false,
         width: initialSize.width,
         height: initialSize.height
       },
@@ -44,7 +44,9 @@ export function GameCanvas({ save }: { save: PlayerSave }) {
 }
 
 function scaledGameSize(container: HTMLDivElement) {
-  const scale = container.clientWidth >= 1_000 ? 0.8 : 1;
+  // A folga de 5% em telas grandes recupera o orçamento de GPU sem repetir a
+  // ampliação borrada de 20% que existia na 0.7.0.
+  const scale = container.clientWidth >= 1_000 ? 0.95 : 1;
   return {
     width: Math.max(1, Math.round(container.clientWidth * scale)),
     height: Math.max(1, Math.round(container.clientHeight * scale))

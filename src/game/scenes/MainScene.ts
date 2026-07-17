@@ -9,6 +9,7 @@ import { gameEvents, type GameCommand } from '../events';
 import { createCarVisual, createPassengerVisual } from '../entities/VehicleVisual';
 import { MissionSystem } from '../missions/MissionSystem';
 import { RoadSurfaceIndex } from '../systems/RoadSurfaceIndex';
+import { advanceActiveRoute } from '../systems/RouteProgress';
 import { guidanceForRoute } from '../systems/RouteSteeringAssist';
 import { automaticThrottle, missionApproachTargetSpeed } from '../systems/Autopilot';
 import { VehicleController, type VehicleInput } from '../systems/VehicleController';
@@ -18,7 +19,7 @@ import { GameAudio } from '../audio/GameAudio';
 import { EconomyService } from '../economy/EconomyService';
 import { fuelPurchaseCost, upgradeEffects, upgradePrice, workshopPrice, type WorkshopServiceId } from '../economy/ExpenseCalculator';
 import { ECONOMY_CONFIG } from '../economy/EconomyConfig';
-import { ServiceSystem } from '../services/ServiceSystem';
+import { serviceAccessDistance, ServiceSystem } from '../services/ServiceSystem';
 import { AirTrafficSystem } from '../environment/AirTrafficSystem';
 import { refreshProgression } from '../progression/DriverProgression';
 import { simulateEconomy } from '../economy/EconomySimulator';
@@ -34,7 +35,7 @@ import { FleetVehicleSystem } from '../fleet/FleetVehicleSystem';
 import { roundMoney } from '../economy/TransactionLedger';
 
 type SignalVisual = { signal: MapSignal; graphics: Phaser.GameObjects.Graphics };
-const DETAILED_ROAD_MARKINGS = new Set(['motorway', 'motorway_link', 'trunk', 'trunk_link', 'primary', 'primary_link', 'secondary', 'secondary_link', 'tertiary']);
+const DETAILED_ROAD_MARKINGS = new Set(['motorway', 'motorway_link', 'trunk', 'trunk_link', 'primary', 'primary_link', 'secondary', 'secondary_link']);
 
 export class MainScene extends Phaser.Scene {
   private map?: CityMapData;
@@ -441,11 +442,8 @@ export class MainScene extends Phaser.Scene {
     this.mission.recordDrivingQuality(dt, this.offRouteSeconds > 0, aggressive);
 
     if (this.services?.selected && this.serviceRoute.length) {
-      const serviceDistance = Math.hypot(
-        this.vehicle.position.x - this.services.selected.stopPoint.x,
-        this.vehicle.position.y - this.services.selected.stopPoint.y
-      );
-      this.serviceRoute = advanceRoutePoints(this.serviceRoute, this.vehicle.position);
+      const serviceDistance = serviceAccessDistance(this.services.selected, this.vehicle.position);
+      this.serviceRoute = advanceActiveRoute(this.serviceRoute, this.vehicle.position, 28).route;
       if (serviceDistance <= GAME_CONFIG.services.interactionRadiusMeters && Math.abs(this.vehicle.speed) * 3.6 <= GAME_CONFIG.services.maximumInteractionSpeedKmh) {
         this.serviceRoute = [];
         if (!this.serviceArrived) {
@@ -558,7 +556,8 @@ export class MainScene extends Phaser.Scene {
         steering: guidance && !insideArrivalArea ? guidance.steering : 0,
         handbrake: false,
         assistanceEnabled: true,
-        assistanceHeading: guidance?.preferredRoadHeading
+        assistanceHeading: guidance?.preferredRoadHeading,
+        assistanceRoadAnchor: guidance?.roadAnchor
       };
     }
 
@@ -587,6 +586,7 @@ export class MainScene extends Phaser.Scene {
 
   private navigationDistance() {
     if (!this.vehicle) return 0;
+    if (this.services?.selected) return serviceAccessDistance(this.services.selected, this.vehicle.position);
     const target = this.navigationTarget();
     return Math.hypot(this.vehicle.position.x - target.x, this.vehicle.position.y - target.y);
   }
@@ -633,7 +633,11 @@ export class MainScene extends Phaser.Scene {
       ? this.fleetVehicles?.activePosition() ?? this.vehicle?.position ?? this.save.position
       : this.vehicle?.position ?? this.save.position;
     this.mapRenderCenter = { ...renderCenter };
-    const renderRadius = this.save.settings.cameraZoom === 'far' ? 560 : 420;
+    const renderRadius = this.save.settings.quality === 'high'
+      ? this.save.settings.cameraZoom === 'far' ? 560 : 420
+      : this.save.settings.quality === 'low'
+        ? this.save.settings.cameraZoom === 'far' ? 340 : 270
+        : this.save.settings.cameraZoom === 'far' ? 420 : 320;
     const visibleRoads = map.roads.filter((road) => pointsNear(road.points, renderCenter, renderRadius));
     const visibleBuildings = map.buildings.filter((building) => pointsNear(building.points, renderCenter, renderRadius));
     const visibleStops = map.busStops.filter((stop) => Math.hypot(stop.x - renderCenter.x, stop.y - renderCenter.y) <= renderRadius);
@@ -659,10 +663,12 @@ export class MainScene extends Phaser.Scene {
         return new Phaser.Math.Vector2(projected.x, projected.y);
       });
       if (points.length < 3) continue;
-      const height = Math.min(10, 1.4 + building.levels * 0.55);
-      buildings.fillStyle(0x31485b, 0.24).fillPoints(points.map((point) => new Phaser.Math.Vector2(point.x + height, point.y + height)), true);
+      if (this.save.settings.quality === 'high') {
+        const height = Math.min(10, 1.4 + building.levels * 0.55);
+        buildings.fillStyle(0x31485b, 0.24).fillPoints(points.map((point) => new Phaser.Math.Vector2(point.x + height, point.y + height)), true);
+      }
       buildings.fillStyle(building.levels > 5 ? 0xc9d2d8 : 0xe5dfd0).fillPoints(points, true);
-      buildings.lineStyle(0.55, 0x687987, 0.75).strokePoints(points, true);
+      if (this.save.settings.quality !== 'low') buildings.lineStyle(0.45, 0x687987, 0.65).strokePoints(points, true);
     }
 
     const roads = this.add.graphics().setDepth(8);
@@ -1094,7 +1100,8 @@ export class MainScene extends Phaser.Scene {
 
   private activeNearbyService(category: MapServiceLocation['category']) {
     if (!this.services || !this.vehicle) return null;
-    const location = this.services.nearest(this.vehicle.position, category);
+    const location = this.services.selectedWithin(this.vehicle.position, category)
+      ?? this.services.nearest(this.vehicle.position, category);
     const speedKmh = Math.abs(this.vehicle.speed) * 3.6;
     if (!location || speedKmh > GAME_CONFIG.services.maximumInteractionSpeedKmh) {
       this.emitToast('Entre no local indicado e pare o Hatch para usar o serviço.', 'warning');
@@ -1423,7 +1430,7 @@ export class MainScene extends Phaser.Scene {
     };
     const selectedService = this.services?.selected ?? null;
     const selectedServiceDistance = selectedService
-      ? Math.hypot(this.vehicle.position.x - selectedService.stopPoint.x, this.vehicle.position.y - selectedService.stopPoint.y)
+      ? serviceAccessDistance(selectedService, this.vehicle.position)
       : Number.POSITIVE_INFINITY;
     const nearbyService = selectedService && selectedServiceDistance <= GAME_CONFIG.services.interactionRadiusMeters
       ? selectedService
@@ -1617,24 +1624,6 @@ function collisionMessage(severity: CollisionSeverity | null, relativeSpeedKmh: 
 
 function vehicleCondition(collisionDamage: number, maintenanceWear: number) {
   return Math.max(0, Math.min(100, 100 - collisionDamage - maintenanceWear * 0.45));
-}
-
-function advanceRoutePoints(route: Point[], position: Point) {
-  if (route.length < 2) return route;
-  let bestIndex = 0;
-  let bestDistance = Number.POSITIVE_INFINITY;
-  for (let index = 0; index < Math.min(route.length - 1, 18); index += 1) {
-    const a = route[index];
-    const b = route[index + 1];
-    const dx = b.x - a.x;
-    const dy = b.y - a.y;
-    const lengthSq = dx * dx + dy * dy;
-    if (!lengthSq) continue;
-    const t = Math.max(0, Math.min(1, ((position.x - a.x) * dx + (position.y - a.y) * dy) / lengthSq));
-    const distance = Math.hypot(position.x - (a.x + dx * t), position.y - (a.y + dy * t));
-    if (distance < bestDistance) { bestDistance = distance; bestIndex = index; }
-  }
-  return bestDistance <= 28 ? [{ ...position }, ...route.slice(bestIndex + 1)] : route;
 }
 
 function routeDistanceFrom(route: Point[], position: Point, target: Point) {

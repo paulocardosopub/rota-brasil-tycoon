@@ -187,7 +187,8 @@ export class FleetVehicleSystem {
       steering: distance > 9 ? guidance.steering : 0,
       handbrake: false,
       assistanceEnabled: true,
-      assistanceHeading: guidance.preferredRoadHeading
+      assistanceHeading: guidance.preferredRoadHeading,
+      assistanceRoadAnchor: guidance.roadAnchor
     }, Math.min(0.05, deltaSeconds), Math.max(0.1, vehicle.fuel));
     this.controller.fuelUsed = 0;
     const progress = advanceActiveRoute(this.route, this.controller.position);

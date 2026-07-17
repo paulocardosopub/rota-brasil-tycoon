@@ -66,7 +66,8 @@ describe('piloto automático no mapa real', () => {
           steering: guidance.steering,
           handbrake: false,
           assistanceEnabled: true,
-          assistanceHeading: guidance.preferredRoadHeading
+          assistanceHeading: guidance.preferredRoadHeading,
+          assistanceRoadAnchor: guidance.roadAnchor
         }, 1 / 30, 18);
 
         const deviation = progress.advanceRoute(vehicle.position);

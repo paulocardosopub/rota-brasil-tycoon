@@ -1,10 +1,27 @@
-import type { GraphNode, NavigationGraph, Point, RoadData } from '../../types/game';
+import type { GraphEdge, GraphNode, NavigationGraph, Point, RoadData } from '../../types/game';
 import { pointInTrafficLane } from './roadRules';
+
+type DirectedSegment = {
+  from: GraphNode;
+  to: GraphNode;
+  edge: GraphEdge;
+  length: number;
+  heading: number;
+};
+
+type LaneAnchor = DirectedSegment & {
+  point: Point;
+  t: number;
+  lateralDistance: number;
+  headingError: number;
+  score: number;
+};
 
 export class GraphRouter {
   private readonly nodes = new Map<string, GraphNode>();
   private readonly roads = new Map<string, RoadData>();
   private readonly spatialNodes = new Map<string, GraphNode[]>();
+  private readonly spatialSegments = new Map<string, DirectedSegment[]>();
   private readonly incomingCount = new Map<string, number>();
   private readonly spatialCellSize = 120;
   private readonly laneGraph: boolean;
@@ -20,6 +37,8 @@ export class GraphRouter {
     }
     for (const node of graph.nodes) for (const edge of node.edges) {
       this.incomingCount.set(edge.to, (this.incomingCount.get(edge.to) ?? 0) + 1);
+      const target = this.nodes.get(edge.to);
+      if (this.laneGraph && target) this.indexSegment(node, target, edge);
     }
     for (const road of roads) this.roads.set(road.id, road);
   }
@@ -45,14 +64,8 @@ export class GraphRouter {
   }
 
   drivingRoute(from: Point, to: Point, preferredStartHeading?: number): Point[] {
+    if (this.laneGraph) return this.laneDrivingRoute(from, to, preferredStartHeading);
     const nodes = this.findRoute(from, to, preferredStartHeading, true);
-    if (this.laneGraph) {
-      const points = nodes?.map(({ x, y }) => ({ x, y })) ?? [];
-      if (points.length && Math.hypot(from.x - points[0].x, from.y - points[0].y) > 1) points.unshift({ ...from });
-      const last = points[points.length - 1];
-      if (last && Math.hypot(to.x - last.x, to.y - last.y) > 1 && Math.hypot(to.x - last.x, to.y - last.y) < 45) points.push({ ...to });
-      return points;
-    }
     if (!nodes || nodes.length < 2 || !this.roads.size) return nodes?.map(({ x, y }) => ({ x, y })) ?? [];
 
     const segments = nodes.slice(1).map((node, index) => {
@@ -76,6 +89,106 @@ export class GraphRouter {
     const last = lanePoints[lanePoints.length - 1];
     if (Math.hypot(to.x - last.x, to.y - last.y) > 1) lanePoints.push({ ...to });
     return lanePoints;
+  }
+
+  /**
+   * Lane routes attach to the directed segment under the vehicle instead of
+   * to an arbitrary nearby node. This prevents the first instruction from
+   * jumping across a median, a sidewalk or a parallel access road.
+   */
+  private laneDrivingRoute(from: Point, to: Point, preferredStartHeading?: number): Point[] {
+    const heading = Number.isFinite(preferredStartHeading) ? preferredStartHeading! : undefined;
+    const starts = this.laneAnchors(from, heading);
+    const goals = this.laneAnchors(to);
+    if (!starts.length || !goals.length) {
+      const fallback = this.findRoute(from, to, preferredStartHeading, true);
+      return fallback?.map(({ x, y }) => ({ x, y })) ?? [];
+    }
+
+    for (const start of starts) {
+      const direct = goals.find((goal) => sameSegment(start, goal) && start.t <= goal.t + 0.001);
+      if (direct) return compactRoute([from, start.point, direct.point]);
+
+      const goalNodes = uniqueNodes(goals.map((goal) => goal.from));
+      const route = this.findRouteToAny(start.to, goalNodes);
+      if (!route) continue;
+      const reached = route[route.length - 1];
+      const goal = goals
+        .filter((candidate) => candidate.from.id === reached.id)
+        .sort((a, b) => a.score - b.score)[0];
+      if (!goal) continue;
+      return compactRoute([
+        from,
+        start.point,
+        ...route.map(({ x, y }) => ({ x, y })),
+        goal.point
+      ]);
+    }
+    return [];
+  }
+
+  private laneAnchors(point: Point, heading?: number) {
+    const segments = this.nearbySegments(point);
+    if (!segments.length) return [];
+    const anchors = segments.map((segment): LaneAnchor => {
+      const projection = projectOnSegment(point, segment.from, segment.to);
+      const lateralDistance = Math.hypot(point.x - projection.point.x, point.y - projection.point.y);
+      const headingError = heading === undefined ? 0 : Math.abs(angleDelta(heading, segment.heading));
+      return {
+        ...segment,
+        point: projection.point,
+        t: projection.t,
+        lateralDistance,
+        headingError,
+        score: lateralDistance * 20 + headingError * 42 + (segment.edge.connector ? 3 : 0)
+      };
+    });
+    const nearestDistance = Math.min(...anchors.map((anchor) => anchor.lateralDistance));
+    const nearest = anchors.filter((anchor) => anchor.lateralDistance <= nearestDistance + 2.5);
+    const directionallyValid = heading === undefined
+      ? nearest
+      : nearest.filter((anchor) => anchor.headingError <= 1.25);
+    return (directionallyValid.length ? directionallyValid : nearest)
+      .sort((a, b) => a.score - b.score)
+      .slice(0, 8);
+  }
+
+  private indexSegment(from: GraphNode, to: GraphNode, edge: GraphEdge) {
+    const length = Math.hypot(to.x - from.x, to.y - from.y);
+    if (length < 0.05) return;
+    const segment: DirectedSegment = {
+      from, to, edge, length,
+      heading: Math.atan2(to.y - from.y, to.x - from.x)
+    };
+    const minX = Math.floor(Math.min(from.x, to.x) / this.spatialCellSize);
+    const maxX = Math.floor(Math.max(from.x, to.x) / this.spatialCellSize);
+    const minY = Math.floor(Math.min(from.y, to.y) / this.spatialCellSize);
+    const maxY = Math.floor(Math.max(from.y, to.y) / this.spatialCellSize);
+    for (let x = minX; x <= maxX; x += 1) for (let y = minY; y <= maxY; y += 1) {
+      const key = `${x}:${y}`;
+      const values = this.spatialSegments.get(key) ?? [];
+      values.push(segment);
+      this.spatialSegments.set(key, values);
+    }
+  }
+
+  private nearbySegments(point: Point) {
+    const centerX = Math.floor(point.x / this.spatialCellSize);
+    const centerY = Math.floor(point.y / this.spatialCellSize);
+    const found = new Map<string, DirectedSegment>();
+    for (let ring = 0; ring <= 3; ring += 1) {
+      for (let x = centerX - ring; x <= centerX + ring; x += 1) for (let y = centerY - ring; y <= centerY + ring; y += 1) {
+        if (ring > 0 && x > centerX - ring && x < centerX + ring && y > centerY - ring && y < centerY + ring) continue;
+        for (const segment of this.spatialSegments.get(`${x}:${y}`) ?? []) {
+          found.set(`${segment.from.id}>${segment.to.id}`, segment);
+        }
+      }
+      // Always inspect the adjacent cells too. Near a cell boundary, the
+      // segment under the vehicle can live in the neighbouring bucket even
+      // when the current (120 m wide) bucket already contains many roads.
+      if (ring >= 1 && found.size >= 12) break;
+    }
+    return [...found.values()];
   }
 
   private findRoute(from: Point, to: Point, preferredStartHeading?: number, robust = true): GraphNode[] | null {
@@ -254,6 +367,32 @@ export class GraphRouter {
 
 function angleDelta(from: number, to: number) {
   return Math.atan2(Math.sin(to - from), Math.cos(to - from));
+}
+
+function projectOnSegment(point: Point, from: Point, to: Point) {
+  const dx = to.x - from.x;
+  const dy = to.y - from.y;
+  const lengthSquared = dx * dx + dy * dy;
+  if (lengthSquared < 0.001) return { point: { ...from }, t: 0 };
+  const t = Math.max(0, Math.min(1, ((point.x - from.x) * dx + (point.y - from.y) * dy) / lengthSquared));
+  return { point: { x: from.x + dx * t, y: from.y + dy * t }, t };
+}
+
+function sameSegment(a: LaneAnchor, b: LaneAnchor) {
+  return a.from.id === b.from.id && a.to.id === b.to.id;
+}
+
+function compactRoute(route: Point[]) {
+  const compact: Point[] = [];
+  for (const point of route) {
+    const previous = compact[compact.length - 1];
+    if (!previous || Math.hypot(previous.x - point.x, previous.y - point.y) > 0.25) compact.push({ ...point });
+  }
+  return compact;
+}
+
+function uniqueNodes(nodes: GraphNode[]) {
+  return [...new Map(nodes.map((node) => [node.id, node])).values()];
 }
 
 type HeapEntry = { id: string; distance: number };

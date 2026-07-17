@@ -8,32 +8,37 @@ export interface ActiveRouteProgress {
 
 /** Advances an active route by projecting onto its nearby segments. */
 export function advanceActiveRoute(route: Point[], position: Point, maximumDeviationMeters = 24): ActiveRouteProgress {
+  while (route.length >= 2 && distance(route[0], route[1]) < 0.1) route = route.slice(1);
   if (route.length < 2) {
     return { route, deviationMeters: Number.POSITIVE_INFINITY, remainingMeters: routeRemainingDistance(route, position) };
   }
 
+  const first = closestPointOnSegment(position, route[0], route[1]);
   let bestIndex = 0;
-  let bestPoint = route[0];
-  let bestDistance = Number.POSITIVE_INFINITY;
-  let scannedDistance = 0;
-  const firstSegmentLength = distance(route[0], route[1]);
-  const maximumScanDistance = Math.max(45, firstSegmentLength + 35);
+  let bestPoint = first.point;
+  let bestDistance = distance(position, first.point);
+  let previousProjection = first;
+  let previousPassed = first.t >= 0.82 || distance(position, route[1]) <= 6;
   const lastIndex = Math.min(route.length - 1, 20);
 
-  for (let index = 0; index < lastIndex; index += 1) {
+  // Only advance through contiguous segments that the vehicle has actually
+  // reached. Choosing the globally closest segment made loops and parallel
+  // carriageways skip several instructions and sent the pilot across grass.
+  for (let index = 1; index < lastIndex && previousPassed; index += 1) {
     const start = route[index];
     const end = route[index + 1];
     const segmentLength = distance(start, end);
-    if (scannedDistance > maximumScanDistance) break;
-    scannedDistance += segmentLength;
     if (segmentLength < 0.1) continue;
-    const point = closestPointOnSegment(position, start, end);
-    const deviation = distance(position, point);
-    if (deviation < bestDistance) {
+    const projection = closestPointOnSegment(position, start, end);
+    const deviation = distance(position, projection.point);
+    if (deviation + 0.2 < bestDistance || (previousProjection.t >= 0.98 && deviation <= bestDistance + 0.5)) {
       bestDistance = deviation;
       bestIndex = index;
-      bestPoint = point;
+      bestPoint = projection.point;
     }
+    previousProjection = projection;
+    previousPassed = deviation <= maximumDeviationMeters
+      && (projection.t >= 0.82 || distance(position, end) <= 6);
   }
 
   let advanced = route;
@@ -78,13 +83,13 @@ function pathLength(route: Point[]) {
   return total;
 }
 
-function closestPointOnSegment(point: Point, a: Point, b: Point): Point {
+function closestPointOnSegment(point: Point, a: Point, b: Point) {
   const dx = b.x - a.x;
   const dy = b.y - a.y;
   const lengthSq = dx * dx + dy * dy;
-  if (!lengthSq) return { ...a };
+  if (!lengthSq) return { point: { ...a }, t: 0 };
   const ratio = Math.max(0, Math.min(1, ((point.x - a.x) * dx + (point.y - a.y) * dy) / lengthSq));
-  return { x: a.x + dx * ratio, y: a.y + dy * ratio };
+  return { point: { x: a.x + dx * ratio, y: a.y + dy * ratio }, t: ratio };
 }
 
 function distance(a: Point, b: Point) {

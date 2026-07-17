@@ -34,7 +34,7 @@ export function StartScreen({ onContinue, onNewGame, onGuest }: Props) {
         <div className="hero-car"><i /><b /><em /></div>
       </div>
       <section className="start-card">
-        <div className="eyebrow">PLAYABLE 0.7.0 • BRASÍLIA EXPANDIDA</div>
+        <div className="eyebrow">PLAYABLE 0.7.1 • NAVEGAÇÃO REFINADA</div>
         <h1><span>Rota Brasil</span> Tycoon</h1>
         <p>Comece ao volante de um Hatch 1998. Busque passageiros e construa sua futura empresa de transporte.</p>
         {!loginOpen ? (

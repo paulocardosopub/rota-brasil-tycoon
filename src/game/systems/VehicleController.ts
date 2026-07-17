@@ -8,6 +8,7 @@ export interface VehicleInput {
   handbrake: boolean;
   assistanceEnabled?: boolean;
   assistanceHeading?: number;
+  assistanceRoadAnchor?: Point;
 }
 
 export interface VehicleModifiers {
@@ -77,6 +78,9 @@ export class VehicleController {
       ? input.assistanceHeading!
       : this.rotation;
     const roadBeforeMove = this.roads.nearestRoad(this.position, preferredHeading);
+    const routeRoad = input.assistanceEnabled && input.assistanceRoadAnchor
+      ? this.roads.nearestRoad(input.assistanceRoadAnchor, preferredHeading)
+      : null;
     if (input.assistanceEnabled && roadBeforeMove && Math.abs(input.steering) < 0.1 && Math.abs(this.speed) > 1.5) {
       const roadHeading = roadBeforeMove.oneway
         ? roadBeforeMove.tangentAngle
@@ -115,25 +119,29 @@ export class VehicleController {
     const requiredRoadInset = config.widthMeters * 0.5;
     let road = this.roads.nearestRoad(this.position, preferredHeading);
     let outsideReliableAsphalt = !road || road.unionSurfaceDistance > -requiredRoadInset;
-    if (input.assistanceEnabled && outsideReliableAsphalt) {
-      const guide = road ?? roadBeforeMove;
-      if (guide && Math.abs(input.steering) < 0.2) {
+    const routeDeviation = input.assistanceRoadAnchor
+      ? Math.hypot(this.position.x - input.assistanceRoadAnchor.x, this.position.y - input.assistanceRoadAnchor.y)
+      : Number.POSITIVE_INFINITY;
+    const followingTrustedLaneGap = routeDeviation <= Math.max(2.4, config.widthMeters * 0.75);
+    if (input.assistanceEnabled && outsideReliableAsphalt && !followingTrustedLaneGap) {
+      const guide = routeRoad ?? road ?? roadBeforeMove;
+      if (guide) {
         const roadHeading = guide.oneway
           ? guide.tangentAngle
           : closestRoadHeading(preferredHeading, guide.tangentAngle);
         const laneCenter = this.roads.laneCenter(guide, roadHeading);
-        const recoveryTarget = {
-          x: laneCenter.x + Math.cos(roadHeading) * 7,
-          y: laneCenter.y + Math.sin(roadHeading) * 7
-        };
-        this.rotation += clamp(
-          angleDelta(
-            this.rotation,
-            Math.atan2(recoveryTarget.y - this.position.y, recoveryTarget.x - this.position.x)
-          ),
-          -config.autopilotRoadRecoveryRadiansPerSecond * 0.5 * deltaSeconds,
-          config.autopilotRoadRecoveryRadiansPerSecond * 0.5 * deltaSeconds
-        );
+        const correctionDistance = Math.hypot(laneCenter.x - this.position.x, laneCenter.y - this.position.y);
+        if (correctionDistance <= 12) {
+          // The automatic pilot may bridge a small map seam, but it must not
+          // continue driving through grass. Reattach to the actual lane before
+          // applying the next movement step.
+          this.position = laneCenter;
+          const maxHeadingCorrection = config.autopilotRoadRecoveryRadiansPerSecond * deltaSeconds;
+          this.rotation += clamp(angleDelta(this.rotation, roadHeading), -maxHeadingCorrection, maxHeadingCorrection);
+        } else {
+          this.position = previous;
+          this.speed = Math.min(Math.max(0, this.speed), config.autopilotRecoverySpeedMps);
+        }
       }
       this.autopilotRoadCorrections += 1;
       road = this.roads.nearestRoad(this.position, preferredHeading);

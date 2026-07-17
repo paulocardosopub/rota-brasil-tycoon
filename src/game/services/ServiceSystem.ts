@@ -4,6 +4,12 @@ import type { MapServiceLocation, Point, ServiceCategory } from '../../types/gam
 
 type Project = (point: Point) => Point;
 
+export function serviceAccessDistance(location: MapServiceLocation, position: Point) {
+  const entranceDistance = Math.hypot(position.x - location.entrance.x, position.y - location.entrance.y);
+  const stopDistance = Math.hypot(position.x - location.stopPoint.x, position.y - location.stopPoint.y);
+  return Math.min(entranceDistance, stopDistance);
+}
+
 export class ServiceSystem {
   selected: MapServiceLocation | null = null;
   private readonly visuals: Phaser.GameObjects.Container[] = [];
@@ -36,6 +42,11 @@ export class ServiceSystem {
 
   nearestAnywhere(position: Point, category: ServiceCategory) {
     return this.nearest(position, category, Number.POSITIVE_INFINITY);
+  }
+
+  selectedWithin(position: Point, category?: ServiceCategory, radius: number = GAME_CONFIG.services.interactionRadiusMeters) {
+    if (!this.selected || (category && this.selected.category !== category)) return null;
+    return serviceAccessDistance(this.selected, position) <= radius ? this.selected : null;
   }
 
   update(elapsedSeconds: number) {
