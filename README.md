@@ -1,4 +1,4 @@
-# Rota Brasil Tycoon — Playable 0.7.2
+# Rota Brasil Tycoon — Playable 0.8.0 Online Alpha
 
 Jogo 2.5D de transporte brasileiro para navegador. Você começa ao volante de um Hatch 1998 em Brasília, atende passageiros, torna-se taxista e monta uma frota com funcionários que percorrem a mesma cidade física do jogador.
 
@@ -12,6 +12,18 @@ npm run dev
 ```
 
 Abra o endereço exibido e escolha **Jogar como visitante**. Use `WASD` ou as setas para dirigir livremente, `Espaço` para o freio de mão, `H` para buzinar e segure `R` para reposicionar. A roda do mouse controla o zoom. O botão **Piloto automático** segue o GPS, respeita mãos, sinais e trânsito, embarca e entrega passageiros e escolhe a próxima corrida.
+
+## Online Alpha 0.8.0
+
+- jogadores visitantes recebem uma identidade pública estável e entram de forma anônima quando o Supabase está configurado;
+- jogadores e funcionários próximos aparecem na mesma cidade por canais privados de chunk, com Presence, Broadcast, interpolação e LOD;
+- troca de chunk faz handoff com sobreposição, e concessões curtas impedem o mesmo veículo de dirigir em duas sessões;
+- a frequência de movimento é adaptativa por distância e estado, com limites de payload, sequência, timestamp e extrapolação;
+- falhas de autenticação, rede ou backend nunca bloqueiam a partida: o HUD passa para **Solo temporário** e reconecta em segundo plano;
+- a configuração permite alternar Solo/Online, ocultar nome, funcionários e etiqueta da frota, além de vincular a conta visitante por e-mail;
+- o save local foi migrado para **v6**, preservando progressão e adicionando perfil público, preferências e estado da sessão online.
+
+Sem as variáveis do Supabase, a mesma compilação funciona integralmente em modo solo. Consulte [SUPABASE.md](./SUPABASE.md) para ativar o backend online.
 
 ## Correções da 0.7.2
 
@@ -52,6 +64,7 @@ npm run test:e2e
 npm run map:validate
 npm run traffic:simulate
 npm run economy:simulate
+npm run online:simulate
 npm run performance:benchmark -- http://127.0.0.1:4174
 npm run build
 ```
@@ -75,6 +88,11 @@ O workflow `.github/workflows/web.yml` testa, compila e publica `main`. Em **Set
 
 ## Auditorias
 
+- [arquitetura online 0.8.0](./docs/online-architecture-0.8.0.md)
+- [segurança online 0.8.0](./docs/online-security-0.8.0.md)
+- [simulação e carga online](./docs/online-load-test-0.8.0.md)
+- [orçamento de mensagens](./docs/online-message-budget-0.8.0.md)
+- [limitações do Online Alpha](./docs/online-limitations-0.8.0.md)
 - [auditoria completa da 0.7.0](./docs/playable-0.7.0-audit.md)
 - [cobertura do mapa](./docs/map-coverage-brasilia-0.7.0.md)
 - [comparação 0.6 → 0.7](./docs/map-before-after-0.7.0.md)
@@ -90,4 +108,5 @@ O workflow `.github/workflows/web.yml` testa, compila e publica `main`. Em **Set
 - o processo de licença e os valores do taxímetro são regras de gameplay;
 - colisões usam física arcade, sem deformação visual complexa;
 - autenticação por e-mail depende do Supabase opcional;
+- a publicação do GitHub Pages permanece em Solo temporário até receber as variáveis e o backend Supabase do ambiente;
 - a câmera inclinada é uma projeção 2.5D estilizada.

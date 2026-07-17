@@ -11,6 +11,9 @@ export type GameCommand =
   | { type: 'set-camera-shake'; enabled: boolean }
   | { type: 'set-traffic-density'; density: TrafficDensity }
   | { type: 'set-audio'; enabled: boolean; masterVolume?: number; engineVolume?: number; effectsVolume?: number }
+  | { type: 'set-online-mode'; mode: 'online' | 'solo' }
+  | { type: 'set-online-visibility'; setting: 'showPlayerNames' | 'showFleetNames' | 'showPlayersOnMap' | 'remoteSounds' | 'publicPresence'; enabled: boolean }
+  | { type: 'set-online-visual-limit'; limit: number }
   | { type: 'cancel-ride' }
   | { type: 'dismiss-receipt' }
   | { type: 'accept-ride' }

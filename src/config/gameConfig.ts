@@ -1,8 +1,8 @@
 import { COLLISION_PHYSICS, VEHICLE_PHYSICS } from './vehiclePhysics';
 
 export const GAME_CONFIG = {
-  version: '0.7.2',
-  saveVersion: 5,
+  version: '0.8.0',
+  saveVersion: 6,
   mapVersion: 'brasilia-0.7.0',
   map: {
     city: 'Brasília',
@@ -72,7 +72,10 @@ export const GAME_CONFIG = {
     collisionStunSeconds: COLLISION_PHYSICS.npcStunSeconds,
     autopilotCollisionGhostSeconds: COLLISION_PHYSICS.autopilotGhostSeconds,
     autopilotHeadOnDeadlockSeconds: 0.45,
-    autopilotFollowingDeadlockSeconds: 7,
+    autopilotFollowingDeadlockSeconds: 10,
+    stuckRecoveryMaximumSeconds: 5,
+    stuckRecoveryEscapeDistanceMeters: 18,
+    stuckRecoverySpeedMps: 4.2,
     collisionCooldownSeconds: COLLISION_PHYSICS.cooldownSeconds,
     collision: COLLISION_PHYSICS,
     densityMultipliers: { low: 0.28, medium: 0.56, high: 1, automatic: 1 },
@@ -132,6 +135,22 @@ export const GAME_CONFIG = {
     defaultShiftMinutes: 240,
     physicalDetailRadiusMeters: 650,
     simplifiedRadiusMeters: 1_600
+  },
+  online: {
+    protocolVersion: 1,
+    worldId: 'city:brasilia:public:1',
+    presenceTopic: 'city:brasilia:presence',
+    nearbyDistanceMeters: 180,
+    mediumDistanceMeters: 520,
+    distantDistanceMeters: 1_200,
+    interpolationDelayMs: 120,
+    maximumExtrapolationMs: 400,
+    staleAfterMs: 1_200,
+    removeAfterMs: 8_000,
+    chunkOverlapMs: 2_500,
+    heartbeatMs: 15_000,
+    maximumVisibleRemotes: 24,
+    movementPayloadBytes: 640
   },
   environment: {
     aircraftCount: 7,

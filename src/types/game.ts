@@ -14,6 +14,20 @@ export type FleetControllerType = 'PLAYER' | 'EMPLOYEE' | 'AMBIENT_NPC' | 'FUTUR
 export type FleetSimulationLevel = 'detailed' | 'simplified' | 'economic';
 export type FleetVehicleState = 'available' | 'player-driving' | 'employee-driving' | 'on-trip' | 'returning' | 'refueling' | 'maintenance' | 'out-of-fuel' | 'damaged' | 'parked';
 export type EmployeeState = 'available' | 'waiting-vehicle' | 'starting-shift' | 'seeking-trip' | 'en-route' | 'with-passenger' | 'returning' | 'refueling' | 'break' | 'blocked' | 'ending-shift' | 'resting';
+export type OnlineModePreference = 'online' | 'solo';
+export type OnlineConnectionState = 'ONLINE' | 'INSTABLE' | 'RECONNECTING' | 'SOLO_TEMPORARY' | 'OFFLINE' | 'SOLO';
+export type AccountLinkState = 'local' | 'anonymous' | 'pending-email' | 'permanent';
+export type PublicAvatarId = 'driver-amber' | 'driver-blue' | 'driver-green' | 'driver-violet';
+
+export interface FleetPublicProfile {
+  fleetPublicId: string;
+  name: string;
+  tag: string;
+  color: string;
+  emblemId: 'road-star' | 'capital-wheel' | 'cerrado-route';
+  publicVehicleCount: number;
+  status: 'active' | 'offline';
+}
 
 export interface Point {
   x: number;
@@ -534,6 +548,15 @@ export interface PlayerSave {
   localPosition: Point;
   lastSafePosition: Point;
   mapMigrationNotice: boolean;
+  publicPlayerId: string;
+  publicDriverName: string;
+  publicAvatarId: PublicAvatarId;
+  onlinePreference: OnlineModePreference;
+  fleetPublicProfile: FleetPublicProfile;
+  lastOnlineWorld: string;
+  lastOnlineChunk: string;
+  lastPublicSessionId: string | null;
+  accountLinkState: AccountLinkState;
 }
 
 export type Quality = 'automatic' | 'low' | 'medium' | 'high';
@@ -550,6 +573,35 @@ export interface PlayerSettings {
   cameraShake: boolean;
   cameraZoom: CameraZoom;
   trafficDensity: TrafficDensity;
+  showPlayerNames: boolean;
+  showFleetNames: boolean;
+  showPlayersOnMap: boolean;
+  remoteSounds: boolean;
+  onlineVisualLimit: number;
+  publicPresence: boolean;
+}
+
+export interface OnlineHudSnapshot {
+  mode: OnlineModePreference;
+  state: OnlineConnectionState;
+  accountLinkState: AccountLinkState;
+  publicSessionId: string | null;
+  nearbyPlayers: number;
+  remoteEmployees: number;
+  offlineDeployments: number;
+  pingMs: number | null;
+  quality: 'excellent' | 'good' | 'weak' | 'offline';
+  subscribedTopics: string[];
+  sendRateHz: number;
+  receiveRateHz: number;
+  sequence: number;
+  interpolationBuffer: number;
+  extrapolating: number;
+  lostPackets: number;
+  outOfOrderPackets: number;
+  npcReplacements: number;
+  reconnectAttempts: number;
+  warning: string | null;
 }
 
 export type CollisionSeverity = 'contact' | 'light' | 'moderate' | 'severe';
@@ -634,4 +686,5 @@ export interface HudSnapshot {
   currentChunk: string;
   loadedMapChunks: number;
   mapRegions: string[];
+  online: OnlineHudSnapshot;
 }

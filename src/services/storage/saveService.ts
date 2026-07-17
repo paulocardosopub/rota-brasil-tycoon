@@ -16,7 +16,13 @@ const DEFAULT_SETTINGS: PlayerSettings = {
   effectsVolume: 0.75,
   cameraShake: true,
   cameraZoom: 'normal',
-  trafficDensity: 'automatic'
+  trafficDensity: 'automatic',
+  showPlayerNames: true,
+  showFleetNames: true,
+  showPlayersOnMap: true,
+  remoteSounds: true,
+  onlineVisualLimit: GAME_CONFIG.online.maximumVisibleRemotes,
+  publicPresence: true
 };
 
 export const DEFAULT_UPGRADES: UpgradeLevels = { engine: 0, brakes: 0, tires: 0, suspension: 0, economy: 0, comfort: 0 };
@@ -27,6 +33,7 @@ export const DEFAULT_GOALS: DriverGoals = {
 
 export function createNewSave(position = { x: 0, y: 0 }): PlayerSave {
   const now = new Date().toISOString();
+  const publicPlayerId = createPublicId('player');
   const ownerId = 'local-owner';
   const fleetId = 'fleet-local-owner';
   const hatch = createFleetVehicle({
@@ -83,7 +90,19 @@ export function createNewSave(position = { x: 0, y: 0 }): PlayerSave {
     geographicPosition: localMetersToLatLon(position.x, position.y, MAP_ORIGIN),
     localPosition: { ...position },
     lastSafePosition: { ...position },
-    mapMigrationNotice: false
+    mapMigrationNotice: false,
+    publicPlayerId,
+    publicDriverName: `Motorista ${publicPlayerId.slice(-4).toUpperCase()}`,
+    publicAvatarId: 'driver-green',
+    onlinePreference: 'online',
+    fleetPublicProfile: {
+      fleetPublicId: createPublicId('fleet'), name: 'Minha Frota', tag: 'RBT', color: '#39d6a6',
+      emblemId: 'road-star', publicVehicleCount: 1, status: 'offline'
+    },
+    lastOnlineWorld: GAME_CONFIG.online.worldId,
+    lastOnlineChunk: chunkFor(position),
+    lastPublicSessionId: null,
+    accountLinkState: 'local'
   };
 }
 
@@ -140,7 +159,16 @@ export function migrateSave(input: unknown): PlayerSave {
       : localMetersToLatLon((raw.position ?? fresh.position).x, (raw.position ?? fresh.position).y, MAP_ORIGIN),
     localPosition: validPoint(raw.localPosition) ? raw.localPosition : { ...(raw.position ?? fresh.position) },
     lastSafePosition: validPoint(raw.lastSafePosition) ? raw.lastSafePosition : { ...(raw.position ?? fresh.position) },
-    mapMigrationNotice: previousSaveVersion < 5
+    mapMigrationNotice: previousSaveVersion < 5,
+    publicPlayerId: validPublicId(raw.publicPlayerId) ? raw.publicPlayerId! : fresh.publicPlayerId,
+    publicDriverName: normalizePublicName(raw.publicDriverName, fresh.publicDriverName),
+    publicAvatarId: validChoice(raw.publicAvatarId, ['driver-amber', 'driver-blue', 'driver-green', 'driver-violet']) ?? fresh.publicAvatarId,
+    onlinePreference: validChoice(raw.onlinePreference, ['online', 'solo']) ?? fresh.onlinePreference,
+    fleetPublicProfile: migrateFleetPublicProfile(raw.fleetPublicProfile, fresh.fleetPublicProfile),
+    lastOnlineWorld: typeof raw.lastOnlineWorld === 'string' ? raw.lastOnlineWorld : GAME_CONFIG.online.worldId,
+    lastOnlineChunk: typeof raw.lastOnlineChunk === 'string' ? raw.lastOnlineChunk : (typeof raw.currentChunk === 'string' ? raw.currentChunk : fresh.currentChunk),
+    lastPublicSessionId: typeof raw.lastPublicSessionId === 'string' ? raw.lastPublicSessionId : null,
+    accountLinkState: validChoice(raw.accountLinkState, ['local', 'anonymous', 'pending-email', 'permanent']) ?? 'local'
   };
   migrated.fleet = migrateFleet(raw.fleet, migrated);
   if (!migrated.fleet.vehicles.some((vehicle) => vehicle.id === migrated.activeVehicleId)) {
@@ -211,7 +239,13 @@ function migrateSettings(input: Partial<PlayerSettings> | undefined): PlayerSett
     effectsVolume: volume(input?.effectsVolume, DEFAULT_SETTINGS.effectsVolume),
     cameraShake: input?.cameraShake !== false,
     cameraZoom: validChoice(input?.cameraZoom, ['near', 'normal', 'far']) as CameraZoom ?? DEFAULT_SETTINGS.cameraZoom,
-    trafficDensity: validChoice(input?.trafficDensity, ['automatic', 'low', 'medium', 'high']) as TrafficDensity ?? DEFAULT_SETTINGS.trafficDensity
+    trafficDensity: validChoice(input?.trafficDensity, ['automatic', 'low', 'medium', 'high']) as TrafficDensity ?? DEFAULT_SETTINGS.trafficDensity,
+    showPlayerNames: input?.showPlayerNames !== false,
+    showFleetNames: input?.showFleetNames !== false,
+    showPlayersOnMap: input?.showPlayersOnMap !== false,
+    remoteSounds: input?.remoteSounds !== false,
+    onlineVisualLimit: clamp(Math.floor(finite(input?.onlineVisualLimit, DEFAULT_SETTINGS.onlineVisualLimit)), 0, 50),
+    publicPresence: input?.publicPresence !== false
   };
 }
 
@@ -316,6 +350,35 @@ function validGeographicPosition(value: unknown): value is { lat: number; lon: n
 
 function chunkFor(point: { x: number; y: number }) {
   return `${Math.floor(point.x / MAP_CHUNK_SIZE)}_${Math.floor(point.y / MAP_CHUNK_SIZE)}`;
+}
+
+function createPublicId(kind: 'player' | 'fleet') {
+  const value = typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+    ? crypto.randomUUID().replaceAll('-', '')
+    : `${Date.now().toString(36)}${Math.random().toString(36).slice(2)}`;
+  return `${kind === 'player' ? 'rbp' : 'rbf'}_${value.slice(0, 24)}`;
+}
+
+function validPublicId(value: unknown) {
+  return typeof value === 'string' && /^(rbp|rbf)_[a-z0-9]{8,32}$/i.test(value);
+}
+
+function normalizePublicName(value: unknown, fallback: string) {
+  if (typeof value !== 'string') return fallback;
+  const normalized = value.normalize('NFKC').replace(/[\u0000-\u001f\u007f-\u009f\u200b-\u200f\u202a-\u202e\u2060\ufeff]/g, '').replace(/[<>]/g, '').replace(/\s+/g, ' ').trim();
+  return normalized.length >= 3 && normalized.length <= 20 ? normalized : fallback;
+}
+
+function migrateFleetPublicProfile(input: Partial<PlayerSave['fleetPublicProfile']> | undefined, fallback: PlayerSave['fleetPublicProfile']): PlayerSave['fleetPublicProfile'] {
+  return {
+    fleetPublicId: validPublicId(input?.fleetPublicId) ? input!.fleetPublicId! : fallback.fleetPublicId,
+    name: normalizePublicName(input?.name, fallback.name),
+    tag: typeof input?.tag === 'string' && /^[A-Z0-9]{2,5}$/.test(input.tag) ? input.tag : fallback.tag,
+    color: typeof input?.color === 'string' && /^#[0-9a-f]{6}$/i.test(input.color) ? input.color : fallback.color,
+    emblemId: validChoice(input?.emblemId, ['road-star', 'capital-wheel', 'cerrado-route']) ?? fallback.emblemId,
+    publicVehicleCount: clamp(Math.floor(finite(input?.publicVehicleCount, fallback.publicVehicleCount)), 0, 99),
+    status: validChoice(input?.status, ['active', 'offline']) ?? fallback.status
+  };
 }
 
 function finite(value: unknown, fallback: number) { return Number.isFinite(value) ? value as number : fallback; }

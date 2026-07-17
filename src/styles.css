@@ -11,6 +11,41 @@
   --danger: #ff646d;
 }
 
+.online-badge {
+  position: absolute;
+  top: 82px;
+  right: 18px;
+  z-index: 90;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 28px;
+  padding: 5px 9px;
+  border: 1px solid rgba(255,255,255,.12);
+  border-radius: 999px;
+  color: #dbe7ee;
+  background: rgba(9, 25, 38, .86);
+  box-shadow: 0 5px 18px rgba(3, 10, 17, .22);
+  font-size: 10px;
+  letter-spacing: .04em;
+  pointer-events: none;
+}
+
+.online-badge i { width: 7px; height: 7px; border-radius: 50%; background: #94a3b8; }
+.online-badge.online i { background: #42d59b; box-shadow: 0 0 8px rgba(66,213,155,.7); }
+.online-badge.reconnecting i { background: #f4bd4f; animation: online-pulse 1s infinite; }
+.online-badge span { opacity: .72; letter-spacing: 0; }
+.online-settings { margin-top: 22px; padding-top: 18px; border-top: 1px solid rgba(255,255,255,.1); }
+.guest-account-notice { position: absolute; z-index: 89; top: 116px; right: 18px; max-width: 310px; padding: 6px 9px; border-radius: 8px; background: rgba(9,25,38,.78); color: rgba(226,239,247,.78); font-size: 10px; pointer-events: none; }
+
+@keyframes online-pulse { 50% { opacity: .3; } }
+
+@media (max-width: 640px) {
+  .online-badge { top: 72px; right: 10px; padding: 4px 7px; }
+  .online-badge span:last-child { display: none; }
+  .guest-account-notice { top: 104px; right: 10px; max-width: 245px; }
+}
+
 * { box-sizing: border-box; }
 html, body, #root { width: 100%; height: 100%; margin: 0; overflow: hidden; }
 button, input, select { font: inherit; }

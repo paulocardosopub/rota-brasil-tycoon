@@ -10,3 +10,4 @@ coverage/
 data/map-sources/brasilia/cache/
 .codex-*.log
 *.tsbuildinfo
+supabase/.temp/

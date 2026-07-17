@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { hasSave } from '../../services/storage/saveService';
 import { isCloudEnabled, supabase } from '../../services/supabase/client';
+import { linkOrCreatePermanentAccount, signInPermanent } from '../../services/supabase/authService';
 
 interface Props {
   onContinue: () => void;
@@ -20,9 +21,18 @@ export function StartScreen({ onContinue, onNewGame, onGuest }: Props) {
       return;
     }
     setMessage('Entrando…');
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) setMessage(error.message);
-    else onContinue();
+    try { await signInPermanent(email, password); onContinue(); }
+    catch (error) { setMessage(error instanceof Error ? error.message : 'Não foi possível entrar.'); }
+  };
+
+  const linkAccount = async () => {
+    if (!supabase) { setMessage('O modo nuvem não está configurado.'); return; }
+    if (password.length < 8) { setMessage('Use uma senha com pelo menos 8 caracteres.'); return; }
+    setMessage('Preparando a conta…');
+    try {
+      const result = await linkOrCreatePermanentAccount(email, password);
+      setMessage(result.status === 'verification-sent' ? 'Confirme o e-mail e volte aqui para definir a senha sem perder o save.' : 'Conta vinculada ao mesmo progresso.');
+    } catch (error) { setMessage(error instanceof Error ? error.message : 'Não foi possível vincular a conta.'); }
   };
 
   return (
@@ -34,7 +44,7 @@ export function StartScreen({ onContinue, onNewGame, onGuest }: Props) {
         <div className="hero-car"><i /><b /><em /></div>
       </div>
       <section className="start-card">
-        <div className="eyebrow">PLAYABLE 0.7.2 • ROTAS NO ASFALTO</div>
+        <div className="eyebrow">PLAYABLE 0.8.0 • ONLINE ALPHA</div>
         <h1><span>Rota Brasil</span> Tycoon</h1>
         <p>Comece ao volante de um Hatch 1998. Busque passageiros e construa sua futura empresa de transporte.</p>
         {!loginOpen ? (
@@ -52,6 +62,7 @@ export function StartScreen({ onContinue, onNewGame, onGuest }: Props) {
             <label>E-mail<input type="email" value={email} onChange={(event) => setEmail(event.target.value)} autoComplete="email" /></label>
             <label>Senha<input type="password" value={password} onChange={(event) => setPassword(event.target.value)} autoComplete="current-password" /></label>
             <button className="primary-button" onClick={signIn}>Entrar na nuvem</button>
+            <button onClick={linkAccount}>Criar ou vincular conta</button>
             <small>{message || (isCloudEnabled ? 'Seu progresso local será sincronizado após entrar.' : 'Supabase opcional não configurado.')}</small>
           </div>
         )}
