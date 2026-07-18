@@ -14,6 +14,12 @@ export type RideMode = 'informal' | 'official-taxi';
 export type TaxiRequestType = 'taxi-rank' | 'street-hail' | 'dispatch';
 export type TaxiMeterState = 'free' | 'en-route' | 'boarding' | 'occupied' | 'waiting' | 'finished';
 export type FleetControllerType = 'PLAYER' | 'EMPLOYEE' | 'AMBIENT_NPC' | 'FUTURE_REMOTE_PLAYER' | 'FUTURE_REMOTE_EMPLOYEE';
+export type VehicleModel = 'Hatch 1998' | 'Sedan 2012' | 'Compacto 2010' | 'Sedan Executivo 2018' | 'SUV Urbano 2020'
+  | 'Moto Urbana 125' | 'Moto Cargo 160' | 'Scooter Express 150' | 'Triciclo Cargo 200' | 'Hatch Entrega'
+  | 'Furgão Compacto' | 'Van de Carga' | 'Picape Leve' | 'Furgão Médio' | 'Utilitário Baú';
+export type EmployeeQualification = 'CAR' | 'TAXI' | 'MOTORCYCLE' | 'DELIVERY_VAN' | 'LIGHT_FREIGHT';
+export type BusinessKind = 'taxi' | 'delivery' | 'light-freight';
+export type WorkKind = 'passenger' | 'document' | 'food' | 'small-parcel' | 'express' | 'multi-stop' | 'urban-freight' | 'large-parcel' | 'small-move' | 'supply' | 'inter-region-freight';
 export type FleetSimulationLevel = 'detailed' | 'simplified' | 'economic';
 export type FleetVehicleState = 'available' | 'player-driving' | 'employee-driving' | 'on-trip' | 'returning' | 'refueling' | 'maintenance' | 'out-of-fuel' | 'damaged' | 'parked';
 export type EmployeeState = 'available' | 'waiting-vehicle' | 'starting-shift' | 'seeking-trip' | 'en-route' | 'with-passenger' | 'returning' | 'refueling' | 'break' | 'blocked' | 'ending-shift' | 'resting';
@@ -318,6 +324,11 @@ export interface MissionSnapshot {
   familiarityLevel?: RegionFamiliarityLevel;
   recommendedFuelLiters?: number;
   routeDistanceMeters?: number;
+  workKind?: WorkKind;
+  cargoWeightKg?: number;
+  cargoVolumeM3?: number;
+  fragile?: boolean;
+  requiredVehicle?: VehicleModel;
 }
 
 export interface Receipt {
@@ -384,7 +395,7 @@ export interface FleetVehicle {
   id: string;
   ownerId: string;
   fleetId: string;
-  model: 'Hatch 1998' | 'Sedan 2012';
+  model: VehicleModel;
   controllerType: FleetControllerType;
   controllerId: string | null;
   authority: 'local' | 'server';
@@ -413,6 +424,8 @@ export interface FleetVehicle {
   expenses: number;
   nextMaintenanceKm: number;
   baseGarageId: string;
+  cargoCapacityKg: number;
+  cargoVolumeM3: number;
 }
 
 export interface EmployeeCandidate {
@@ -427,6 +440,7 @@ export interface EmployeeCandidate {
   commissionPercent: number;
   hireCost: number;
   description: string;
+  qualifications: EmployeeQualification[];
 }
 
 export interface FleetEmployee extends EmployeeCandidate {
@@ -533,6 +547,15 @@ export interface PlayerFleet {
   garages: OwnedGarage[];
 }
 
+export interface PlayerBusiness {
+  kind: BusinessKind;
+  name: string;
+  purchasedAt: string;
+  baseGarageId: string;
+  completedJobs: number;
+  grossRevenue: number;
+}
+
 export interface ClockGuard {
   lastSeenAt: string;
   lastTrustedAt: string;
@@ -603,6 +626,7 @@ export interface PlayerSave {
   officialTaxiRides: number;
   activeVehicleId: string;
   fleet: PlayerFleet;
+  businesses: PlayerBusiness[];
   clockGuard: ClockGuard;
   mapVersion: string;
   currentChunk: string;
@@ -744,6 +768,7 @@ export interface HudSnapshot {
   officialTaxiRides: number;
   activeVehicleId: string;
   fleet: PlayerFleet;
+  businesses: PlayerBusiness[];
   fleetVehicleVisible: boolean;
   fleetRouteTarget: Point | null;
   fleetRouteRemaining: number;

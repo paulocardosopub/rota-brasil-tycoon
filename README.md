@@ -1,4 +1,4 @@
-# Rota Brasil Tycoon — PLAYABLE 0.8.3
+# Rota Brasil Tycoon — PLAYABLE 0.8.4
 
 ## Expansão regional, economia e serviços
 

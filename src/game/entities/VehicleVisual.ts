@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import type { VehicleModel } from '../../types/game';
 
 export function createCarVisual(scene: Phaser.Scene, color: number, worn = false, taxi = false) {
   const container = scene.add.container(0, 0);
@@ -68,6 +69,42 @@ export function createUtilityVehicleVisual(scene: Phaser.Scene, color = 0xe8ecef
   van.fillStyle(0xfff1b8).fillCircle(3.72, -0.9, 0.28).fillCircle(3.72, 0.9, 0.28);
   container.add([shadow, van]).setDepth(25);
   return container;
+}
+
+export function createMotorcycleVisual(scene: Phaser.Scene, color = 0x32c48d, cargo = false) {
+  const container = scene.add.container(0, 0);
+  const shadow = scene.add.graphics().fillStyle(0x07111a, 0.25).fillEllipse(-0.2, 0.8, 5.8, 2.2);
+  const bike = scene.add.graphics();
+  bike.fillStyle(0x111827).fillCircle(-2.05, 0, 0.82).fillCircle(2.05, 0, 0.82);
+  bike.lineStyle(0.35, 0xb8c2cc).strokeCircle(-2.05, 0, 0.55).strokeCircle(2.05, 0, 0.55);
+  bike.lineStyle(0.42, color).lineBetween(-1.7, 0, -0.35, -0.7).lineBetween(-0.35, -0.7, 0.75, 0).lineBetween(0.75, 0, -1.05, 0);
+  bike.fillStyle(color).fillRoundedRect(-0.7, -1.02, 1.9, 0.62, 0.22);
+  bike.fillStyle(0x2a3542).fillRoundedRect(-1.45, -0.85, 1.2, 0.42, 0.18);
+  bike.lineStyle(0.3, 0x303b47).lineBetween(0.75, 0, 1.75, -1.25).lineBetween(1.75, -1.25, 2.1, 0);
+  bike.fillStyle(0xfff1b8).fillCircle(2.0, -1.28, 0.28);
+  const rider = scene.add.graphics();
+  rider.fillStyle(0x27384d).fillRoundedRect(-0.55, -2.3, 1.2, 1.5, 0.38);
+  rider.fillStyle(0xd69b72).fillCircle(0.12, -2.85, 0.58);
+  rider.fillStyle(0x202c39).fillCircle(0.12, -3.05, 0.62);
+  container.add([shadow, bike, rider]);
+  if (cargo) {
+    const box = scene.add.graphics();
+    box.fillStyle(0xf2b134).fillRoundedRect(-2.15, -2.45, 1.45, 1.55, 0.2);
+    box.lineStyle(0.18, 0x603d10).strokeRoundedRect(-2.15, -2.45, 1.45, 1.55, 0.2);
+    container.add(box);
+  }
+  return container.setDepth(30);
+}
+
+export function createFleetVehicleVisual(scene: Phaser.Scene, model: VehicleModel, color: number, taxi = false) {
+  if (['Moto Urbana 125','Moto Cargo 160','Scooter Express 150','Triciclo Cargo 200'].includes(model)) {
+    return createMotorcycleVisual(scene, color, model !== 'Moto Urbana 125').setScale(model === 'Triciclo Cargo 200' ? 1.15 : 1);
+  }
+  if (['Furgão Compacto','Van de Carga','Picape Leve','Furgão Médio','Utilitário Baú'].includes(model)) {
+    const scale = model === 'Utilitário Baú' ? 1.22 : model === 'Furgão Médio' ? 1.12 : model === 'Van de Carga' ? 1.05 : 0.9;
+    return createUtilityVehicleVisual(scene, color).setScale(scale);
+  }
+  return createCarVisual(scene, color, false, taxi);
 }
 
 export function createPassengerVisual(scene: Phaser.Scene, color = 0x17b890) {
