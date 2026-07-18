@@ -1,5 +1,5 @@
 import { GAME_CONFIG } from '../../config/gameConfig';
-import type { EmployeeCandidate, EmployeeRegionalPreferences, FleetEmployee, FleetReport, FleetShift, FleetSimulationLevel, FleetVehicle, MapServiceLocation, PlayerSave, Point, UpgradeLevels } from '../../types/game';
+import type { BusinessKind, EmployeeCandidate, EmployeeQualification, EmployeeRegionalPreferences, FleetEmployee, FleetReport, FleetShift, FleetSimulationLevel, FleetVehicle, MapServiceLocation, PlayerSave, Point, UpgradeLevels, VehicleModel } from '../../types/game';
 import { EconomyService } from '../economy/EconomyService';
 import { roundMoney } from '../economy/TransactionLedger';
 import { DEFAULT_SHIFT_POLICY, EMPLOYEE_CANDIDATES } from './FleetConfig';
@@ -20,12 +20,14 @@ export function createFleetVehicle(input: {
     stateVersion: 1, updatedAt: now, leaseExpiresAt: null,
     taxiLicensed: input.taxiLicensed ?? false, taxiVisualEnabled: input.taxiLicensed ?? false,
     taxiRegistrationId: input.taxiLicensed ? `taxi-${input.id ?? 'vehicle'}` : null,
-    fuel: input.fuel, fuelCapacity: input.model === 'Sedan 2012' ? 48 : 40,
+    fuel: input.fuel, fuelCapacity: vehicleSpec(input.model).fuelCapacity,
     condition: input.condition, collisionDamage: input.collisionDamage, maintenanceWear: input.maintenanceWear,
     totalKm: input.totalKm, upgrades: { ...input.upgrades }, position: { ...input.position }, rotation: input.rotation,
     purchasePrice: input.purchasePrice, acquiredAt: now, grossRevenue: 0, expenses: 0,
     nextMaintenanceKm: Math.ceil(input.totalKm / 100 + 1) * 100,
-    baseGarageId: 'garage-shs-hatch'
+    baseGarageId: 'garage-shs-hatch',
+    cargoCapacityKg: vehicleSpec(input.model).cargoKg,
+    cargoVolumeM3: vehicleSpec(input.model).volumeM3
   };
 }
 
@@ -77,22 +79,23 @@ export function hireEmployee(save: PlayerSave, candidateId: string, requestId: s
   return { applied: true, employee, transaction: result.transaction };
 }
 
-export function purchaseSecondVehicle(save: PlayerSave, requestId: string, garageService?: MapServiceLocation) {
+export function purchaseSecondVehicle(save: PlayerSave, requestId: string, garageService?: MapServiceLocation, model: 'Sedan 2012' | 'Compacto 2010' | 'Sedan Executivo 2018' | 'SUV Urbano 2020' = 'Sedan 2012') {
   if (save.professionalStatus !== 'licensed-taxi') return { applied: false, reason: 'not-licensed' as const };
   const garageId = garageService?.id ?? save.fleet.garageServiceId;
   if (!save.fleet.garages.some((garage) => garage.serviceId === garageId)) return { applied: false, reason: 'garage' as const };
   if (garageVehicleCount(save, garageId) >= GAME_CONFIG.fleet.garageVehicleCapacity) return { applied: false, reason: 'capacity' as const };
+  const price = model === 'Sedan 2012' ? GAME_CONFIG.fleet.secondVehiclePrice : GAME_CONFIG.fleet.passengerVehiclePrices[model];
   const result = new EconomyService(save).expense(
-    GAME_CONFIG.fleet.secondVehiclePrice, 'fleet-purchase', 'Classificados da frota • Sedan 2012', requestId, false,
+    price, 'fleet-purchase', `Classificados da frota • ${model}`, requestId, false,
     fleetContext(save, 'pending-sedan', 'none', 'none')
   );
   if (!result.applied) return result;
   const garage = garageService?.stopPoint ?? { x: -744.378, y: 57.827 };
   const vehicle = createFleetVehicle({
-    ownerId: save.ownerId, fleetId: save.fleet.id, model: 'Sedan 2012', fuel: 26,
+    ownerId: save.ownerId, fleetId: save.fleet.id, model, fuel: 26,
     condition: GAME_CONFIG.fleet.secondVehicleCondition, collisionDamage: 18, maintenanceWear: 4,
     totalKm: 86_400, upgrades: { engine: 1, brakes: 1, tires: 1, suspension: 1, economy: 1, comfort: 1 },
-    position: garage, rotation: 0, purchasePrice: GAME_CONFIG.fleet.secondVehiclePrice, taxiLicensed: true
+    position: garage, rotation: 0, purchasePrice: price, taxiLicensed: true
   });
   vehicle.state = 'parked'; vehicle.controllerId = null; vehicle.simulationLevel = 'economic';
   vehicle.baseGarageId = garageId;
@@ -108,6 +111,7 @@ export function assignEmployee(save: PlayerSave, employeeId: string, vehicleId: 
   const employee = save.fleet.employees.find((item) => item.id === employeeId);
   const vehicle = save.fleet.vehicles.find((item) => item.id === vehicleId);
   if (!employee || !vehicle) return { applied: false, reason: 'missing' as const };
+  if (!employee.qualifications.includes(requiredQualification(vehicle.model))) return { applied: false, reason: 'qualification' as const };
   if (vehicleId === save.activeVehicleId || vehicle.controllerType === 'EMPLOYEE' || save.fleet.activeShift?.vehicleId === vehicleId) return { applied: false, reason: 'vehicle-in-use' as const };
   if (save.fleet.employees.some((item) => item.id !== employeeId && item.vehicleId === vehicleId)) return { applied: false, reason: 'vehicle-assigned' as const };
   if (employee.vehicleId && employee.vehicleId !== vehicleId) {
@@ -133,6 +137,72 @@ export function unassignEmployee(save: PlayerSave, employeeId: string) {
   }
   employee.vehicleId = null; employee.state = 'waiting-vehicle';
   return { applied: true, employee, vehicle };
+}
+
+function requiredQualification(model: VehicleModel): EmployeeQualification {
+  if (['Moto Urbana 125','Moto Cargo 160','Scooter Express 150','Triciclo Cargo 200'].includes(model)) return 'MOTORCYCLE';
+  if (model === 'Hatch Entrega' || model === 'Furgão Compacto' || model === 'Picape Leve') return 'DELIVERY_VAN';
+  if (['Van de Carga','Furgão Médio','Utilitário Baú'].includes(model)) return 'LIGHT_FREIGHT';
+  return ['Sedan 2012','Compacto 2010','Sedan Executivo 2018','SUV Urbano 2020'].includes(model) ? 'TAXI' : 'CAR';
+}
+
+export function availableCandidates(save: PlayerSave, maximum = 8) {
+  const hired = new Set(save.fleet.employees.map((employee) => employee.id));
+  return EMPLOYEE_CANDIDATES.filter((candidate) => !hired.has(candidate.id)).slice(0, maximum);
+}
+
+export function purchaseBusiness(save: PlayerSave, kind: Exclude<BusinessKind, 'taxi'>, garageId: string, requestId: string) {
+  if (save.businesses.some((business) => business.kind === kind)) return { applied: false, reason: 'owned' as const };
+  if (!save.fleet.garages.some((garage) => garage.serviceId === garageId)) return { applied: false, reason: 'garage' as const };
+  if (kind === 'delivery' && save.completedRides < 5) return { applied: false, reason: 'requirements' as const };
+  if (kind === 'light-freight' && (!save.businesses.some((business) => business.kind === 'delivery') || save.completedRides < 10)) return { applied: false, reason: 'requirements' as const };
+  const price = kind === 'delivery' ? GAME_CONFIG.fleet.deliveryBusinessPrice : GAME_CONFIG.fleet.freightBusinessPrice;
+  const name = kind === 'delivery' ? 'Central de Entregas' : 'Frete Brasília';
+  const result = new EconomyService(save).expense(price, 'fleet-purchase', `Empresa • ${name}`, requestId, false, fleetContext(save, 'none', 'none', 'none'));
+  if (!result.applied) return result;
+  const business = { kind, name, purchasedAt: new Date().toISOString(), baseGarageId: garageId, completedJobs: 0, grossRevenue: 0 };
+  save.businesses.push(business);
+  return { applied: true, business, transaction: result.transaction };
+}
+
+export function purchaseLightVehicle(save: PlayerSave, model: Exclude<VehicleModel, 'Hatch 1998' | 'Sedan 2012' | 'Compacto 2010' | 'Sedan Executivo 2018' | 'SUV Urbano 2020'>, garageService: MapServiceLocation, requestId: string) {
+  const garage = save.fleet.garages.find((item) => item.serviceId === garageService.id);
+  if (!garage) return { applied: false, reason: 'garage' as const };
+  if (garageVehicleCount(save, garage.serviceId) >= 5) return { applied: false, reason: 'capacity' as const };
+  const requiredBusiness = ['Moto Urbana 125','Moto Cargo 160','Scooter Express 150','Triciclo Cargo 200','Hatch Entrega'].includes(model) ? 'delivery' : 'light-freight';
+  if (!save.businesses.some((business) => business.kind === requiredBusiness)) return { applied: false, reason: 'business' as const };
+  if (model === 'Van de Carga' && garage.regionId === 'centro') return { applied: false, reason: 'incompatible' as const };
+  const price = GAME_CONFIG.fleet.vehiclePrices[model];
+  const result = new EconomyService(save).expense(price, 'fleet-purchase', `Veículo • ${model}`, requestId, false, fleetContext(save, 'pending', 'none', 'none'));
+  if (!result.applied) return result;
+  const vehicle = createFleetVehicle({ ownerId: save.ownerId, fleetId: save.fleet.id, model, fuel: vehicleSpec(model).initialFuel, condition: 86, collisionDamage: 10, maintenanceWear: 2, totalKm: 0, upgrades: { engine: 0, brakes: 0, tires: 0, suspension: 0, economy: 0, comfort: 0 }, position: garageService.stopPoint, rotation: 0, purchasePrice: price });
+  vehicle.state = 'parked'; vehicle.controllerId = null; vehicle.simulationLevel = 'economic'; vehicle.baseGarageId = garage.serviceId;
+  save.fleet.vehicles.push(vehicle);
+  return { applied: true, vehicle, transaction: result.transaction };
+}
+
+export function trainEmployee(save: PlayerSave, employeeId: string, qualification: EmployeeQualification, requestId: string) {
+  const employee = save.fleet.employees.find((item) => item.id === employeeId);
+  if (!employee || save.fleet.activeShift?.employeeId === employeeId) return { applied: false, reason: 'in-use' as const };
+  if (employee.qualifications.includes(qualification)) return { applied: false, reason: 'trained' as const };
+  const result = new EconomyService(save).expense(GAME_CONFIG.fleet.employeeTrainingCost, 'commission', `Treinamento • ${qualification}`, requestId, false, fleetContext(save, 'none', employeeId, 'none'));
+  if (!result.applied) return result;
+  employee.qualifications.push(qualification);
+  return { applied: true, employee, transaction: result.transaction };
+}
+
+function vehicleSpec(model: VehicleModel) {
+  if (model === 'Moto Urbana 125') return { fuelCapacity: 12, initialFuel: 8, cargoKg: 18, volumeM3: 0.08 };
+  if (model === 'Moto Cargo 160') return { fuelCapacity: 14, initialFuel: 9, cargoKg: 35, volumeM3: 0.16 };
+  if (model === 'Scooter Express 150') return { fuelCapacity: 11, initialFuel: 7, cargoKg: 22, volumeM3: 0.11 };
+  if (model === 'Triciclo Cargo 200') return { fuelCapacity: 16, initialFuel: 10, cargoKg: 120, volumeM3: 0.75 };
+  if (model === 'Hatch Entrega') return { fuelCapacity: 44, initialFuel: 25, cargoKg: 320, volumeM3: 1.3 };
+  if (model === 'Furgão Compacto') return { fuelCapacity: 55, initialFuel: 30, cargoKg: 650, volumeM3: 3.2 };
+  if (model === 'Van de Carga') return { fuelCapacity: 70, initialFuel: 38, cargoKg: 1_400, volumeM3: 8.5 };
+  if (model === 'Picape Leve') return { fuelCapacity: 62, initialFuel: 34, cargoKg: 850, volumeM3: 2.2 };
+  if (model === 'Furgão Médio') return { fuelCapacity: 78, initialFuel: 42, cargoKg: 1_800, volumeM3: 11 };
+  if (model === 'Utilitário Baú') return { fuelCapacity: 92, initialFuel: 50, cargoKg: 2_400, volumeM3: 15 };
+  return { fuelCapacity: model === 'Sedan 2012' ? 48 : 40, initialFuel: 26, cargoKg: 80, volumeM3: 0.45 };
 }
 
 export function purchaseRegionalGarage(save: PlayerSave, service: MapServiceLocation, requestId: string) {
@@ -208,7 +278,11 @@ export function startFleetShift(save: PlayerSave, employeeId: string, requestId:
   const employee = save.fleet.employees.find((item) => item.id === employeeId);
   const vehicle = save.fleet.vehicles.find((item) => item.id === employee?.vehicleId);
   if (!employee || !vehicle) return { applied: false, reason: 'assignment' as const };
-  if (!vehicle.taxiLicensed) return { applied: false, reason: 'taxi-required' as const };
+  const deliveryVehicle = ['Moto Urbana 125','Moto Cargo 160','Scooter Express 150','Triciclo Cargo 200','Hatch Entrega'].includes(vehicle.model);
+  const freightVehicle = ['Furgão Compacto','Van de Carga','Picape Leve','Furgão Médio','Utilitário Baú'].includes(vehicle.model);
+  const commercialAuthorized = (deliveryVehicle && save.businesses.some((business) => business.kind === 'delivery'))
+    || (freightVehicle && save.businesses.some((business) => business.kind === 'light-freight'));
+  if (!vehicle.taxiLicensed && !commercialAuthorized) return { applied: false, reason: 'taxi-required' as const };
   if (vehicle.id === save.activeVehicleId) return { applied: false, reason: 'player-vehicle' as const };
   if (vehicle.fuel / vehicle.fuelCapacity * 100 < DEFAULT_SHIFT_POLICY.minimumFuelPercent || vehicle.condition < DEFAULT_SHIFT_POLICY.minimumCondition) {
     return { applied: false, reason: 'vehicle-unfit' as const };

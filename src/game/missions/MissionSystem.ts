@@ -1,6 +1,6 @@
 import { GAME_CONFIG } from '../../config/gameConfig';
 import { GraphRouter } from '../../map/routing/GraphRouter';
-import type { GraphNode, MapRegion, MissionSnapshot, Point, Receipt, RideCategory, RideQuality, TaxiPoint } from '../../types/game';
+import type { GraphNode, MapRegion, MissionSnapshot, Point, Receipt, RideCategory, RideQuality, TaxiPoint, WorkKind } from '../../types/game';
 import { createFareQuote, settleFare } from '../economy/FareCalculator';
 import { ECONOMY_CONFIG } from '../economy/EconomyConfig';
 import { advanceActiveRoute } from '../systems/RouteProgress';
@@ -257,6 +257,24 @@ export class MissionSystem {
     this.mission = this.createMission(position, completedRides);
   }
 
+  nextWork(position: Point, completedRides: number, business: 'delivery' | 'light-freight') {
+    this.receipt = null;
+    this.mission = this.createMission(position, completedRides);
+    const kinds: WorkKind[] = business === 'delivery'
+      ? ['document', 'food', 'small-parcel', 'express', 'multi-stop']
+      : ['urban-freight', 'large-parcel', 'small-move', 'supply', 'inter-region-freight'];
+    const cargoWeightKg = business === 'delivery' ? 2 + completedRides % 24 : 120 + completedRides % 780;
+    this.mission.workKind = kinds[completedRides % kinds.length];
+    this.mission.cargoWeightKg = cargoWeightKg;
+    this.mission.cargoVolumeM3 = business === 'delivery' ? 0.03 + (completedRides % 8) * 0.015 : 0.8 + (completedRides % 14) * 0.32;
+    this.mission.fragile = completedRides % 4 === 0;
+    this.mission.requiredVehicle = business === 'delivery' ? 'Moto Urbana 125' : 'Furgão Compacto';
+    this.mission.passengerName = business === 'delivery' ? 'Cliente da Central de Entregas' : 'Cliente Frete Brasília';
+    this.mission.pickupLabel = `Coleta • ${this.mission.pickupLabel.replace(/^Embarque\s*/, '')}`;
+    this.mission.destinationLabel = `Entrega • ${this.mission.destinationLabel.replace(/^Destino\s*/, '')}`;
+    this.mission.requirements = [`${cargoWeightKg} kg`, this.mission.fragile ? 'Carga frágil' : 'Carga comum', business === 'delivery' ? 'Veículo de entrega' : 'Furgão ou van'];
+  }
+
   updateVehicleContext(context: Partial<MissionVehicleContext>) {
     this.vehicleContext = { ...this.vehicleContext, ...context };
   }
@@ -361,6 +379,7 @@ function chooseRegionalPlan(regions: MapRegion[], current: MapRegion | null, pre
     const neighbor = neighbors[rideIndex % neighbors.length];
     return { pickupRegion: neighbor, destinationRegion: preferred, kind: 'neighbor-region' as const };
   }
+
   const distant = [...withCandidates].sort((a, b) => Math.hypot(b.center.x - preferred.center.x, b.center.y - preferred.center.y)
     - Math.hypot(a.center.x - preferred.center.x, a.center.y - preferred.center.y))[rideIndex % Math.max(1, withCandidates.length)] ?? preferred;
   return { pickupRegion: preferred, destinationRegion: distant, kind: 'long' as const };

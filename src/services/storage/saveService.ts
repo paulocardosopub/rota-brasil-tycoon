@@ -111,7 +111,8 @@ export function createNewSave(position = { x: 0, y: 0 }): PlayerSave {
     favoriteServiceIds: [],
     regionalBaseServiceId: null,
     lastCloudRevision: 0,
-    cloudLineageId: createLineageId()
+    cloudLineageId: createLineageId(),
+    businesses: []
   };
 }
 
@@ -184,7 +185,8 @@ export function migrateSave(input: unknown): PlayerSave {
     favoriteServiceIds: Array.isArray(raw.favoriteServiceIds) ? [...new Set(raw.favoriteServiceIds.filter((id): id is string => typeof id === 'string'))].slice(0, 24) : [],
     regionalBaseServiceId: typeof raw.regionalBaseServiceId === 'string' ? raw.regionalBaseServiceId : null,
     lastCloudRevision: Math.max(0, Math.floor(finite(raw.lastCloudRevision, 0))),
-    cloudLineageId: validLineageId(raw.cloudLineageId) ? raw.cloudLineageId! : fresh.cloudLineageId
+    cloudLineageId: validLineageId(raw.cloudLineageId) ? raw.cloudLineageId! : fresh.cloudLineageId,
+    businesses: Array.isArray(raw.businesses) ? raw.businesses.filter((business) => business && ['taxi','delivery','light-freight'].includes(business.kind)) : []
   };
   migrated.fleet = migrateFleet(raw.fleet, migrated);
   if (!migrated.fleet.vehicles.some((vehicle) => vehicle.id === migrated.activeVehicleId)) {
@@ -353,7 +355,7 @@ function migrateFleet(input: Partial<PlayerFleet> | undefined, save: PlayerSave)
 function migrateFleetVehicle(input: FleetVehicle, ownerId: string, fleetId: string): FleetVehicle {
   const base = createFleetVehicle({
     id: typeof input.id === 'string' ? input.id : undefined,
-    ownerId, fleetId, model: input.model === 'Sedan 2012' ? 'Sedan 2012' : 'Hatch 1998',
+    ownerId, fleetId, model: validVehicleModel(input.model),
     fuel: finite(input.fuel, 1), condition: finite(input.condition, 70),
     collisionDamage: finite(input.collisionDamage, 30), maintenanceWear: finite(input.maintenanceWear, 0),
     totalKm: finite(input.totalKm, 0), upgrades: migrateUpgrades(input.upgrades),
@@ -408,7 +410,11 @@ function normalizePublicName(value: unknown, fallback: string) {
 }
 
 function migrateEmployee(employee: FleetEmployee): FleetEmployee {
-  return { ...employee, baseGarageId: typeof employee.baseGarageId === 'string' ? employee.baseGarageId : 'garage-shs-hatch', regionalPreferences: migrateEmployeeRegionalPreferences(employee.regionalPreferences) };
+  return { ...employee, qualifications: Array.isArray(employee.qualifications) && employee.qualifications.length ? employee.qualifications : ['CAR','TAXI'], baseGarageId: typeof employee.baseGarageId === 'string' ? employee.baseGarageId : 'garage-shs-hatch', regionalPreferences: migrateEmployeeRegionalPreferences(employee.regionalPreferences) };
+}
+
+function validVehicleModel(model: FleetVehicle['model']): FleetVehicle['model'] {
+  return ['Hatch 1998','Sedan 2012','Compacto 2010','Sedan Executivo 2018','SUV Urbano 2020','Moto Urbana 125','Moto Cargo 160','Scooter Express 150','Triciclo Cargo 200','Hatch Entrega','Furgão Compacto','Van de Carga','Picape Leve','Furgão Médio','Utilitário Baú'].includes(model) ? model : 'Hatch 1998';
 }
 
 function migrateEmployeeRegionalPreferences(input: Partial<EmployeeRegionalPreferences> | undefined): EmployeeRegionalPreferences {

@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 import { GAME_CONFIG } from '../config/gameConfig';
 import type { OnlineHudSnapshot, PlayerSettings, Point } from '../types/game';
-import { createCarVisual } from '../game/entities/VehicleVisual';
+import { createFleetVehicleVisual } from '../game/entities/VehicleVisual';
 import type { PriorityTrafficVehicle, TrafficSystem } from '../game/traffic/TrafficSystem';
 import { interestLevel } from './adaptiveRate';
 import { RemoteInterpolationBuffer } from './interpolation';
@@ -136,7 +136,7 @@ export class RemoteVehicleSystem {
 
   private createVisual(snapshot: MovementSnapshot) {
     const colors = { amber: 0xc97732, blue: 0x4f86d9, green: 0x39a879, violet: 0x8e6bbf, taxi: 0xf1cc45 } as const;
-    return createCarVisual(this.scene, colors[snapshot.colorId] ?? colors.amber, snapshot.vehicleModel === 'Hatch 1998', snapshot.colorId === 'taxi').setScale(0.78).setDepth(31);
+    return createFleetVehicleVisual(this.scene, snapshot.vehicleModel, colors[snapshot.colorId] ?? colors.amber, snapshot.colorId === 'taxi').setScale(0.78).setDepth(31);
   }
 
   private createLabel(snapshot: MovementSnapshot) {

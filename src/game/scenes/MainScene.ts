@@ -6,7 +6,7 @@ import { GraphRouter } from '../../map/routing/GraphRouter';
 import { visibleRoadWidth } from '../../map/routing/roadRules';
 import type { CollisionSeverity, CityMapData, FleetReport, HudSnapshot, MapServiceLocation, MapSignal, PlayerSave, Point } from '../../types/game';
 import { gameEvents, type GameCommand } from '../events';
-import { createCarVisual, createPassengerVisual } from '../entities/VehicleVisual';
+import { createFleetVehicleVisual, createPassengerVisual } from '../entities/VehicleVisual';
 import { MissionSystem } from '../missions/MissionSystem';
 import { RoadSurfaceIndex } from '../systems/RoadSurfaceIndex';
 import { advanceActiveRoute } from '../systems/RouteProgress';
@@ -31,7 +31,7 @@ import {
   acknowledgeFleetReport, advanceFleetShift, assignEmployee, dismissEmployee, endFleetShift,
   hireEmployee, purchaseRegionalGarage, purchaseSecondVehicle, selectPlayerVehicle, simulateOfflineReturn,
   startFleetShift, syncActiveVehicleFromLegacy, unassignEmployee,
-  updateEmployeeRegionalPreferences
+  updateEmployeeRegionalPreferences, purchaseBusiness, purchaseLightVehicle, trainEmployee, transferFleetEntity
 } from '../fleet/FleetService';
 import { FleetVehicleSystem } from '../fleet/FleetVehicleSystem';
 import { recordRegionalRide } from '../regions/FamiliarityService';
@@ -175,7 +175,7 @@ export class MainScene extends Phaser.Scene {
       }
       this.renderMap(this.map);
       this.vehicle = new VehicleController(this.save.position, this.save.rotation, surface);
-      this.vehicle.setModifiers(upgradeEffects(this.save.upgrades));
+      this.vehicle.setModifiers(this.activeVehicleModifiers());
       this.vehicle.alignToRoad(true);
       this.save.position = { ...this.vehicle.position };
       this.save.rotation = this.vehicle.rotation;
@@ -479,6 +479,11 @@ export class MainScene extends Phaser.Scene {
       this.save.xp += this.mission.receipt.xp;
       this.save.rating = Math.round((this.save.rating * 0.82 + receipt.rating * 0.18) * 100) / 100;
       this.save.completedRides += 1;
+      if (this.mission.mission.workKind) {
+        const businessKind = ['document','food','small-parcel','express','multi-stop'].includes(this.mission.mission.workKind) ? 'delivery' : 'light-freight';
+        const business = this.save.businesses.find((item) => item.kind === businessKind);
+        if (business) { business.completedJobs += 1; business.grossRevenue = roundMoney(business.grossRevenue + receipt.total); }
+      }
       this.save.tipsEarned += tip;
       this.save.ratingHistory = [...this.save.ratingHistory, receipt.rating].slice(-30);
       this.save.rideHistory = [{
@@ -1192,8 +1197,8 @@ export class MainScene extends Phaser.Scene {
     if (command.type === 'buy-fleet-vehicle') {
       const garage = this.activeNearbyService('garage');
       if (!garage) return;
-      const result = purchaseSecondVehicle(this.save, command.requestId, garage);
-      this.emitToast(result.applied ? 'Sedan 2012 adquirido, registrado e estacionado na garagem.' : result.reason === 'capacity' ? 'Esta garagem já possui 5 veículos. Compre outra garagem ou transfira um veículo.' : result.reason === 'garage' ? 'Compre esta garagem antes de registrar veículos nela.' : result.reason === 'not-licensed' ? 'Regularize-se antes de adquirir o Sedan.' : 'Saldo insuficiente para a compra.', result.applied ? 'success' : 'warning');
+      const result = purchaseSecondVehicle(this.save, command.requestId, garage, command.model);
+      this.emitToast(result.applied ? `${command.model ?? 'Sedan 2012'} adquirido, registrado e estacionado na garagem.` : result.reason === 'capacity' ? 'Esta garagem já possui 5 veículos. Compre outra garagem ou transfira um veículo.' : result.reason === 'garage' ? 'Compre esta garagem antes de registrar veículos nela.' : result.reason === 'not-licensed' ? 'Regularize-se antes de adquirir o veículo.' : 'Saldo insuficiente para a compra.', result.applied ? 'success' : 'warning');
       if (result.applied) this.persist();
       return;
     }
@@ -1202,6 +1207,48 @@ export class MainScene extends Phaser.Scene {
       if (!service || service.id !== command.serviceId) return;
       const result = purchaseRegionalGarage(this.save, service, command.requestId);
       this.emitToast(result.applied ? `${service.gameName} agora pertence à sua frota.` : result.reason === 'owned' ? 'Essa garagem já pertence à sua frota.' : 'Saldo insuficiente para comprar a garagem.', result.applied ? 'success' : 'warning');
+      if (result.applied) this.persist();
+      return;
+    }
+    if (command.type === 'generate-work' && this.mission && this.vehicle) {
+      const ownsBusiness = this.save.businesses.some((business) => business.kind === command.business);
+      const model = this.activeFleetVehicle()?.model;
+      const deliveryModels = ['Moto Urbana 125','Moto Cargo 160','Scooter Express 150','Triciclo Cargo 200','Hatch Entrega'];
+      const freightModels = ['Furgão Compacto','Van de Carga','Picape Leve','Furgão Médio','Utilitário Baú'];
+      const compatible = model && (command.business === 'delivery' ? deliveryModels : freightModels).includes(model);
+      if (!ownsBusiness || !compatible) {
+        this.emitToast(!ownsBusiness ? 'Abra a empresa antes de buscar trabalhos.' : 'Selecione um veículo compatível na garagem.', 'warning');
+        return;
+      }
+      this.mission.nextWork(this.vehicle.position, this.save.completedRides, command.business);
+      resetTaxiMeter(this.save.taxiMeter);
+      this.syncMissionVisuals();
+      this.emitToast('Nova oferta comercial gerada com coleta pela rota real.', 'success');
+      return;
+    }
+    if (command.type === 'purchase-business') {
+      const result = purchaseBusiness(this.save, command.kind, command.garageId, command.requestId);
+      this.emitToast(result.applied ? `${command.kind === 'delivery' ? 'Central de Entregas' : 'Frete Brasília'} aberta e vinculada à garagem.` : 'Requisitos, garagem ou saldo insuficientes.', result.applied ? 'success' : 'warning');
+      if (result.applied) this.persist();
+      return;
+    }
+    if (command.type === 'purchase-light-vehicle') {
+      const garage = this.services?.locations.find((service) => service.id === command.garageId && service.category === 'garage');
+      if (!garage) return;
+      const result = purchaseLightVehicle(this.save, command.model, garage, command.requestId);
+      this.emitToast(result.applied ? `${command.model} comprado e estacionado em ${garage.gameName}.` : 'Empresa, capacidade, compatibilidade ou saldo insuficientes.', result.applied ? 'success' : 'warning');
+      if (result.applied) this.persist();
+      return;
+    }
+    if (command.type === 'train-employee') {
+      const result = trainEmployee(this.save, command.employeeId, command.qualification, command.requestId);
+      this.emitToast(result.applied ? 'Qualificação concluída.' : 'Treinamento indisponível durante turno ou já concluído.', result.applied ? 'success' : 'warning');
+      if (result.applied) this.persist();
+      return;
+    }
+    if (command.type === 'transfer-fleet-entity') {
+      const result = transferFleetEntity(this.save, command.entityKind, command.entityId, command.targetGarageId, command.requestId);
+      this.emitToast(result.applied ? 'Transferência entre garagens concluída.' : 'Entidade em uso, garagem cheia ou destino inválido.', result.applied ? 'success' : 'warning');
       if (result.applied) this.persist();
       return;
     }
@@ -1343,7 +1390,7 @@ export class MainScene extends Phaser.Scene {
     const result = new EconomyService(this.save).expense(price, 'upgrade', location.gameName, requestId, false, { upgrade, level: nextLevel });
     if (!result.applied) { this.emitToast(result.reason === 'duplicate' ? 'Melhoria já registrada.' : 'Saldo insuficiente para essa melhoria.', 'warning'); return; }
     this.save.upgrades[upgrade] = nextLevel;
-    this.vehicle.setModifiers(upgradeEffects(this.save.upgrades));
+    this.vehicle.setModifiers(this.activeVehicleModifiers());
     refreshProgression(this.save);
     this.emitToast(`${ECONOMY_CONFIG.upgrades[upgrade].name} agora está no nível ${nextLevel}.`, 'success');
     this.resumeAfterService();
@@ -1366,10 +1413,22 @@ export class MainScene extends Phaser.Scene {
     return this.save.fleet.vehicles.find((vehicle) => vehicle.id === this.save.activeVehicleId);
   }
 
+  private activeVehicleModifiers() {
+    const effects = upgradeEffects(this.save.upgrades);
+    const model = this.activeFleetVehicle()?.model ?? 'Hatch 1998';
+    const motorcycle = ['Moto Urbana 125','Moto Cargo 160','Scooter Express 150','Triciclo Cargo 200'].includes(model);
+    const largeCargo = ['Van de Carga','Furgão Médio','Utilitário Baú'].includes(model);
+    if (motorcycle) return { ...effects, maxSpeedMultiplier: effects.maxSpeedMultiplier * 0.92, accelerationMultiplier: effects.accelerationMultiplier * 1.18, brakingMultiplier: effects.brakingMultiplier * 1.08, steeringMultiplier: effects.steeringMultiplier * 1.22, offRoadMultiplier: effects.offRoadMultiplier * 0.72, fuelMultiplier: effects.fuelMultiplier * 0.42 };
+    if (largeCargo) return { ...effects, maxSpeedMultiplier: effects.maxSpeedMultiplier * 0.82, accelerationMultiplier: effects.accelerationMultiplier * 0.68, brakingMultiplier: effects.brakingMultiplier * 0.78, steeringMultiplier: effects.steeringMultiplier * 0.76, offRoadMultiplier: effects.offRoadMultiplier * 0.82, fuelMultiplier: effects.fuelMultiplier * 1.45 };
+    if (model === 'Furgão Compacto' || model === 'Picape Leve') return { ...effects, maxSpeedMultiplier: effects.maxSpeedMultiplier * 0.9, accelerationMultiplier: effects.accelerationMultiplier * 0.82, steeringMultiplier: effects.steeringMultiplier * 0.88, fuelMultiplier: effects.fuelMultiplier * 1.18 };
+    return effects;
+  }
+
   private createPlayerVehicleVisual() {
     const vehicle = this.activeFleetVehicle();
     const sedan = vehicle?.model === 'Sedan 2012';
-    return createCarVisual(this, sedan ? 0x4aa7a1 : 0xc97732, !sedan, vehicle?.taxiVisualEnabled === true).setScale(sedan ? 0.76 : 0.74);
+    return createFleetVehicleVisual(this, vehicle?.model ?? 'Hatch 1998', sedan ? 0x4aa7a1 : 0xc97732, vehicle?.taxiVisualEnabled === true)
+      .setScale(vehicle?.model?.startsWith('Moto') ? 0.88 : sedan ? 0.76 : 0.74);
   }
 
   private refreshPlayerVehicleVisual() {
@@ -1383,7 +1442,7 @@ export class MainScene extends Phaser.Scene {
   private rebuildPlayerVehicle() {
     if (!this.roadSurface) return;
     this.vehicle = new VehicleController(this.save.position, this.save.rotation, this.roadSurface);
-    this.vehicle.setModifiers(upgradeEffects(this.save.upgrades));
+    this.vehicle.setModifiers(this.activeVehicleModifiers());
     this.vehicle.alignToRoad(true, this.save.rotation);
     this.refreshPlayerVehicleVisual();
     this.updateMissionVehicleContext();
@@ -1608,7 +1667,7 @@ export class MainScene extends Phaser.Scene {
     }
     if (action === 'upgrade-all') {
       Object.keys(this.save.upgrades).forEach((id) => { this.save.upgrades[id as keyof typeof this.save.upgrades] = 3; });
-      this.vehicle.setModifiers(upgradeEffects(this.save.upgrades));
+      this.vehicle.setModifiers(this.activeVehicleModifiers());
     }
     if (action.startsWith('simulate-')) {
       const rides = Number(action.split('-')[1]);
@@ -1802,6 +1861,7 @@ export class MainScene extends Phaser.Scene {
       officialTaxiRides: this.save.officialTaxiRides,
       activeVehicleId: this.save.activeVehicleId,
       fleet: structuredClone(this.save.fleet),
+      businesses: structuredClone(this.save.businesses),
       fleetVehicleVisible: this.fleetVehicles?.isVisible() ?? false,
       fleetRouteTarget: fleetTelemetry.target,
       fleetRouteRemaining: fleetTelemetry.remaining,

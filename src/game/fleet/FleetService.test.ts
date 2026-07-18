@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
+import { GAME_CONFIG } from '../../config/gameConfig';
 import { createNewSave } from '../../services/storage/saveService';
 import { regularizeTaxi } from '../progression/RegularizationService';
-import { advanceFleetShift, assignEmployee, fleetOperationalState, fleetSimulationLevel, hireEmployee, purchaseSecondVehicle, simulateOfflineReturn, startFleetShift, updateEmployeeRegionalPreferences } from './FleetService';
+import type { MapServiceLocation } from '../../types/game';
+import { advanceFleetShift, assignEmployee, availableCandidates, fleetOperationalState, fleetSimulationLevel, hireEmployee, purchaseBusiness, purchaseLightVehicle, purchaseSecondVehicle, simulateOfflineReturn, startFleetShift, trainEmployee, updateEmployeeRegionalPreferences } from './FleetService';
 
 function fleetReady() {
   const save = createNewSave();
@@ -16,6 +18,39 @@ function fleetReady() {
 }
 
 describe('primeira frota', () => {
+  it('expõe cinco modelos para passageiros, cinco para entregas e cinco para frete', () => {
+    expect(['Hatch 1998','Sedan 2012', ...Object.keys(GAME_CONFIG.fleet.passengerVehiclePrices)]).toHaveLength(5);
+    expect(Object.keys(GAME_CONFIG.fleet.vehiclePrices).slice(0, 5)).toHaveLength(5);
+    expect(Object.keys(GAME_CONFIG.fleet.vehiclePrices).slice(5)).toHaveLength(5);
+  });
+  it('oferece oito candidatos e permite preencher os cinco postos da garagem', () => {
+    const save = createNewSave();
+    save.money = 10_000; save.completedRides = 20; save.xp = 1_000; save.rating = 4.8; save.totalKm = 30;
+    regularizeTaxi(save, 'regularize-team');
+    expect(availableCandidates(save)).toHaveLength(8);
+    for (const candidate of availableCandidates(save, 5)) expect(hireEmployee(save, candidate.id, `hire-${candidate.id}`).applied).toBe(true);
+    expect(save.fleet.employees).toHaveLength(5);
+    expect(hireEmployee(save, availableCandidates(save, 1)[0].id, 'hire-over-capacity').applied).toBe(false);
+  });
+
+  it('compra empresas, treina funcionário e registra os dez modelos comerciais', () => {
+    const save = createNewSave();
+    save.money = 50_000; save.completedRides = 20; save.xp = 1_000; save.rating = 4.8; save.totalKm = 30;
+    regularizeTaxi(save, 'regularize-business');
+    const garage = { id: 'garage-shs-hatch', category: 'garage', gameName: 'Garagem', stopPoint: { x: 0, y: 0 }, regionId: 'sudoeste' } as MapServiceLocation;
+    expect(purchaseBusiness(save, 'delivery', garage.id, 'business-delivery').applied).toBe(true);
+    expect(purchaseBusiness(save, 'delivery', garage.id, 'business-delivery-repeat').applied).toBe(false);
+    expect(purchaseBusiness(save, 'light-freight', garage.id, 'business-freight').applied).toBe(true);
+    expect(hireEmployee(save, 'bia-rocha', 'hire-commercial').applied).toBe(true);
+    const employee = save.fleet.employees.find((item) => item.id === 'bia-rocha')!;
+    expect(trainEmployee(save, employee.id, 'MOTORCYCLE', 'training-moto').applied).toBe(true);
+    const models = ['Moto Urbana 125','Moto Cargo 160','Scooter Express 150','Triciclo Cargo 200'] as const;
+    for (const model of models) expect(purchaseLightVehicle(save, model, garage, `buy-${model}`).applied).toBe(true);
+    expect(purchaseLightVehicle(save, 'Hatch Entrega', garage, 'garage-capacity').applied).toBe(false);
+    const moto = save.fleet.vehicles.find((vehicle) => vehicle.model === 'Moto Urbana 125')!;
+    expect(assignEmployee(save, employee.id, moto.id).applied).toBe(true);
+    expect(startFleetShift(save, employee.id, 'delivery-shift').applied).toBe(true);
+  });
   it('impede veículo e motorista duplicados', () => {
     const { save, employee, sedan } = fleetReady();
     expect(assignEmployee(save, employee.id, sedan.id).applied).toBe(false);

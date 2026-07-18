@@ -1,4 +1,4 @@
-import type { AccountLinkState, CameraZoom, EmployeeRegionalPreferences, HudSnapshot, PlayerSave, Quality, RegionPreference, ServiceCategory, TrafficDensity, VehicleUpgradeId } from '../types/game';
+import type { AccountLinkState, BusinessKind, CameraZoom, EmployeeQualification, EmployeeRegionalPreferences, HudSnapshot, PlayerSave, Quality, RegionPreference, ServiceCategory, TrafficDensity, VehicleModel, VehicleUpgradeId } from '../types/game';
 import type { WorkshopServiceId } from './economy/ExpenseCalculator';
 
 export type GameCommand =
@@ -21,6 +21,7 @@ export type GameCommand =
   | { type: 'dismiss-receipt' }
   | { type: 'accept-ride' }
   | { type: 'reject-ride' }
+  | { type: 'generate-work'; business: 'delivery' | 'light-freight' }
   | { type: 'navigate-service'; serviceId: string }
   | { type: 'navigate-nearest-service'; category: Extract<ServiceCategory, 'fuel' | 'workshop'> }
   | { type: 'clear-service-route' }
@@ -31,8 +32,12 @@ export type GameCommand =
   | { type: 'regularize-taxi'; requestId: string }
   | { type: 'convert-taxi'; requestId: string }
   | { type: 'hire-employee'; candidateId: string; requestId: string }
-  | { type: 'buy-fleet-vehicle'; requestId: string }
+  | { type: 'buy-fleet-vehicle'; requestId: string; model?: 'Sedan 2012' | 'Compacto 2010' | 'Sedan Executivo 2018' | 'SUV Urbano 2020' }
   | { type: 'buy-regional-garage'; serviceId: string; requestId: string }
+  | { type: 'purchase-business'; kind: Exclude<BusinessKind, 'taxi'>; garageId: string; requestId: string }
+  | { type: 'purchase-light-vehicle'; model: Exclude<VehicleModel, 'Hatch 1998' | 'Sedan 2012' | 'Compacto 2010' | 'Sedan Executivo 2018' | 'SUV Urbano 2020'>; garageId: string; requestId: string }
+  | { type: 'train-employee'; employeeId: string; qualification: EmployeeQualification; requestId: string }
+  | { type: 'transfer-fleet-entity'; entityKind: 'vehicle' | 'employee'; entityId: string; targetGarageId: string; requestId: string }
   | { type: 'assign-employee'; employeeId: string; vehicleId: string }
   | { type: 'unassign-employee'; employeeId: string }
   | { type: 'start-fleet-shift'; employeeId: string; requestId: string }

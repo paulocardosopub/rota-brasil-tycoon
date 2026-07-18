@@ -1,5 +1,5 @@
 import { GAME_CONFIG } from '../config/gameConfig';
-import type { Point } from '../types/game';
+import type { Point, VehicleModel } from '../types/game';
 
 export type OnlineControllerType = 'PLAYER' | 'EMPLOYEE' | 'OFFLINE_FLEET';
 export type TurnSignal = 'none' | 'left' | 'right' | 'hazard';
@@ -25,7 +25,7 @@ export interface MovementSnapshot {
   turnSignal: TurnSignal;
   braking: boolean;
   controllerType: OnlineControllerType;
-  vehicleModel: 'Hatch 1998' | 'Sedan 2012';
+  vehicleModel: VehicleModel;
   colorId: 'amber' | 'blue' | 'green' | 'violet' | 'taxi';
   fleetPublicId: string | null;
 }
@@ -114,7 +114,7 @@ function structurallyValid(value: MovementSnapshot) {
     && ['free', 'occupied', 'stopped'].includes(value.vehicleState)
     && ['none', 'left', 'right', 'hazard'].includes(value.turnSignal)
     && ['PLAYER', 'EMPLOYEE', 'OFFLINE_FLEET'].includes(value.controllerType)
-    && ['Hatch 1998', 'Sedan 2012'].includes(value.vehicleModel)
+    && ['Hatch 1998', 'Sedan 2012', 'Compacto 2010', 'Sedan Executivo 2018', 'SUV Urbano 2020', 'Moto Urbana 125', 'Moto Cargo 160', 'Scooter Express 150', 'Triciclo Cargo 200', 'Hatch Entrega', 'Furgão Compacto', 'Van de Carga', 'Picape Leve', 'Furgão Médio', 'Utilitário Baú'].includes(value.vehicleModel)
     && ['amber', 'blue', 'green', 'violet', 'taxi'].includes(value.colorId)
     && (value.fleetPublicId === null || typeof value.fleetPublicId === 'string');
 }
