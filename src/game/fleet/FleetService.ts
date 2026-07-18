@@ -13,6 +13,7 @@ export function createFleetVehicle(input: {
   purchasePrice: number; taxiLicensed?: boolean;
 }): FleetVehicle {
   const now = new Date().toISOString();
+  const bus = busVehicleSpec(input.model);
   return {
     id: input.id ?? entityId('vehicle'), ownerId: input.ownerId, fleetId: input.fleetId,
     model: input.model, controllerType: 'PLAYER', controllerId: input.ownerId, authority: 'local',
@@ -27,7 +28,8 @@ export function createFleetVehicle(input: {
     nextMaintenanceKm: Math.ceil(input.totalKm / 100 + 1) * 100,
     baseGarageId: 'garage-shs-hatch',
     cargoCapacityKg: vehicleSpec(input.model).cargoKg,
-    cargoVolumeM3: vehicleSpec(input.model).volumeM3
+    cargoVolumeM3: vehicleSpec(input.model).volumeM3,
+    ...(bus ?? {})
   };
 }
 
@@ -139,7 +141,14 @@ export function unassignEmployee(save: PlayerSave, employeeId: string) {
   return { applied: true, employee, vehicle };
 }
 
+export function busVehicleSpec(model: VehicleModel) {
+  if (model === 'Micro-ônibus Urbano') return { seatedCapacity: 18, passengerCapacity: 24, lengthMeters: 8.2, widthMeters: 2.35, turningRadiusMeters: 8.1, maintenanceCostPerKm: 0.72 };
+  if (model === 'Ônibus Urbano Convencional') return { seatedCapacity: 36, passengerCapacity: 72, lengthMeters: 12.6, widthMeters: 2.5, turningRadiusMeters: 10.8, maintenanceCostPerKm: 1.18 };
+  return null;
+}
+
 function requiredQualification(model: VehicleModel): EmployeeQualification {
+  if (model === 'Micro-ônibus Urbano' || model === 'Ônibus Urbano Convencional') return 'BUS';
   if (['Moto Urbana 125','Moto Cargo 160','Scooter Express 150','Triciclo Cargo 200'].includes(model)) return 'MOTORCYCLE';
   if (model === 'Hatch Entrega' || model === 'Furgão Compacto' || model === 'Picape Leve') return 'DELIVERY_VAN';
   if (['Van de Carga','Furgão Médio','Utilitário Baú'].includes(model)) return 'LIGHT_FREIGHT';
@@ -156,8 +165,9 @@ export function purchaseBusiness(save: PlayerSave, kind: Exclude<BusinessKind, '
   if (!save.fleet.garages.some((garage) => garage.serviceId === garageId)) return { applied: false, reason: 'garage' as const };
   if (kind === 'delivery' && save.completedRides < 5) return { applied: false, reason: 'requirements' as const };
   if (kind === 'light-freight' && (!save.businesses.some((business) => business.kind === 'delivery') || save.completedRides < 10)) return { applied: false, reason: 'requirements' as const };
-  const price = kind === 'delivery' ? GAME_CONFIG.fleet.deliveryBusinessPrice : GAME_CONFIG.fleet.freightBusinessPrice;
-  const name = kind === 'delivery' ? 'Central de Entregas' : 'Frete Brasília';
+  if (kind === 'bus' && (!save.businesses.some((business) => business.kind === 'light-freight') || save.completedRides < 15)) return { applied: false, reason: 'requirements' as const };
+  const price = kind === 'delivery' ? GAME_CONFIG.fleet.deliveryBusinessPrice : kind === 'light-freight' ? GAME_CONFIG.fleet.freightBusinessPrice : GAME_CONFIG.fleet.busBusinessPrice;
+  const name = kind === 'delivery' ? 'Central de Entregas' : kind === 'light-freight' ? 'Frete Brasília' : 'Rota Coletiva Brasília';
   const result = new EconomyService(save).expense(price, 'fleet-purchase', `Empresa • ${name}`, requestId, false, fleetContext(save, 'none', 'none', 'none'));
   if (!result.applied) return result;
   const business = { kind, name, purchasedAt: new Date().toISOString(), baseGarageId: garageId, completedJobs: 0, grossRevenue: 0 };
@@ -169,9 +179,9 @@ export function purchaseLightVehicle(save: PlayerSave, model: Exclude<VehicleMod
   const garage = save.fleet.garages.find((item) => item.serviceId === garageService.id);
   if (!garage) return { applied: false, reason: 'garage' as const };
   if (garageVehicleCount(save, garage.serviceId) >= 5) return { applied: false, reason: 'capacity' as const };
-  const requiredBusiness = ['Moto Urbana 125','Moto Cargo 160','Scooter Express 150','Triciclo Cargo 200','Hatch Entrega'].includes(model) ? 'delivery' : 'light-freight';
+  const requiredBusiness = ['Micro-ônibus Urbano','Ônibus Urbano Convencional'].includes(model) ? 'bus' : ['Moto Urbana 125','Moto Cargo 160','Scooter Express 150','Triciclo Cargo 200','Hatch Entrega'].includes(model) ? 'delivery' : 'light-freight';
   if (!save.businesses.some((business) => business.kind === requiredBusiness)) return { applied: false, reason: 'business' as const };
-  if (model === 'Van de Carga' && garage.regionId === 'centro') return { applied: false, reason: 'incompatible' as const };
+  if ((model === 'Van de Carga' && garage.regionId === 'centro') || (requiredBusiness === 'bus' && !['centro','asa-sul','sudoeste'].includes(garage.regionId))) return { applied: false, reason: 'incompatible' as const };
   const price = GAME_CONFIG.fleet.vehiclePrices[model];
   const result = new EconomyService(save).expense(price, 'fleet-purchase', `Veículo • ${model}`, requestId, false, fleetContext(save, 'pending', 'none', 'none'));
   if (!result.applied) return result;
@@ -185,13 +195,16 @@ export function trainEmployee(save: PlayerSave, employeeId: string, qualificatio
   const employee = save.fleet.employees.find((item) => item.id === employeeId);
   if (!employee || save.fleet.activeShift?.employeeId === employeeId) return { applied: false, reason: 'in-use' as const };
   if (employee.qualifications.includes(qualification)) return { applied: false, reason: 'trained' as const };
-  const result = new EconomyService(save).expense(GAME_CONFIG.fleet.employeeTrainingCost, 'commission', `Treinamento • ${qualification}`, requestId, false, fleetContext(save, 'none', employeeId, 'none'));
+  const trainingCost = qualification === 'BUS' ? GAME_CONFIG.fleet.busQualificationCost : GAME_CONFIG.fleet.employeeTrainingCost;
+  const result = new EconomyService(save).expense(trainingCost, 'commission', `Treinamento • ${qualification}`, requestId, false, fleetContext(save, 'none', employeeId, 'none'));
   if (!result.applied) return result;
   employee.qualifications.push(qualification);
   return { applied: true, employee, transaction: result.transaction };
 }
 
 function vehicleSpec(model: VehicleModel) {
+  if (model === 'Micro-ônibus Urbano') return { fuelCapacity: 110, initialFuel: 62, cargoKg: 1_900, volumeM3: 18 };
+  if (model === 'Ônibus Urbano Convencional') return { fuelCapacity: 220, initialFuel: 125, cargoKg: 5_500, volumeM3: 42 };
   if (model === 'Moto Urbana 125') return { fuelCapacity: 12, initialFuel: 8, cargoKg: 18, volumeM3: 0.08 };
   if (model === 'Moto Cargo 160') return { fuelCapacity: 14, initialFuel: 9, cargoKg: 35, volumeM3: 0.16 };
   if (model === 'Scooter Express 150') return { fuelCapacity: 11, initialFuel: 7, cargoKg: 22, volumeM3: 0.11 };

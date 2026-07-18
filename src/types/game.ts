@@ -16,9 +16,10 @@ export type TaxiMeterState = 'free' | 'en-route' | 'boarding' | 'occupied' | 'wa
 export type FleetControllerType = 'PLAYER' | 'EMPLOYEE' | 'AMBIENT_NPC' | 'FUTURE_REMOTE_PLAYER' | 'FUTURE_REMOTE_EMPLOYEE';
 export type VehicleModel = 'Hatch 1998' | 'Sedan 2012' | 'Compacto 2010' | 'Sedan Executivo 2018' | 'SUV Urbano 2020'
   | 'Moto Urbana 125' | 'Moto Cargo 160' | 'Scooter Express 150' | 'Triciclo Cargo 200' | 'Hatch Entrega'
-  | 'Furgão Compacto' | 'Van de Carga' | 'Picape Leve' | 'Furgão Médio' | 'Utilitário Baú';
-export type EmployeeQualification = 'CAR' | 'TAXI' | 'MOTORCYCLE' | 'DELIVERY_VAN' | 'LIGHT_FREIGHT';
-export type BusinessKind = 'taxi' | 'delivery' | 'light-freight';
+  | 'Furgão Compacto' | 'Van de Carga' | 'Picape Leve' | 'Furgão Médio' | 'Utilitário Baú'
+  | 'Micro-ônibus Urbano' | 'Ônibus Urbano Convencional';
+export type EmployeeQualification = 'CAR' | 'TAXI' | 'MOTORCYCLE' | 'DELIVERY_VAN' | 'LIGHT_FREIGHT' | 'BUS';
+export type BusinessKind = 'taxi' | 'delivery' | 'light-freight' | 'bus';
 export type WorkKind = 'passenger' | 'document' | 'food' | 'small-parcel' | 'express' | 'multi-stop' | 'urban-freight' | 'large-parcel' | 'small-move' | 'supply' | 'inter-region-freight';
 export type FleetSimulationLevel = 'detailed' | 'simplified' | 'economic';
 export type FleetVehicleState = 'available' | 'player-driving' | 'employee-driving' | 'on-trip' | 'returning' | 'refueling' | 'maintenance' | 'out-of-fuel' | 'damaged' | 'parked';
@@ -426,6 +427,12 @@ export interface FleetVehicle {
   baseGarageId: string;
   cargoCapacityKg: number;
   cargoVolumeM3: number;
+  seatedCapacity?: number;
+  passengerCapacity?: number;
+  lengthMeters?: number;
+  widthMeters?: number;
+  turningRadiusMeters?: number;
+  maintenanceCostPerKm?: number;
 }
 
 export interface EmployeeCandidate {
@@ -556,6 +563,16 @@ export interface PlayerBusiness {
   grossRevenue: number;
 }
 
+export type BusDoorState = 'closed' | 'open';
+export type BusOperationStatus = 'idle' | 'heading-to-stop' | 'at-stop' | 'completed';
+export interface BusLineStop { id: string; name: string; lat: number; lon: number; osmType: 'node' | 'way' | 'relation'; osmId: string; regionId: string; }
+export interface BusLine { id: string; publicCode: string; name: string; operator: string; color: string; stops: BusLineStop[]; distanceKm: number; estimatedMinutes: number; fare: number; demand: RegionDemandLevel; expectedOperatingCost: number; expectedProfit: number; sourceUrl: string; sourceLicense: string; }
+export interface BusOperationSnapshot {
+  lineId: string | null; status: BusOperationStatus; currentStopIndex: number; nextStopName: string | null;
+  doors: BusDoorState; occupancy: number; capacity: number; boarded: number; alighted: number; refused: number;
+  grossRevenue: number; delaySeconds: number; dwellRemainingSeconds: number; startedAt: string | null; completedTrips: number;
+}
+
 export interface ClockGuard {
   lastSeenAt: string;
   lastTrustedAt: string;
@@ -627,6 +644,7 @@ export interface PlayerSave {
   activeVehicleId: string;
   fleet: PlayerFleet;
   businesses: PlayerBusiness[];
+  busOperation: BusOperationSnapshot;
   clockGuard: ClockGuard;
   mapVersion: string;
   currentChunk: string;
@@ -769,6 +787,7 @@ export interface HudSnapshot {
   activeVehicleId: string;
   fleet: PlayerFleet;
   businesses: PlayerBusiness[];
+  busOperation: BusOperationSnapshot;
   fleetVehicleVisible: boolean;
   fleetRouteTarget: Point | null;
   fleetRouteRemaining: number;

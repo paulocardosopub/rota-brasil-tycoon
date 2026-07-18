@@ -1,8 +1,8 @@
 import { COLLISION_PHYSICS, VEHICLE_PHYSICS } from './vehiclePhysics';
 
 export const GAME_CONFIG = {
-  version: '0.8.4',
-  saveVersion: 9,
+  version: '0.8.5',
+  saveVersion: 10,
   mapVersion: 'brasilia-0.8.2',
   map: {
     city: 'Brasília',
@@ -136,10 +136,13 @@ export const GAME_CONFIG = {
     employeeTrainingCost: 90,
     deliveryBusinessPrice: 480,
     freightBusinessPrice: 1_200,
+    busBusinessPrice: 3_600,
+    busQualificationCost: 240,
     passengerVehiclePrices: { 'Compacto 2010': 820, 'Sedan Executivo 2018': 1_450, 'SUV Urbano 2020': 2_100 },
     vehiclePrices: {
       'Moto Urbana 125': 280, 'Moto Cargo 160': 430, 'Scooter Express 150': 360, 'Triciclo Cargo 200': 620, 'Hatch Entrega': 780,
-      'Furgão Compacto': 1_050, 'Van de Carga': 1_750, 'Picape Leve': 1_350, 'Furgão Médio': 2_250, 'Utilitário Baú': 3_400
+      'Furgão Compacto': 1_050, 'Van de Carga': 1_750, 'Picape Leve': 1_350, 'Furgão Médio': 2_250, 'Utilitário Baú': 3_400,
+      'Micro-ônibus Urbano': 4_800, 'Ônibus Urbano Convencional': 7_900
     },
     secondVehiclePrice: 650,
     secondVehicleCondition: 78,

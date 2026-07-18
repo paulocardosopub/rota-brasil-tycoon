@@ -112,7 +112,12 @@ export function createNewSave(position = { x: 0, y: 0 }): PlayerSave {
     regionalBaseServiceId: null,
     lastCloudRevision: 0,
     cloudLineageId: createLineageId(),
-    businesses: []
+    businesses: [],
+    busOperation: {
+      lineId: null, status: 'idle', currentStopIndex: 0, nextStopName: null, doors: 'closed',
+      occupancy: 0, capacity: 0, boarded: 0, alighted: 0, refused: 0, grossRevenue: 0,
+      delaySeconds: 0, dwellRemainingSeconds: 0, startedAt: null, completedTrips: 0
+    }
   };
 }
 
@@ -130,7 +135,7 @@ export function migrateSave(input: unknown): PlayerSave {
     saveVersion: GAME_CONFIG.saveVersion,
     revision: Number.isFinite(raw.revision) ? Math.max(1, raw.revision!) : 1,
     money: finiteMoney(raw.money, fresh.money),
-    fuel: Number.isFinite(raw.fuel) ? Math.max(0, Math.min(40, raw.fuel!)) : fresh.fuel,
+    fuel: Number.isFinite(raw.fuel) ? Math.max(0, Math.min(240, raw.fuel!)) : fresh.fuel,
     condition: clamp(legacyCondition, 0, 100),
     position: raw.position && Number.isFinite(raw.position.x) && Number.isFinite(raw.position.y) ? raw.position : fresh.position,
     settings: migrateSettings(raw.settings),
@@ -186,7 +191,13 @@ export function migrateSave(input: unknown): PlayerSave {
     regionalBaseServiceId: typeof raw.regionalBaseServiceId === 'string' ? raw.regionalBaseServiceId : null,
     lastCloudRevision: Math.max(0, Math.floor(finite(raw.lastCloudRevision, 0))),
     cloudLineageId: validLineageId(raw.cloudLineageId) ? raw.cloudLineageId! : fresh.cloudLineageId,
-    businesses: Array.isArray(raw.businesses) ? raw.businesses.filter((business) => business && ['taxi','delivery','light-freight'].includes(business.kind)) : []
+    businesses: Array.isArray(raw.businesses) ? raw.businesses.filter((business) => business && ['taxi','delivery','light-freight','bus'].includes(business.kind)) : [],
+    busOperation: {
+      ...fresh.busOperation, ...(raw.busOperation ?? {}),
+      doors: raw.busOperation?.doors === 'open' ? 'open' as const : 'closed' as const,
+      occupancy: Math.max(0, Math.floor(finite(raw.busOperation?.occupancy, 0))),
+      grossRevenue: finiteMoney(raw.busOperation?.grossRevenue, 0)
+    }
   };
   migrated.fleet = migrateFleet(raw.fleet, migrated);
   if (!migrated.fleet.vehicles.some((vehicle) => vehicle.id === migrated.activeVehicleId)) {
@@ -414,7 +425,7 @@ function migrateEmployee(employee: FleetEmployee): FleetEmployee {
 }
 
 function validVehicleModel(model: FleetVehicle['model']): FleetVehicle['model'] {
-  return ['Hatch 1998','Sedan 2012','Compacto 2010','Sedan Executivo 2018','SUV Urbano 2020','Moto Urbana 125','Moto Cargo 160','Scooter Express 150','Triciclo Cargo 200','Hatch Entrega','Furgão Compacto','Van de Carga','Picape Leve','Furgão Médio','Utilitário Baú'].includes(model) ? model : 'Hatch 1998';
+  return ['Hatch 1998','Sedan 2012','Compacto 2010','Sedan Executivo 2018','SUV Urbano 2020','Moto Urbana 125','Moto Cargo 160','Scooter Express 150','Triciclo Cargo 200','Hatch Entrega','Furgão Compacto','Van de Carga','Picape Leve','Furgão Médio','Utilitário Baú','Micro-ônibus Urbano','Ônibus Urbano Convencional'].includes(model) ? model : 'Hatch 1998';
 }
 
 function migrateEmployeeRegionalPreferences(input: Partial<EmployeeRegionalPreferences> | undefined): EmployeeRegionalPreferences {
