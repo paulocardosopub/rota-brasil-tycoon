@@ -21,7 +21,8 @@ describe('primeira frota', () => {
   it('expõe cinco modelos para passageiros, cinco para entregas e cinco para frete', () => {
     expect(['Hatch 1998','Sedan 2012', ...Object.keys(GAME_CONFIG.fleet.passengerVehiclePrices)]).toHaveLength(5);
     expect(Object.keys(GAME_CONFIG.fleet.vehiclePrices).slice(0, 5)).toHaveLength(5);
-    expect(Object.keys(GAME_CONFIG.fleet.vehiclePrices).slice(5)).toHaveLength(5);
+    expect(Object.keys(GAME_CONFIG.fleet.vehiclePrices).slice(5, 10)).toHaveLength(5);
+    expect(Object.keys(GAME_CONFIG.fleet.vehiclePrices).slice(10)).toEqual(['Micro-ônibus Urbano','Ônibus Urbano Convencional']);
   });
   it('oferece oito candidatos e permite preencher os cinco postos da garagem', () => {
     const save = createNewSave();
@@ -50,6 +51,22 @@ describe('primeira frota', () => {
     const moto = save.fleet.vehicles.find((vehicle) => vehicle.model === 'Moto Urbana 125')!;
     expect(assignEmployee(save, employee.id, moto.id).applied).toBe(true);
     expect(startFleetShift(save, employee.id, 'delivery-shift').applied).toBe(true);
+  });
+  it('exige empresa, base compatível e qualificação BUS', () => {
+    const save = createNewSave();
+    save.money = 80_000; save.completedRides = 20; save.xp = 1_000; save.rating = 4.8; save.totalKm = 30;
+    regularizeTaxi(save, 'regularize-bus');
+    const garage = { id: 'garage-shs-hatch', category: 'garage', gameName: 'Garagem', stopPoint: { x: 0, y: 0 }, regionId: 'sudoeste' } as MapServiceLocation;
+    purchaseBusiness(save, 'delivery', garage.id, 'bus-delivery');
+    purchaseBusiness(save, 'light-freight', garage.id, 'bus-freight');
+    expect(purchaseBusiness(save, 'bus', garage.id, 'bus-company').applied).toBe(true);
+    expect(purchaseLightVehicle(save, 'Micro-ônibus Urbano', garage, 'bus-micro').applied).toBe(true);
+    hireEmployee(save, 'bia-rocha', 'bus-driver');
+    const employee = save.fleet.employees[0];
+    const micro = save.fleet.vehicles.find((vehicle) => vehicle.model === 'Micro-ônibus Urbano')!;
+    expect(assignEmployee(save, employee.id, micro.id).applied).toBe(false);
+    expect(trainEmployee(save, employee.id, 'BUS', 'bus-training').applied).toBe(true);
+    expect(assignEmployee(save, employee.id, micro.id).applied).toBe(true);
   });
   it('impede veículo e motorista duplicados', () => {
     const { save, employee, sedan } = fleetReady();

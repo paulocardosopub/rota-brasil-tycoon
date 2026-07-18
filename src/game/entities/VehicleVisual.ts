@@ -97,6 +97,9 @@ export function createMotorcycleVisual(scene: Phaser.Scene, color = 0x32c48d, ca
 }
 
 export function createFleetVehicleVisual(scene: Phaser.Scene, model: VehicleModel, color: number, taxi = false) {
+  if (model === 'Micro-ônibus Urbano' || model === 'Ônibus Urbano Convencional') {
+    return createBusVisual(scene, color).setScale(model === 'Micro-ônibus Urbano' ? 0.82 : 1.18);
+  }
   if (['Moto Urbana 125','Moto Cargo 160','Scooter Express 150','Triciclo Cargo 200'].includes(model)) {
     return createMotorcycleVisual(scene, color, model !== 'Moto Urbana 125').setScale(model === 'Triciclo Cargo 200' ? 1.15 : 1);
   }

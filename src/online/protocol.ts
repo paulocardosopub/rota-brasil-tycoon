@@ -114,7 +114,7 @@ function structurallyValid(value: MovementSnapshot) {
     && ['free', 'occupied', 'stopped'].includes(value.vehicleState)
     && ['none', 'left', 'right', 'hazard'].includes(value.turnSignal)
     && ['PLAYER', 'EMPLOYEE', 'OFFLINE_FLEET'].includes(value.controllerType)
-    && ['Hatch 1998', 'Sedan 2012', 'Compacto 2010', 'Sedan Executivo 2018', 'SUV Urbano 2020', 'Moto Urbana 125', 'Moto Cargo 160', 'Scooter Express 150', 'Triciclo Cargo 200', 'Hatch Entrega', 'Furgão Compacto', 'Van de Carga', 'Picape Leve', 'Furgão Médio', 'Utilitário Baú'].includes(value.vehicleModel)
+    && ['Hatch 1998', 'Sedan 2012', 'Compacto 2010', 'Sedan Executivo 2018', 'SUV Urbano 2020', 'Moto Urbana 125', 'Moto Cargo 160', 'Scooter Express 150', 'Triciclo Cargo 200', 'Hatch Entrega', 'Furgão Compacto', 'Van de Carga', 'Picape Leve', 'Furgão Médio', 'Utilitário Baú', 'Micro-ônibus Urbano', 'Ônibus Urbano Convencional'].includes(value.vehicleModel)
     && ['amber', 'blue', 'green', 'violet', 'taxi'].includes(value.colorId)
     && (value.fleetPublicId === null || typeof value.fleetPublicId === 'string');
 }

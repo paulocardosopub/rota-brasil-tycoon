@@ -11,6 +11,7 @@ import { forceCloudSave } from '../../services/supabase/cloudSaveService';
 import { ensureGuestSession, finishPermanentAccount, getAccountStatus, requestGuestAccountLink, type AccountStatus } from '../../services/supabase/authService';
 import type { CameraZoom, HudSnapshot, Quality, TrafficDensity } from '../../types/game';
 import { MobileControls } from './MobileControls';
+import { BUS_LINES } from '../../game/bus/BusTransitConfig';
 
 const emptyGoals = { firstRide: false, fiveRides: false, collisionFreeRide: false, firstTip: false, firstRefuel: false, firstWorkshop: false, firstUpgrade: false, rating45: false, tenKm: false, thousandReais: false };
 const emptyUpgrades = { engine: 0, brakes: 0, tires: 0, suspension: 0, economy: 0, comfort: 0 };
@@ -30,7 +31,7 @@ const initialHud: HudSnapshot = {
   nearbyService: null, selectedService: null, airTraffic: 0, trafficCapacity: 0,
   trafficHardCeiling: GAME_CONFIG.traffic.maximumTerrestrialEntities, trafficReservedSlots: 0, serviceLocations: [], taxiPoints: [],
   professionalStatus: emptySave.professionalStatus, taxiLicense: emptySave.taxiLicense, taxiMeter: emptySave.taxiMeter,
-  officialTaxiRides: 0, activeVehicleId: emptySave.activeVehicleId, fleet: emptySave.fleet, businesses: emptySave.businesses,
+  officialTaxiRides: 0, activeVehicleId: emptySave.activeVehicleId, fleet: emptySave.fleet, businesses: emptySave.businesses, busOperation: emptySave.busOperation,
   fleetVehicleVisible: false, fleetRouteTarget: null, fleetRouteRemaining: 0, fleetRoutePathRemaining: 0,
   fleetCompletedStops: 0, fleetRouteRecoveries: 0, fleetLastRecoveryReason: null,
   fleetDriverIdentification: null, totalTerrestrialEntities: 1,
@@ -122,6 +123,7 @@ export function Hud() {
       <section className="objective-card" data-testid="objective-card"><div className="objective-icon" style={{ transform: `rotate(${hud.headingDelta}rad)` }}>↑</div><div><small>OBJETIVO ATUAL</small><strong>{hud.objective}</strong><span>{hud.distanceRemaining < 1_000 ? `${Math.round(hud.distanceRemaining)} m` : `${(hud.distanceRemaining / 1000).toFixed(1)} km`} • aprox. {eta}</span></div></section>
       <div className="speedometer" data-testid="speedometer"><strong>{Math.round(hud.speedKmh)}</strong><span>km/h</span><small>{hud.speedKmh < 1 ? 'P' : 'D'}</small></div>
       {activeVehicle?.taxiLicensed && <TaxiMeter hud={hud} />}
+      {hud.busOperation.status !== 'idle' && <BusOperationHud hud={hud} />}
       {hud.mission?.phase === 'offered' && !panel && <RideOfferCard hud={hud} />}
       {fuelPercent <= 25 && <button className={`fuel-warning ${fuelPercent <= 5 ? 'critical' : ''}`} data-testid="fuel-route-alert" onClick={() => gameEvents.emit('command', { type: 'navigate-nearest-service', category: 'fuel' })}>COMBUSTÍVEL {fuelPercent <= 5 ? 'CRÍTICO' : fuelPercent <= 10 ? 'BAIXO' : 'EM 25%'} • IR AO POSTO</button>}
       {hud.condition <= 50 && <button className="repair-warning" data-testid="repair-route-alert" onClick={() => gameEvents.emit('command', { type: 'navigate-nearest-service', category: 'workshop' })}>REPARO NECESSÁRIO • IR À OFICINA</button>}
@@ -170,6 +172,19 @@ function TaxiMeter({ hud }: { hud: HudSnapshot }) {
     : meter.state === 'en-route' || meter.state === 'boarding' ? 'Inicia depois do embarque'
       : `${(meter.distanceMeters / 1_000).toFixed(2)} km • ${Math.floor(meter.elapsedSeconds / 60)}:${String(Math.floor(meter.elapsedSeconds % 60)).padStart(2, '0')}`;
   return <section className={`taxi-meter ${meter.state}`} data-testid="taxi-meter" data-meter-fare={meter.currentFare.toFixed(2)}><small>TAXÍMETRO • VALORES DE GAMEPLAY</small><b>{labels[meter.state]}</b><strong>{running ? formatCurrency(meter.currentFare) : '—'}</strong><span>{detail}</span></section>;
+}
+
+function BusOperationHud({ hud }: { hud: HudSnapshot }) {
+  const operation = hud.busOperation;
+  const line = BUS_LINES.find((item) => item.id === operation.lineId);
+  return <section className="taxi-meter bus-operation" data-testid="bus-operation-hud">
+    <small>LINHA {line?.publicCode ?? '—'} • {operation.status === 'at-stop' ? 'NA PARADA' : operation.status === 'completed' ? 'CONCLUÍDA' : 'EM OPERAÇÃO'}</small>
+    <b>{operation.nextStopName ?? line?.name ?? 'Operação finalizada'}</b>
+    <strong>{operation.occupancy}/{operation.capacity}</strong>
+    <span>{operation.doors === 'open' ? 'PORTAS ABERTAS' : 'PORTAS FECHADAS'} • receita {formatCurrency(operation.grossRevenue)} • recusados {operation.refused}{operation.dwellRemainingSeconds > 0 ? ` • embarque ${Math.ceil(operation.dwellRemainingSeconds)}s` : ''}</span>
+    {operation.status === 'at-stop' && operation.doors === 'closed' && <button onClick={() => gameEvents.emit('command', { type: 'service-bus-stop' })}>Abrir portas e embarcar</button>}
+    {operation.status === 'at-stop' && operation.doors === 'open' && <button disabled={operation.dwellRemainingSeconds > 0} onClick={() => gameEvents.emit('command', { type: 'depart-bus-stop' })}>Fechar portas e partir</button>}
+  </section>;
 }
 
 function RideOfferCard({ hud }: { hud: HudSnapshot }) {
@@ -307,11 +322,15 @@ function BusinessFleetSection({ hud, confirm, primaryGarageId }: { hud: HudSnaps
   const atGarage = hud.nearbyService?.category === 'garage';
   const delivery = hud.businesses.some((business) => business.kind === 'delivery');
   const freight = hud.businesses.some((business) => business.kind === 'light-freight');
+  const bus = hud.businesses.some((business) => business.kind === 'bus');
   return <section className="business-fleet-section"><h3>Empresas e trabalho leve</h3>{atGarage && <div className="fleet-actions"><h3>Passageiros • 5 modelos</h3>{(['Compacto 2010','Sedan Executivo 2018','SUV Urbano 2020'] as const).map((model) => <button key={model} onClick={() => confirm(`comprar ${model} por ${formatCurrency(GAME_CONFIG.fleet.passengerVehiclePrices[model])}`, { type: 'buy-fleet-vehicle', model, requestId: requestId(`vehicle-${model}`) })}>{model} • {formatCurrency(GAME_CONFIG.fleet.passengerVehiclePrices[model])}</button>)}</div>}<div className="service-list">
     <article className="fleet-card"><b>Central de Entregas</b><small>Documentos, comida, pequenos volumes e expresso.</small><em>{delivery ? 'ATIVA' : `5 corridas • ${formatCurrency(GAME_CONFIG.fleet.deliveryBusinessPrice)}`}</em>{!delivery && primaryGarageId && <button disabled={hud.completedRides < 5} onClick={() => confirm('abrir Central de Entregas', { type: 'purchase-business', kind: 'delivery', garageId: primaryGarageId, requestId: requestId('business-delivery') })}>Abrir empresa</button>}</article>
     <article className="fleet-card"><b>Frete Brasília</b><small>Fretes urbanos, grandes volumes, mudanças e abastecimento.</small><em>{freight ? 'ATIVA' : `Central + 10 corridas • ${formatCurrency(GAME_CONFIG.fleet.freightBusinessPrice)}`}</em>{!freight && primaryGarageId && <button disabled={!delivery || hud.completedRides < 10} onClick={() => confirm('abrir Frete Brasília', { type: 'purchase-business', kind: 'light-freight', garageId: primaryGarageId, requestId: requestId('business-freight') })}>Abrir empresa</button>}</article>
+    <article className="fleet-card"><b>Rota Coletiva Brasília</b><small>Linhas reais, paradas, lotação, pontualidade e operação manual ou automática.</small><em>{bus ? 'ATIVA' : `Frete + 15 corridas • ${formatCurrency(GAME_CONFIG.fleet.busBusinessPrice)}`}</em>{!bus && primaryGarageId && <button disabled={!freight || hud.completedRides < 15} onClick={() => confirm('abrir Rota Coletiva Brasília', { type: 'purchase-business', kind: 'bus', garageId: primaryGarageId, requestId: requestId('business-bus') })}>Abrir empresa</button>}</article>
   </div>{atGarage && hud.nearbyService && <div className="fleet-actions"><h3>Veículos comerciais • 5 por empresa</h3>{(['Moto Urbana 125','Moto Cargo 160','Scooter Express 150','Triciclo Cargo 200','Hatch Entrega','Furgão Compacto','Van de Carga','Picape Leve','Furgão Médio','Utilitário Baú'] as const).map((model) => <button key={model} onClick={() => confirm(`comprar ${model} por ${formatCurrency(GAME_CONFIG.fleet.vehiclePrices[model])}`, { type: 'purchase-light-vehicle', model, garageId: hud.nearbyService!.id, requestId: requestId(`vehicle-${model}`) })}>{model} • {formatCurrency(GAME_CONFIG.fleet.vehiclePrices[model])}</button>)}</div>}
-  {hud.fleet.employees.map((worker) => <article className="fleet-card" key={`training-${worker.id}`}><b>{worker.name} • qualificações</b><small>{worker.qualifications.join(' • ')}</small>{(['MOTORCYCLE','DELIVERY_VAN','LIGHT_FREIGHT'] as const).filter((qualification) => !worker.qualifications.includes(qualification)).map((qualification) => <button key={qualification} disabled={hud.fleet.activeShift?.employeeId === worker.id} onClick={() => confirm(`treinar ${worker.name}`, { type: 'train-employee', employeeId: worker.id, qualification, requestId: requestId(`train-${worker.id}`) })}>{qualification} • {formatCurrency(GAME_CONFIG.fleet.employeeTrainingCost)}</button>)}</article>)}
+  {bus && atGarage && hud.nearbyService && <div className="fleet-actions"><h3>Transporte coletivo • 2 modelos</h3>{(['Micro-ônibus Urbano','Ônibus Urbano Convencional'] as const).map((model) => <button key={model} onClick={() => confirm(`comprar ${model} por ${formatCurrency(GAME_CONFIG.fleet.vehiclePrices[model])}`, { type: 'purchase-light-vehicle', model, garageId: hud.nearbyService!.id, requestId: requestId(`vehicle-${model}`) })}>{model} • {formatCurrency(GAME_CONFIG.fleet.vehiclePrices[model])}</button>)}</div>}
+  {bus && <div className="service-list"><h3>Linhas públicas disponíveis</h3>{BUS_LINES.map((line) => <article className="fleet-card" key={line.id}><b>{line.publicCode} • {line.name}</b><small>{line.distanceKm.toFixed(1)} km • {line.estimatedMinutes} min • tarifa {formatCurrency(line.fare)} • demanda {line.demand}</small><small>Custo esperado {formatCurrency(line.expectedOperatingCost)} • lucro moderado {formatCurrency(line.expectedProfit)} • Semob/DF + OSM/ODbL</small><button disabled={!['Micro-ônibus Urbano','Ônibus Urbano Convencional'].includes(hud.fleet.vehicles.find((vehicle) => vehicle.id === hud.activeVehicleId)?.model ?? '')} onClick={() => gameEvents.emit('command', { type: 'start-bus-line', lineId: line.id })}>Iniciar linha</button></article>)}</div>}
+  {hud.fleet.employees.map((worker) => <article className="fleet-card" key={`training-${worker.id}`}><b>{worker.name} • qualificações</b><small>{worker.qualifications.join(' • ')}</small>{(['MOTORCYCLE','DELIVERY_VAN','LIGHT_FREIGHT','BUS'] as const).filter((qualification) => !worker.qualifications.includes(qualification)).map((qualification) => <button key={qualification} disabled={hud.fleet.activeShift?.employeeId === worker.id} onClick={() => confirm(`treinar ${worker.name}`, { type: 'train-employee', employeeId: worker.id, qualification, requestId: requestId(`train-${worker.id}`) })}>{qualification} • {formatCurrency(qualification === 'BUS' ? GAME_CONFIG.fleet.busQualificationCost : GAME_CONFIG.fleet.employeeTrainingCost)}</button>)}</article>)}
   {hud.fleet.garages.length > 1 && <div className="fleet-actions"><h3>Transferências</h3>{hud.fleet.vehicles.filter((vehicle) => vehicle.id !== hud.activeVehicleId).map((vehicle) => { const target = hud.fleet.garages.find((garage) => garage.serviceId !== vehicle.baseGarageId); return target ? <button key={vehicle.id} disabled={vehicle.controllerType === 'EMPLOYEE'} onClick={() => confirm(`transferir ${vehicle.model} para ${target.name}`, { type: 'transfer-fleet-entity', entityKind: 'vehicle', entityId: vehicle.id, targetGarageId: target.serviceId, requestId: requestId(`transfer-${vehicle.id}`) })}>{vehicle.model} → {target.name}</button> : null; })}</div>}
   </section>;
 }

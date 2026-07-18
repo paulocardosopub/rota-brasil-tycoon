@@ -36,6 +36,9 @@ export type GameCommand =
   | { type: 'buy-regional-garage'; serviceId: string; requestId: string }
   | { type: 'purchase-business'; kind: Exclude<BusinessKind, 'taxi'>; garageId: string; requestId: string }
   | { type: 'purchase-light-vehicle'; model: Exclude<VehicleModel, 'Hatch 1998' | 'Sedan 2012' | 'Compacto 2010' | 'Sedan Executivo 2018' | 'SUV Urbano 2020'>; garageId: string; requestId: string }
+  | { type: 'start-bus-line'; lineId: string }
+  | { type: 'service-bus-stop' }
+  | { type: 'depart-bus-stop' }
   | { type: 'train-employee'; employeeId: string; qualification: EmployeeQualification; requestId: string }
   | { type: 'transfer-fleet-entity'; entityKind: 'vehicle' | 'employee'; entityId: string; targetGarageId: string; requestId: string }
   | { type: 'assign-employee'; employeeId: string; vehicleId: string }

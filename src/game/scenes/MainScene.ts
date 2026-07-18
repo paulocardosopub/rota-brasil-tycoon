@@ -39,6 +39,8 @@ import { createRegionalFamiliarity } from '../regions/RegionalDefaults';
 import { roundMoney } from '../economy/TransactionLedger';
 import { OnlineWorldClient, type LocalMovementState } from '../../online/OnlineWorldClient';
 import { RemoteVehicleSystem } from '../../online/RemoteVehicleSystem';
+import { BUS_LINES, busCapacity, busStopPoint } from '../bus/BusTransitConfig';
+import { advanceBusDwell, arriveAtBusStop, departBusStop, serviceBusStop, startBusOperation } from '../bus/BusOperationSystem';
 
 type SignalVisual = { signal: MapSignal; graphics: Phaser.GameObjects.Graphics };
 const DETAILED_ROAD_MARKINGS = new Set(['motorway', 'motorway_link', 'trunk', 'trunk_link', 'primary', 'primary_link', 'secondary', 'secondary_link']);
@@ -60,6 +62,7 @@ export class MainScene extends Phaser.Scene {
   private fleetVehicles?: FleetVehicleSystem;
   private roadSurface?: RoadSurfaceIndex;
   private serviceRoute: Point[] = [];
+  private busRoute: Point[] = [];
   private serviceArrived = false;
   private emergencyFuelGranted = false;
   private routeGraphics?: Phaser.GameObjects.Graphics;
@@ -253,6 +256,7 @@ export class MainScene extends Phaser.Scene {
       simulationSteps += 1;
     }
     this.services?.update(this.simulationSeconds);
+    this.updateBusArrival();
     this.taxiPoints?.update(this.simulationSeconds);
     this.airTraffic?.update(Math.min(0.1, delta / 1000), this.simulationSeconds);
     this.updateMapStreaming();
@@ -301,6 +305,7 @@ export class MainScene extends Phaser.Scene {
   private simulateStep(dt: number, time: number) {
     if (!this.vehicle || !this.mission || !this.traffic) return;
     this.simulationSeconds += dt;
+    if (this.save.busOperation.doors === 'open') this.save.busOperation = advanceBusDwell(this.save.busOperation, dt);
     const fleetResult = advanceFleetShift(this.save, dt);
     if (fleetResult.report && fleetResult.report.id !== this.fleetReportNotifiedId) {
       this.fleetReportNotifiedId = fleetResult.report.id;
@@ -687,11 +692,29 @@ export class MainScene extends Phaser.Scene {
     };
   }
 
+  private rebuildBusRoute() {
+    if (!this.router || !this.vehicle || !this.save.busOperation.lineId) { this.busRoute = []; return; }
+    const target = busStopPoint(this.save.busOperation.lineId, this.save.busOperation.currentStopIndex);
+    this.busRoute = target ? this.router.route(this.vehicle.position, target) : [];
+  }
+
+  private updateBusArrival() {
+    if (!this.vehicle || this.save.busOperation.status !== 'heading-to-stop') return;
+    const target = this.navigationTarget();
+    if (Math.hypot(this.vehicle.position.x - target.x, this.vehicle.position.y - target.y) > 18 || Math.abs(this.vehicle.speed) > 0.9) return;
+    this.save.busOperation = arriveAtBusStop(this.save.busOperation);
+    this.emitToast(`Parada ${this.save.busOperation.nextStopName}. Pare e abra as portas.`, 'info');
+    this.persist();
+  }
+
   private activeRoute() {
-    return this.services?.selected ? this.serviceRoute : this.mission?.route ?? [];
+    return this.save.busOperation.status === 'heading-to-stop' || this.save.busOperation.status === 'at-stop'
+      ? this.busRoute
+      : this.services?.selected ? this.serviceRoute : this.mission?.route ?? [];
   }
 
   private navigationTarget(): Point {
+    if (this.save.busOperation.lineId && this.save.busOperation.status !== 'idle' && this.save.busOperation.status !== 'completed') return busStopPoint(this.save.busOperation.lineId, this.save.busOperation.currentStopIndex) ?? this.vehicle?.position ?? { x: 0, y: 0 };
     if (this.services?.selected) return this.services.selected.stopPoint;
     if (!this.mission) return this.vehicle?.position ?? { x: 0, y: 0 };
     return this.mission.mission.phase === 'passenger-on-board'
@@ -701,6 +724,7 @@ export class MainScene extends Phaser.Scene {
 
   private navigationDistance() {
     if (!this.vehicle) return 0;
+    if (this.save.busOperation.lineId && this.save.busOperation.status !== 'idle' && this.save.busOperation.status !== 'completed') return Math.hypot(this.vehicle.position.x - this.navigationTarget().x, this.vehicle.position.y - this.navigationTarget().y);
     if (this.services?.selected) return serviceAccessDistance(this.services.selected, this.vehicle.position);
     const target = this.navigationTarget();
     return Math.hypot(this.vehicle.position.x - target.x, this.vehicle.position.y - target.y);
@@ -723,9 +747,11 @@ export class MainScene extends Phaser.Scene {
     void this.mapStream.windowAt(focusPosition).then((map) => {
       if (!this.vehicle || !this.traffic || !this.roadSurface || !this.mapStream) return;
       this.map = map;
+      this.router = new GraphRouter(map.graph, map.roads);
       this.roadSurface.replaceRoads(map.roads);
       this.traffic.updateMap(map.roads, map.signals, focusPosition);
       this.renderMap(map);
+      if (this.save.busOperation.status === 'heading-to-stop') this.rebuildBusRoute();
       const location = this.mapStream.location(focusPosition);
       this.save.currentChunk = location.chunkId;
       this.save.currentRegion = location.region.name;
@@ -1232,6 +1258,47 @@ export class MainScene extends Phaser.Scene {
       if (result.applied) this.persist();
       return;
     }
+    if (command.type === 'start-bus-line') {
+      const line = BUS_LINES.find((item) => item.id === command.lineId);
+      const model = this.activeFleetVehicle()?.model ?? '';
+      if (!line || !this.save.businesses.some((business) => business.kind === 'bus') || !busCapacity(model)) {
+        this.emitToast('Adquira a empresa e selecione um ônibus compatível.', 'warning'); return;
+      }
+      if (this.mission?.mission.phase === 'pickup' || this.mission?.mission.phase === 'passenger-on-board') { this.emitToast('Conclua a corrida atual antes de iniciar uma linha.', 'warning'); return; }
+      this.services?.clearSelection(); this.serviceRoute = [];
+      this.save.busOperation = startBusOperation(line, busCapacity(model));
+      this.rebuildBusRoute(); this.drawRoute(); this.persist();
+      this.emitToast(`Linha ${line.publicCode} iniciada. Siga para ${line.stops[0].name}.`, 'success'); return;
+    }
+    if (command.type === 'service-bus-stop') {
+      const line = BUS_LINES.find((item) => item.id === this.save.busOperation.lineId);
+      if (!line) return;
+      try { this.save.busOperation = serviceBusStop(this.save.busOperation, line); this.emitToast(`${this.save.busOperation.boarded} embarques acumulados • lotação ${this.save.busOperation.occupancy}/${this.save.busOperation.capacity}.`, 'success'); this.persist(); }
+      catch { this.emitToast('Pare completamente no ponto antes de abrir as portas.', 'warning'); }
+      return;
+    }
+    if (command.type === 'depart-bus-stop') {
+      const line = BUS_LINES.find((item) => item.id === this.save.busOperation.lineId);
+      if (!line) return;
+      try {
+        const previousRevenue = this.save.busOperation.grossRevenue;
+        this.save.busOperation = departBusStop(this.save.busOperation, line);
+        if (this.save.busOperation.status === 'completed') {
+          const elapsedMinutes = this.save.busOperation.startedAt ? (Date.now() - Date.parse(this.save.busOperation.startedAt)) / 60_000 : line.estimatedMinutes;
+          const lateMinutes = Math.max(0, elapsedMinutes - line.estimatedMinutes);
+          const safetyFactor = Math.max(0.72, 1 - this.collisionEvents * 0.04);
+          const punctualityFactor = Math.max(0.82, 1 - lateMinutes * 0.006);
+          const payout = roundMoney(previousRevenue * safetyFactor * punctualityFactor);
+          this.save.busOperation.delaySeconds = Math.round(lateMinutes * 60);
+          new EconomyService(this.save).income(payout, 'fleet-revenue', `Linha ${line.publicCode}`, `bus-${this.save.busOperation.startedAt}`);
+          const business = this.save.businesses.find((item) => item.kind === 'bus');
+          if (business) { business.completedJobs += 1; business.grossRevenue = roundMoney(business.grossRevenue + payout); }
+          this.busRoute = []; this.emitToast(`Linha concluída • pagamento ${this.formatMoney(payout)} após pontualidade e segurança.`, 'success');
+        } else { this.rebuildBusRoute(); this.emitToast(`Próxima parada: ${this.save.busOperation.nextStopName}.`, 'info'); }
+        this.drawRoute(); this.persist();
+      } catch { this.emitToast('Abra as portas e conclua o embarque antes de partir.', 'warning'); }
+      return;
+    }
     if (command.type === 'purchase-light-vehicle') {
       const garage = this.services?.locations.find((service) => service.id === command.garageId && service.category === 'garage');
       if (!garage) return;
@@ -1282,6 +1349,7 @@ export class MainScene extends Phaser.Scene {
     }
     if (command.type === 'select-vehicle') {
       if (!this.activeNearbyService('garage')) return;
+      if (this.save.busOperation.status === 'heading-to-stop' || this.save.busOperation.status === 'at-stop') { this.emitToast('Conclua a linha antes de trocar de veículo.', 'warning'); return; }
       const result = selectPlayerVehicle(this.save, command.vehicleId);
       this.emitToast(result.applied && result.vehicle ? `${result.vehicle.model} agora é o veículo do jogador.` : 'Esse veículo está atribuído ou em operação.', result.applied ? 'success' : 'warning');
       if (result.applied) {
@@ -1344,7 +1412,7 @@ export class MainScene extends Phaser.Scene {
   private buyFuel(requestedLiters: number | 'full', requestId: string) {
     const location = this.activeNearbyService('fuel');
     if (!location) return;
-    const capacity = GAME_CONFIG.vehicle.fuelCapacityLiters;
+    const capacity = this.activeFleetVehicle()?.fuelCapacity ?? GAME_CONFIG.vehicle.fuelCapacityLiters;
     const liters = requestedLiters === 'full'
       ? capacity - this.save.fuel
       : Math.min(Math.max(0, requestedLiters), capacity - this.save.fuel);
@@ -1418,6 +1486,8 @@ export class MainScene extends Phaser.Scene {
     const model = this.activeFleetVehicle()?.model ?? 'Hatch 1998';
     const motorcycle = ['Moto Urbana 125','Moto Cargo 160','Scooter Express 150','Triciclo Cargo 200'].includes(model);
     const largeCargo = ['Van de Carga','Furgão Médio','Utilitário Baú'].includes(model);
+    const bus = model === 'Micro-ônibus Urbano' || model === 'Ônibus Urbano Convencional';
+    if (bus) return { ...effects, maxSpeedMultiplier: effects.maxSpeedMultiplier * 0.7, accelerationMultiplier: effects.accelerationMultiplier * 0.48, brakingMultiplier: effects.brakingMultiplier * 0.68, steeringMultiplier: effects.steeringMultiplier * 0.58, offRoadMultiplier: effects.offRoadMultiplier * 0.55, fuelMultiplier: effects.fuelMultiplier * (model === 'Micro-ônibus Urbano' ? 1.75 : 2.45) };
     if (motorcycle) return { ...effects, maxSpeedMultiplier: effects.maxSpeedMultiplier * 0.92, accelerationMultiplier: effects.accelerationMultiplier * 1.18, brakingMultiplier: effects.brakingMultiplier * 1.08, steeringMultiplier: effects.steeringMultiplier * 1.22, offRoadMultiplier: effects.offRoadMultiplier * 0.72, fuelMultiplier: effects.fuelMultiplier * 0.42 };
     if (largeCargo) return { ...effects, maxSpeedMultiplier: effects.maxSpeedMultiplier * 0.82, accelerationMultiplier: effects.accelerationMultiplier * 0.68, brakingMultiplier: effects.brakingMultiplier * 0.78, steeringMultiplier: effects.steeringMultiplier * 0.76, offRoadMultiplier: effects.offRoadMultiplier * 0.82, fuelMultiplier: effects.fuelMultiplier * 1.45 };
     if (model === 'Furgão Compacto' || model === 'Picape Leve') return { ...effects, maxSpeedMultiplier: effects.maxSpeedMultiplier * 0.9, accelerationMultiplier: effects.accelerationMultiplier * 0.82, steeringMultiplier: effects.steeringMultiplier * 0.88, fuelMultiplier: effects.fuelMultiplier * 1.18 };
@@ -1427,8 +1497,9 @@ export class MainScene extends Phaser.Scene {
   private createPlayerVehicleVisual() {
     const vehicle = this.activeFleetVehicle();
     const sedan = vehicle?.model === 'Sedan 2012';
+    const bus = vehicle?.model === 'Micro-ônibus Urbano' || vehicle?.model === 'Ônibus Urbano Convencional';
     return createFleetVehicleVisual(this, vehicle?.model ?? 'Hatch 1998', sedan ? 0x4aa7a1 : 0xc97732, vehicle?.taxiVisualEnabled === true)
-      .setScale(vehicle?.model?.startsWith('Moto') ? 0.88 : sedan ? 0.76 : 0.74);
+      .setScale(bus ? vehicle?.model === 'Micro-ônibus Urbano' ? 0.9 : 1.08 : vehicle?.model?.startsWith('Moto') ? 0.88 : sedan ? 0.76 : 0.74);
   }
 
   private refreshPlayerVehicleVisual() {
@@ -1749,7 +1820,9 @@ export class MainScene extends Phaser.Scene {
     const phase = this.mission.mission.phase;
     const target = this.navigationTarget();
     const desiredAngle = Math.atan2(target.y - this.vehicle.position.y, target.x - this.vehicle.position.x);
-    const distanceRemaining = this.services?.selected
+    const distanceRemaining = this.save.busOperation.status !== 'idle' && this.save.busOperation.status !== 'completed'
+      ? routeDistanceFrom(this.busRoute, this.vehicle.position, target)
+      : this.services?.selected
       ? routeDistanceFrom(this.serviceRoute, this.vehicle.position, target)
       : this.mission.remainingDistance(this.vehicle.position);
     const trafficStats = this.traffic?.stats() ?? {
@@ -1790,9 +1863,11 @@ export class MainScene extends Phaser.Scene {
       money: this.save.money,
       speedKmh: Math.abs(this.vehicle.speed) * 3.6,
       fuel: this.save.fuel,
-      fuelCapacity: GAME_CONFIG.vehicle.fuelCapacityLiters,
+      fuelCapacity: this.activeFleetVehicle()?.fuelCapacity ?? GAME_CONFIG.vehicle.fuelCapacityLiters,
       condition: this.save.condition,
-      objective: this.services?.selected
+      objective: this.save.busOperation.status !== 'idle' && this.save.busOperation.status !== 'completed'
+        ? `${this.save.busOperation.status === 'at-stop' ? 'Atenda' : 'Siga para'} ${this.save.busOperation.nextStopName ?? 'a próxima parada'}`
+        : this.services?.selected
         ? `${this.serviceArrived ? 'Parado em' : 'Siga para'} ${this.services.selected.gameName}`
         : phase === 'offered'
           ? `Nova oferta de ${this.mission.mission.passengerName}`
@@ -1862,6 +1937,7 @@ export class MainScene extends Phaser.Scene {
       activeVehicleId: this.save.activeVehicleId,
       fleet: structuredClone(this.save.fleet),
       businesses: structuredClone(this.save.businesses),
+      busOperation: structuredClone(this.save.busOperation),
       fleetVehicleVisible: this.fleetVehicles?.isVisible() ?? false,
       fleetRouteTarget: fleetTelemetry.target,
       fleetRouteRemaining: fleetTelemetry.remaining,
