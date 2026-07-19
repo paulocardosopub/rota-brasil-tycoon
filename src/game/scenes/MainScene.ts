@@ -122,6 +122,7 @@ export class MainScene extends Phaser.Scene {
   private readonly worldClock: WorldClock;
   private worldSnapshot: WorldClockSnapshot;
   private lastWorldPeriod: WorldClockSnapshot['period'];
+  private developmentWorldClockOverride = false;
   private worldLighting?: WorldLightingSystem;
   private lastPlayerBraking = false;
 
@@ -150,6 +151,7 @@ export class MainScene extends Phaser.Scene {
     const allowWorldClockControl = import.meta.env.DEV || new URLSearchParams(window.location.search).has('performanceWorldClock');
     if (allowWorldClockControl) {
       (window as typeof window & { __RBT_SET_WORLD_TIME__?: (gameMinute: number) => void }).__RBT_SET_WORLD_TIME__ = (gameMinute) => {
+        this.developmentWorldClockOverride = true;
         this.worldClock.setGameMinuteForDevelopment(gameMinute);
         this.worldSnapshot = this.worldClock.snapshot();
         this.applyWorldConditions();
@@ -281,7 +283,9 @@ export class MainScene extends Phaser.Scene {
 
   update(time: number, delta: number) {
     if (!this.initialized || !this.vehicle || !this.mission || !this.traffic || !this.vehicleVisual) return;
-    this.worldSnapshot = this.worldClock.update(delta);
+    this.worldSnapshot = this.developmentWorldClockOverride
+      ? this.worldClock.snapshot()
+      : this.worldClock.update(delta);
     this.applyWorldConditions();
     this.handleWorldPeriodTransition();
     if (this.manuallyPaused) {

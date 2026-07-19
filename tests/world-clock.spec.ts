@@ -26,7 +26,7 @@ test('relógio de 24 horas respeita todos os limites e transições de pico', as
     [539, 'pico-manha', '08:59', '1.000'],
     [540, 'dia', '09:00', '0.700'],
     [960, 'transicao-tarde', '16:00', '0.700'],
-    [1_019, 'transicao-tarde', '16:59', '0.848'],
+    [1_019, 'transicao-tarde', '16:59', '0.847'],
     [1_020, 'pico-tarde', '17:00', '1.000'],
     [1_139, 'pico-tarde', '18:59', '1.000'],
     [1_140, 'noite', '19:00', '0.650'],
