@@ -41,7 +41,7 @@ describe('save local versionado', () => {
     expect(migrated.collisionDamage).toBe(36);
     expect(migrated.maintenanceWear).toBe(0);
     expect(migrated.goals.firstRide).toBe(false);
-    expect(migrated.mapVersion).toBe('brasilia-0.8.2');
+    expect(migrated.mapVersion).toBe('brasilia-0.8.6');
     expect(migrated.fleet.garages[0]).toMatchObject({ serviceId: 'garage-shs-hatch', purchasePrice: 0, vehicleCapacity: 5, employeeCapacity: 5 });
     expect(migrated.publicPlayerId).toMatch(/^rbp_/);
     expect(migrated.onlinePreference).toBe('online');
@@ -53,6 +53,14 @@ describe('save local versionado', () => {
     expect(migrated.regionalFamiliarity).toEqual({});
     expect(migrated.favoriteServiceIds).toEqual([]);
     expect(migrated.cloudLineageId).toMatch(/^rbl_/);
+    expect(migrated.autopilotSportMode).toBe(false);
+  });
+
+  it('preserva a preferência do Modo Sport ao salvar e migrar', () => {
+    const save = createNewSave();
+    save.autopilotSportMode = true;
+    expect(migrateSave(save).autopilotSportMode).toBe(true);
+    expect(migrateSave({ ...save, autopilotSportMode: undefined }).autopilotSportMode).toBe(false);
   });
 
   it('migra funcionário antigo com política regional idempotente', () => {

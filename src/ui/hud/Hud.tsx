@@ -9,7 +9,7 @@ import { employeeIdentification } from '../../game/fleet/FleetRoutePlan';
 import { createNewSave, deleteSave, loadSave } from '../../services/storage/saveService';
 import { forceCloudSave } from '../../services/supabase/cloudSaveService';
 import { ensureGuestSession, finishPermanentAccount, getAccountStatus, requestGuestAccountLink, type AccountStatus } from '../../services/supabase/authService';
-import type { CameraZoom, HudSnapshot, Quality, TrafficDensity } from '../../types/game';
+import type { CameraZoom, EmployeeQualification, FleetEmployee, FleetVehicle, HudSnapshot, Quality, TrafficDensity, VehicleModel } from '../../types/game';
 import { MobileControls } from './MobileControls';
 import { BUS_LINES } from '../../game/bus/BusTransitConfig';
 
@@ -22,7 +22,7 @@ const initialHud: HudSnapshot = {
   money: 100, speedKmh: 0, fuel: 18, fuelCapacity: 40, condition: 70, objective: 'Carregando o mapa de Brasília…',
   distanceRemaining: 0, etaSeconds: 0, headingDelta: 0, vehicleHeading: 0, fps: 0, redLightWarning: false,
   trafficVehicles: 0, trafficBuses: 0, trafficStunned: 0, trafficGhosted: 0, autopilotDeadlockRecoveries: 0,
-  collisionEvents: 0, collisionSeverity: null, collisionRelativeSpeedKmh: 0, autopilotEnabled: false,
+  collisionEvents: 0, collisionSeverity: null, collisionRelativeSpeedKmh: 0, autopilotEnabled: false, autopilotSportMode: false,
   autopilotNextMissionSeconds: 0, autopilotRoadCorrections: 0, autopilotMinRoadClearance: 0, simulationSeconds: 0,
   autopilotCollisionRecovery: false, autoBrakeReason: 'clear', autopilotState: 'off', autopilotTargetSpeedKmh: 0,
   trafficStopReason: 'Livre', repositionProgress: 0, routeRecalculations: 0, mission: null, receipt: null,
@@ -35,12 +35,27 @@ const initialHud: HudSnapshot = {
   fleetVehicleVisible: false, fleetRouteTarget: null, fleetRouteRemaining: 0, fleetRoutePathRemaining: 0,
   fleetCompletedStops: 0, fleetRouteRecoveries: 0, fleetLastRecoveryReason: null,
   fleetDriverIdentification: null, totalTerrestrialEntities: 1,
-  mapVersion: GAME_CONFIG.mapVersion, currentRegion: 'Setores Centrais', currentChunk: '0_0', loadedMapChunks: 0, mapRegions: [],
+  mapVersion: GAME_CONFIG.mapVersion, currentRegion: 'Setores Centrais', currentAddress: 'Preparando localização…', currentChunk: '0_0', loadedMapChunks: 0, mapRegions: [],
   regionCatalog: [], preferredRegionId: 'any', currentRegionId: 'centro', regionalFamiliarity: {},
   online: { mode: 'online', state: 'OFFLINE', accountLinkState: 'local', publicSessionId: null, nearbyPlayers: 0, remoteEmployees: 0, offlineDeployments: 0, pingMs: null, quality: 'offline', subscribedTopics: [], sendRateHz: 0, receiveRateHz: 0, sequence: 0, interpolationBuffer: 0, extrapolating: 0, lostPackets: 0, outOfOrderPackets: 0, npcReplacements: 0, reconnectAttempts: 0, warning: null }
 };
 
-type Panel = 'rides' | 'garage' | 'fleet' | 'city' | 'settings' | 'cash' | null;
+type Panel = 'rides' | 'garage' | 'fleet' | 'city' | 'service' | 'settings' | 'cash' | null;
+type FleetSection = 'overview' | 'vehicles' | 'employees' | 'garages' | 'transfers' | 'training';
+type FleetNavigation = { section: FleetSection; vehicleId: string | null; employeeId: string | null; garageId: string | null };
+
+let rememberedFleetNavigation: FleetNavigation = {
+  section: 'overview', vehicleId: null, employeeId: null, garageId: null
+};
+
+type GarageSection = 'owned' | 'catalog' | 'upgrades';
+type GarageCategory = 'passageiros' | 'entregas' | 'carga' | 'motos' | 'ônibus';
+let rememberedGarageNavigation: { section: GarageSection; category: GarageCategory } = { section: 'owned', category: 'passageiros' };
+
+const PASSENGER_MODELS: VehicleModel[] = ['Sedan 2012', 'Compacto 2010', 'Sedan Executivo 2018', 'SUV Urbano 2020'];
+const DELIVERY_MODELS: VehicleModel[] = ['Moto Urbana 125', 'Moto Cargo 160', 'Scooter Express 150', 'Triciclo Cargo 200', 'Hatch Entrega'];
+const FREIGHT_MODELS: VehicleModel[] = ['Furgão Compacto', 'Van de Carga', 'Picape Leve', 'Furgão Médio', 'Utilitário Baú'];
+const BUS_MODELS: VehicleModel[] = ['Micro-ônibus Urbano', 'Ônibus Urbano Convencional'];
 
 export function Hud() {
   const [hud, setHud] = useState(initialHud);
@@ -79,7 +94,7 @@ export function Hud() {
       data-traffic-stunned={hud.trafficStunned} data-traffic-ghosted={hud.trafficGhosted}
       data-autopilot-deadlock-recoveries={hud.autopilotDeadlockRecoveries} data-collision-events={hud.collisionEvents}
       data-collision-severity={hud.collisionSeverity ?? 'none'} data-collision-relative-speed-kmh={hud.collisionRelativeSpeedKmh.toFixed(2)}
-      data-autopilot-enabled={hud.autopilotEnabled ? 'true' : 'false'} data-autopilot-next-mission-seconds={hud.autopilotNextMissionSeconds}
+      data-autopilot-enabled={hud.autopilotEnabled ? 'true' : 'false'} data-autopilot-sport={hud.autopilotSportMode ? 'true' : 'false'} data-autopilot-next-mission-seconds={hud.autopilotNextMissionSeconds}
       data-autopilot-road-corrections={hud.autopilotRoadCorrections} data-autopilot-min-road-clearance={hud.autopilotMinRoadClearance.toFixed(3)}
       data-simulation-seconds={hud.simulationSeconds.toFixed(3)} data-autopilot-collision-recovery={hud.autopilotCollisionRecovery ? 'true' : 'false'}
       data-auto-brake-reason={hud.autoBrakeReason} data-autopilot-state={hud.autopilotState}
@@ -105,7 +120,7 @@ export function Hud() {
       data-online-npc-replacements={hud.online.npcReplacements} data-online-channels={hud.online.subscribedTopics.length}
     >
       <header className="top-hud">
-        <div className="brand-chip"><span>RB</span><div><b>Brasília</b><small>{hud.currentRegion} • Dia</small></div></div>
+        <div className="brand-chip"><span>RB</span><div><b>Brasília</b><small>{hud.currentAddress} • Dia</small></div></div>
         <div className="status-cluster">
           <button className="money" onClick={() => choosePanel('cash')}><small>CAIXA</small><strong>{formatCurrency(hud.money)}</strong>{hud.debts > 0 && <em>Dívida {formatCurrency(hud.debts)}</em>}</button>
           <div className="vehicle-vitals">
@@ -128,7 +143,7 @@ export function Hud() {
       {fuelPercent <= 25 && <button className={`fuel-warning ${fuelPercent <= 5 ? 'critical' : ''}`} data-testid="fuel-route-alert" onClick={() => gameEvents.emit('command', { type: 'navigate-nearest-service', category: 'fuel' })}>COMBUSTÍVEL {fuelPercent <= 5 ? 'CRÍTICO' : fuelPercent <= 10 ? 'BAIXO' : 'EM 25%'} • IR AO POSTO</button>}
       {hud.condition <= 50 && <button className="repair-warning" data-testid="repair-route-alert" onClick={() => gameEvents.emit('command', { type: 'navigate-nearest-service', category: 'workshop' })}>REPARO NECESSÁRIO • IR À OFICINA</button>}
       {hud.fleet.lastReport && !hud.fleet.lastReport.acknowledged && !panel && <button className="fleet-report-alert" onClick={() => choosePanel('fleet')}>RELATÓRIO DA FROTA • {formatCurrency(hud.fleet.lastReport.netProfit)}</button>}
-      {hud.nearbyService && !panel && <button className="service-nearby" onClick={() => choosePanel(hud.nearbyService?.category === 'garage' ? 'garage' : 'city')}>{hud.nearbyService.gameName} • serviço disponível</button>}
+      {hud.nearbyService && !panel && <button className="service-nearby" data-testid="open-service-panel" onClick={() => choosePanel('service')}>{hud.nearbyService.gameName} • abrir atendimento</button>}
       {import.meta.env.DEV && <div className="fps">{hud.fps} FPS • {hud.trafficVehicles} NPCs</div>}
       <div className="map-attribution">© OpenStreetMap contributors • ODbL</div>
       {hud.redLightWarning && <div className="red-warning">SINAL VERMELHO • MULTA APLICADA</div>}
@@ -138,12 +153,16 @@ export function Hud() {
       {toast && <div className={`toast ${toast.tone ?? 'info'}`}>{toast.message}</div>}
       {panel && <PanelContent panel={panel} hud={hud} close={() => setPanel(null)} />}
 
-      <button className={`autopilot-toggle ${hud.autopilotEnabled ? 'active' : ''}`} onClick={() => gameEvents.emit('command', { type: 'autopilot' })}
-        aria-pressed={hud.autopilotEnabled} data-testid="autopilot-button"><span>{hud.autopilotEnabled ? '●' : '◎'}</span><b>{hud.autopilotEnabled ? 'Piloto ligado' : 'Piloto automático'}</b>{hud.autopilotEnabled && <small>{autopilotStatus(hud)} • alvo {Math.round(hud.autopilotTargetSpeedKmh)} km/h</small>}</button>
+      {!panel && <div className={`autopilot-controls ${hud.autopilotEnabled ? 'active' : ''}`}>
+        <button className={`autopilot-toggle ${hud.autopilotEnabled ? 'active' : ''}`} onClick={() => gameEvents.emit('command', { type: 'autopilot' })}
+          aria-pressed={hud.autopilotEnabled} data-testid="autopilot-button"><span>{hud.autopilotEnabled ? '●' : '◎'}</span><b>{hud.autopilotEnabled ? 'Piloto ligado' : 'Piloto automático'}</b>{hud.autopilotEnabled && <small>{autopilotStatus(hud)} • alvo {Math.round(hud.autopilotTargetSpeedKmh)} km/h</small>}</button>
+        <button className={`sport-toggle ${hud.autopilotSportMode ? 'active' : ''}`} onClick={() => gameEvents.emit('command', { type: 'toggle-autopilot-sport' })}
+          aria-pressed={hud.autopilotSportMode} data-testid="sport-mode-button"><span>⚡</span><b>Modo Sport</b><small>{hud.autopilotSportMode ? '+18% consumo' : 'velocidade máx.'}</small></button>
+      </div>}
       <nav className="bottom-nav" aria-label="Navegação principal">
         <button className={!panel ? 'active' : ''} onClick={() => setPanel(null)}><span>◉</span>Dirigir</button>
         <button className={panel === 'rides' ? 'active' : ''} onClick={() => choosePanel('rides')} data-testid="rides-button"><span>▣</span>Corridas</button>
-        <button className={panel === 'garage' ? 'active' : ''} onClick={() => choosePanel('garage')}><span>⌂</span>Garagem</button>
+        <button className={panel === 'garage' ? 'active' : ''} onClick={() => choosePanel('garage')} data-testid="garage-button"><span>⌂</span>Garagem</button>
         <button className={panel === 'fleet' ? 'active' : ''} onClick={() => choosePanel('fleet')} data-testid="fleet-button"><span>◆</span>Minha Frota</button>
         <button className={panel === 'cash' ? 'active' : ''} onClick={() => choosePanel('cash')}><span>R$</span>Caixa</button>
         <button className={panel === 'city' ? 'active' : ''} onClick={() => choosePanel('city')} data-testid="city-button"><span>⌖</span>Cidade</button>
@@ -205,6 +224,7 @@ function PanelContent({ panel, hud, close }: { panel: Exclude<Panel, null>; hud:
     {panel === 'garage' && <GaragePanel hud={hud} confirm={confirm} />}
     {panel === 'fleet' && <FleetPanel hud={hud} confirm={confirm} />}
     {panel === 'city' && <ServicesPanel hud={hud} confirm={confirm} />}
+    {panel === 'service' && <ServiceOperationPanel hud={hud} confirm={confirm} />}
     {panel === 'cash' && <CashPanel hud={hud} confirm={confirm} />}
     {panel === 'settings' && <><SettingsPanel hud={hud} /><AccountSettingsPanel hud={hud} /><OnlineSettingsPanel hud={hud} /></>}
     {confirmation && <div className="confirm-strip"><b>Confirmar {confirmation.label}?</b><button className="primary-button" onClick={execute}>Confirmar</button><button className="ghost-button" onClick={() => setConfirmation(null)}>Voltar</button></div>}
@@ -221,16 +241,303 @@ function RidesPanel({ hud }: { hud: HudSnapshot }) {
 }
 
 function GaragePanel({ hud, confirm }: { hud: HudSnapshot; confirm: ConfirmFn }) {
+  const [navigation, setNavigation] = useState(() => ({ ...rememberedGarageNavigation }));
+  const navigate = (patch: Partial<typeof rememberedGarageNavigation>) => setNavigation((current) => {
+    const next = { ...current, ...patch };
+    rememberedGarageNavigation = next;
+    return next;
+  });
   const atGarage = hud.nearbyService?.category === 'garage';
   const active = hud.fleet.vehicles.find((vehicle) => vehicle.id === hud.activeVehicleId);
-  return <><div className="panel-kicker">GARAGEM E MELHORIAS</div><h2>{active?.model ?? 'Hatch 1998'}</h2><div className="spec-grid"><span><small>Condição</small><b>{Math.round(hud.condition)}%</b></span><span><small>Desgaste</small><b>{hud.maintenanceWear.toFixed(1)}%</b></span><span><small>Dano de colisão</small><b>{hud.collisionDamage.toFixed(1)}%</b></span><span><small>Tanque</small><b>{hud.fuel.toFixed(1)}/{hud.fuelCapacity} L</b></span></div>
-    {!atGarage && <p>Vá até a Garagem do Hatch para instalar melhorias, comprar ou alternar veículos.</p>}
-    <h3>Veículos estacionados</h3><div className="fleet-vehicle-list">{hud.fleet.vehicles.map((vehicle) => <div key={vehicle.id}><span><b>{vehicle.model}{vehicle.taxiLicensed ? ' • Táxi' : ''}</b><small>{vehicle.state} • {vehicle.condition.toFixed(0)}% • {vehicle.fuel.toFixed(1)} L</small></span>{vehicle.id === hud.activeVehicleId ? <em>ATIVO</em> : <button disabled={!atGarage || vehicle.controllerType === 'EMPLOYEE'} onClick={() => gameEvents.emit('command', { type: 'select-vehicle', vehicleId: vehicle.id })}>Dirigir</button>}</div>)}</div>
-    <div className="upgrade-list">{UPGRADE_IDS.map((id) => { const price = upgradePrice(id, hud.upgrades); const name = ECONOMY_CONFIG.upgrades[id].name; return <div key={id}><span><b>{name}</b><small>Nível {hud.upgrades[id]}/3</small></span><button disabled={!atGarage || price === null} onClick={() => price !== null && confirm(`${name} por ${formatCurrency(price)}`, { type: 'buy-upgrade', upgrade: id, requestId: requestId('upgrade') })}>{price === null ? 'Máximo' : formatCurrency(price)}</button></div>; })}</div>
+  const owned = hud.fleet.vehicles.filter((vehicle) => vehicleCategory(vehicle) === navigation.category);
+  const delivery = hud.businesses.some((business) => business.kind === 'delivery');
+  const freight = hud.businesses.some((business) => business.kind === 'light-freight');
+  const bus = hud.businesses.some((business) => business.kind === 'bus');
+  const unlocked: Record<GarageCategory, boolean> = {
+    passageiros: hud.professionalStatus === 'licensed-taxi', entregas: delivery, motos: delivery, carga: freight, ônibus: bus
+  };
+  const catalog: Record<GarageCategory, VehicleModel[]> = {
+    passageiros: PASSENGER_MODELS, motos: DELIVERY_MODELS.slice(0, 4), entregas: DELIVERY_MODELS.slice(4), carga: FREIGHT_MODELS, ônibus: BUS_MODELS
+  };
+  const categories: Array<[GarageCategory, string]> = [['passageiros', 'Passageiros'], ['motos', 'Motos'], ['entregas', 'Entregas'], ['carga', 'Carga'], ['ônibus', 'Ônibus']];
+  const buy = (model: VehicleModel) => {
+    const passenger = PASSENGER_MODELS.includes(model);
+    const price = passenger
+      ? model === 'Sedan 2012' ? GAME_CONFIG.fleet.secondVehiclePrice : GAME_CONFIG.fleet.passengerVehiclePrices[model as keyof typeof GAME_CONFIG.fleet.passengerVehiclePrices]
+      : GAME_CONFIG.fleet.vehiclePrices[model as keyof typeof GAME_CONFIG.fleet.vehiclePrices];
+    const command: GameCommand = passenger
+      ? { type: 'buy-fleet-vehicle', model: model as 'Sedan 2012' | 'Compacto 2010' | 'Sedan Executivo 2018' | 'SUV Urbano 2020', requestId: requestId(`garage-${model}`) }
+      : { type: 'purchase-light-vehicle', model: model as Exclude<VehicleModel, 'Hatch 1998' | 'Sedan 2012' | 'Compacto 2010' | 'Sedan Executivo 2018' | 'SUV Urbano 2020'>, garageId: hud.nearbyService!.id, requestId: requestId(`garage-${model}`) };
+    confirm(`comprar ${model} por ${formatCurrency(price)}`, command);
+  };
+  return <><div className="panel-kicker">GARAGEM</div><h2>{active?.model ?? 'Hatch 1998'} • {hud.fleet.vehicles.length} veículos</h2>
+    <nav className="fleet-tabs garage-tabs" aria-label="Áreas da garagem">{([['owned','Meus veículos'],['catalog','Comprar'],['upgrades','Melhorias']] as const).map(([section,label]) => <button key={section} className={navigation.section === section ? 'active' : ''} onClick={() => navigate({ section })}>{label}</button>)}</nav>
+    {navigation.section !== 'upgrades' && <nav className="garage-category-tabs" aria-label="Categorias de veículos">{categories.map(([category,label]) => <button key={category} className={navigation.category === category ? 'active' : ''} onClick={() => navigate({ category })}><b>{label}</b><small>{hud.fleet.vehicles.filter((vehicle) => vehicleCategory(vehicle) === category).length} próprios{unlocked[category] ? ' • liberado' : ''}</small></button>)}</nav>}
+    {navigation.section === 'owned' && <section className="garage-browser"><h3>{categories.find(([id]) => id === navigation.category)?.[1]} próprios</h3><div className="fleet-vehicle-list">{owned.map((vehicle) => <div key={vehicle.id}><span><b>{vehicle.model}{vehicle.taxiLicensed ? ' • Táxi' : ''}</b><small>{vehicleStateLabel(vehicle.state)} • {vehicle.condition.toFixed(0)}% • {vehicle.fuel.toFixed(1)} L</small></span>{vehicle.id === hud.activeVehicleId ? <em>ATIVO</em> : <button disabled={!atGarage || vehicle.controllerType === 'EMPLOYEE'} onClick={() => gameEvents.emit('command', { type: 'select-vehicle', vehicleId: vehicle.id })}>Dirigir</button>}</div>)}{!owned.length && <p>Nenhum veículo desta categoria na sua frota.</p>}</div></section>}
+    {navigation.section === 'catalog' && <section className="garage-browser"><h3>Catálogo • {categories.find(([id]) => id === navigation.category)?.[1]}</h3>{!unlocked[navigation.category] && <div className="garage-locked"><b>Categoria ainda bloqueada</b><small>{navigation.category === 'passageiros' ? 'Conclua a regularização de táxi.' : navigation.category === 'ônibus' ? 'Abra a empresa de transporte coletivo.' : navigation.category === 'carga' ? 'Abra a empresa de frete leve.' : 'Abra a Central de Entregas.'}</small></div>}<div className="garage-catalog-grid">{unlocked[navigation.category] && catalog[navigation.category].map((model) => { const passenger = PASSENGER_MODELS.includes(model); const price = passenger ? model === 'Sedan 2012' ? GAME_CONFIG.fleet.secondVehiclePrice : GAME_CONFIG.fleet.passengerVehiclePrices[model as keyof typeof GAME_CONFIG.fleet.passengerVehiclePrices] : GAME_CONFIG.fleet.vehiclePrices[model as keyof typeof GAME_CONFIG.fleet.vehiclePrices]; return <article key={model}><small>{navigation.category.toUpperCase()}</small><b>{model}</b><span>{formatCurrency(price)}</span><button disabled={!atGarage} onClick={() => buy(model)}>{atGarage ? 'Comprar' : 'Vá a uma garagem'}</button></article>; })}</div></section>}
+    {navigation.section === 'upgrades' && <><div className="spec-grid"><span><small>Condição</small><b>{Math.round(hud.condition)}%</b></span><span><small>Desgaste</small><b>{hud.maintenanceWear.toFixed(1)}%</b></span><span><small>Dano de colisão</small><b>{hud.collisionDamage.toFixed(1)}%</b></span><span><small>Tanque</small><b>{hud.fuel.toFixed(1)}/{hud.fuelCapacity} L</b></span></div><div className="upgrade-list">{UPGRADE_IDS.map((id) => { const price = upgradePrice(id, hud.upgrades); const name = ECONOMY_CONFIG.upgrades[id].name; return <div key={id}><span><b>{name}</b><small>Nível {hud.upgrades[id]}/3</small></span><button disabled={!atGarage || price === null} onClick={() => price !== null && confirm(`${name} por ${formatCurrency(price)}`, { type: 'buy-upgrade', upgrade: id, requestId: requestId('upgrade') })}>{price === null ? 'Máximo' : formatCurrency(price)}</button></div>; })}</div></>}
+    {!atGarage && <p className="garage-location-note">Visualização disponível em qualquer lugar. Para dirigir, comprar ou instalar melhorias, estacione em uma garagem.</p>}
   </>;
 }
 
 function FleetPanel({ hud, confirm }: { hud: HudSnapshot; confirm: ConfirmFn }) {
+  const [navigation, setNavigation] = useState<FleetNavigation>(() => ({ ...rememberedFleetNavigation }));
+  const navigate = (patch: Partial<FleetNavigation>) => setNavigation((current) => {
+    const next = { ...current, ...patch };
+    rememberedFleetNavigation = next;
+    return next;
+  });
+  const sections: Array<[FleetSection, string]> = [
+    ['overview', 'Visão geral'], ['vehicles', 'Veículos'], ['employees', 'Funcionários'],
+    ['garages', 'Garagens'], ['transfers', 'Transferências'], ['training', 'Treinamentos']
+  ];
+
+  return <>
+    <div className="panel-kicker">MINHA FROTA</div>
+    <h2>{hud.fleet.name} • {hud.fleet.vehicles.length} veículos</h2>
+    <nav className="fleet-tabs" aria-label="Áreas da frota">
+      {sections.map(([section, label]) => <button key={section} className={navigation.section === section ? 'active' : ''}
+        onClick={() => navigate({ section })} data-testid={`fleet-tab-${section}`}>{label}</button>)}
+    </nav>
+    {navigation.section === 'overview' && <FleetOverview hud={hud} confirm={confirm} navigate={navigate} />}
+    {navigation.section === 'vehicles' && <FleetVehicleBrowser hud={hud} navigation={navigation} navigate={navigate} />}
+    {navigation.section === 'employees' && <FleetEmployeeBrowser hud={hud} navigation={navigation} navigate={navigate} confirm={confirm} />}
+    {navigation.section === 'garages' && <FleetGarageBrowser hud={hud} navigation={navigation} navigate={navigate} confirm={confirm} />}
+    {navigation.section === 'transfers' && <FleetTransfers hud={hud} confirm={confirm} navigate={navigate} />}
+    {navigation.section === 'training' && <FleetTraining hud={hud} navigation={navigation} navigate={navigate} confirm={confirm} />}
+    {hud.fleet.lastReport && <FleetReport hud={hud} />}
+  </>;
+}
+
+function FleetOverview({ hud, confirm, navigate }: { hud: HudSnapshot; confirm: ConfirmFn; navigate: (patch: Partial<FleetNavigation>) => void }) {
+  const vehicles = hud.fleet.vehicles;
+  const employees = hud.fleet.employees;
+  const availableVehicles = vehicles.filter((vehicle) => ['available', 'parked'].includes(vehicle.state)).length;
+  const operatingVehicles = vehicles.filter((vehicle) => ['employee-driving', 'on-trip', 'returning', 'refueling'].includes(vehicle.state)).length;
+  const repairVehicles = vehicles.filter((vehicle) => vehicle.state === 'maintenance' || vehicle.state === 'damaged' || vehicle.condition < 45).length;
+  const workingEmployees = employees.filter((employee) => !['available', 'waiting-vehicle', 'resting'].includes(employee.state)).length;
+  const recent = hud.ledger.slice(0, 12);
+  const income = recent.filter((entry) => entry.amount > 0).reduce((sum, entry) => sum + entry.amount, 0);
+  const expenses = Math.abs(recent.filter((entry) => entry.amount < 0).reduce((sum, entry) => sum + entry.amount, 0));
+  const licensed = hud.professionalStatus === 'licensed-taxi';
+  const requirements = [
+    [`${GAME_CONFIG.progression.regularization.completedRides} corridas`, hud.completedRides >= GAME_CONFIG.progression.regularization.completedRides],
+    [`Nível ${GAME_CONFIG.progression.regularization.driverLevel}`, hud.driverLevel >= GAME_CONFIG.progression.regularization.driverLevel],
+    [`Avaliação ${GAME_CONFIG.progression.regularization.rating.toFixed(2)}`, hud.rating >= GAME_CONFIG.progression.regularization.rating],
+    [`${GAME_CONFIG.progression.regularization.totalKm} km`, hud.totalKm >= GAME_CONFIG.progression.regularization.totalKm],
+    [`Reserva de ${formatCurrency(GAME_CONFIG.progression.regularization.money)}`, hud.money >= GAME_CONFIG.progression.regularization.money]
+  ] as const;
+
+  return <div className="fleet-overview" data-testid="fleet-overview">
+    <div className="fleet-stat-grid">
+      <button onClick={() => navigate({ section: 'vehicles' })}><small>Total</small><b>{vehicles.length}</b><span>veículos</span></button>
+      <button onClick={() => navigate({ section: 'vehicles' })}><small>Disponíveis</small><b>{availableVehicles}</b><span>veículos</span></button>
+      <button onClick={() => navigate({ section: 'vehicles' })}><small>Operando</small><b>{operatingVehicles}</b><span>veículos</span></button>
+      <button onClick={() => navigate({ section: 'vehicles' })}><small>Em reparo</small><b>{repairVehicles}</b><span>veículos</span></button>
+      <button onClick={() => navigate({ section: 'employees' })}><small>Disponíveis</small><b>{employees.length - workingEmployees}</b><span>funcionários</span></button>
+      <button onClick={() => navigate({ section: 'employees' })}><small>Trabalhando</small><b>{workingEmployees}</b><span>funcionários</span></button>
+    </div>
+    <section className="fleet-card recent-balance"><b>MOVIMENTAÇÃO RECENTE</b><div><span>Entradas <strong>{formatCurrency(income)}</strong></span><span>Saídas <strong>{formatCurrency(expenses)}</strong></span></div></section>
+    <div className="garage-capacity-grid">{hud.fleet.garages.map((garage) => {
+      const garageVehicles = vehicles.filter((vehicle) => vehicle.baseGarageId === garage.serviceId).length;
+      const garageEmployees = employees.filter((employee) => employee.baseGarageId === garage.serviceId).length;
+      return <button key={garage.serviceId} onClick={() => navigate({ section: 'garages', garageId: garage.serviceId })}><b>{garage.name}</b><small>{garageVehicles}/{garage.vehicleCapacity} veículos • {garageEmployees}/{garage.employeeCapacity} funcionários</small></button>;
+    })}</div>
+    <section className={`regularization ${hud.regularizationReady || licensed ? 'ready' : ''}`} data-testid="regularization-panel">
+      <b>{licensed ? 'TAXISTA REGULARIZADO' : hud.regularizationReady ? 'PRONTO PARA REGULARIZAR' : 'REGULARIZAÇÃO EM PROGRESSO'}</b>
+      {!licensed && <div className="requirement-list">{requirements.map(([label, complete]) => <span className={complete ? 'done' : ''} key={label}>{complete ? '✓' : '○'} {label}</span>)}</div>}
+      {!licensed && <button className="primary-button" disabled={!hud.regularizationReady} onClick={() => confirm(`regularização por ${formatCurrency(GAME_CONFIG.taxi.regularizationCost)}`, { type: 'regularize-taxi', requestId: requestId('regularize') })}>Regularizar • {formatCurrency(GAME_CONFIG.taxi.regularizationCost)}</button>}
+    </section>
+    {hud.fleet.activeShift && <FleetActiveShiftCard hud={hud} />}
+    <BusinessFleetSection hud={hud} confirm={confirm} primaryGarageId={hud.fleet.garages[0]?.serviceId} />
+  </div>;
+}
+
+function FleetVehicleBrowser({ hud, navigation, navigate }: { hud: HudSnapshot; navigation: FleetNavigation; navigate: (patch: Partial<FleetNavigation>) => void }) {
+  const [search, setSearch] = useState('');
+  const [garageFilter, setGarageFilter] = useState('all');
+  const [categoryFilter, setCategoryFilter] = useState('all');
+  const [stateFilter, setStateFilter] = useState('all');
+  const [onlyUnassigned, setOnlyUnassigned] = useState(false);
+  const normalized = search.trim().toLocaleLowerCase('pt-BR');
+  const filtered = hud.fleet.vehicles.filter((vehicle) => {
+    const assigned = hud.fleet.employees.some((employee) => employee.vehicleId === vehicle.id);
+    return (!normalized || `${vehicle.model} ${vehicle.id}`.toLocaleLowerCase('pt-BR').includes(normalized))
+      && (garageFilter === 'all' || vehicle.baseGarageId === garageFilter)
+      && (categoryFilter === 'all' || vehicleCategory(vehicle) === categoryFilter)
+      && (stateFilter === 'all' || vehicle.state === stateFilter)
+      && (!onlyUnassigned || !assigned);
+  });
+  const selected = filtered.find((vehicle) => vehicle.id === navigation.vehicleId) ?? filtered[0];
+  const filteredIndex = selected ? filtered.findIndex((vehicle) => vehicle.id === selected.id) : -1;
+  const select = (vehicleId: string) => navigate({ vehicleId });
+  const cycle = (step: number) => {
+    if (!filtered.length) return;
+    const index = filteredIndex >= 0 ? filteredIndex : 0;
+    select(filtered[(index + step + filtered.length) % filtered.length].id);
+  };
+
+  return <section className="fleet-vehicle-browser" data-testid="fleet-vehicle-browser">
+    <div className="fleet-filter-grid">
+      <label className="fleet-search">Buscar por nome ou modelo<input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Ex.: Sedan" data-testid="fleet-vehicle-search" /></label>
+      <label>Garagem<select value={garageFilter} onChange={(event) => setGarageFilter(event.target.value)}><option value="all">Todas</option>{hud.fleet.garages.map((garage) => <option key={garage.serviceId} value={garage.serviceId}>{garage.name}</option>)}</select></label>
+      <label>Categoria<select value={categoryFilter} onChange={(event) => setCategoryFilter(event.target.value)}><option value="all">Todas</option><option value="passageiros">Passageiros</option><option value="motos">Motos</option><option value="entregas">Entregas</option><option value="carga">Carga</option><option value="ônibus">Ônibus</option></select></label>
+      <label>Estado<select value={stateFilter} onChange={(event) => setStateFilter(event.target.value)}><option value="all">Todos</option>{[...new Set(hud.fleet.vehicles.map((vehicle) => vehicle.state))].map((state) => <option key={state} value={state}>{vehicleStateLabel(state)}</option>)}</select></label>
+      <label className="toggle-setting fleet-unassigned"><input type="checkbox" checked={onlyUnassigned} onChange={(event) => setOnlyUnassigned(event.target.checked)} /> Somente veículos sem motorista</label>
+    </div>
+    <div className="fleet-mobile-selector">
+      <select value={selected?.id ?? ''} onChange={(event) => select(event.target.value)}>{filtered.map((vehicle) => <option key={vehicle.id} value={vehicle.id}>{vehicle.model} • {vehicleStateLabel(vehicle.state)}</option>)}</select>
+    </div>
+    <div className="fleet-cycle-controls"><button onClick={() => cycle(-1)} disabled={filtered.length < 2}>← Veículo anterior</button><b>{filtered.length ? `Veículo ${Math.max(1, filteredIndex + 1)} de ${filtered.length}` : 'Nenhum veículo encontrado'}</b><button onClick={() => cycle(1)} disabled={filtered.length < 2}>Próximo veículo →</button></div>
+    <div className="fleet-browser-layout">
+      <aside className="fleet-side-list" aria-label="Lista de veículos">{filtered.map((vehicle) => {
+        const assigned = hud.fleet.employees.find((employee) => employee.vehicleId === vehicle.id);
+        return <button key={vehicle.id} className={selected?.id === vehicle.id ? 'active' : ''} onClick={() => select(vehicle.id)}><b>{vehicle.model}</b><small>{vehicleStateLabel(vehicle.state)} • {vehicle.condition.toFixed(0)}%</small><span>{assigned?.name ?? 'Sem motorista'}</span></button>;
+      })}</aside>
+      <div className="fleet-detail-panel">{selected ? <FleetVehicleDetail hud={hud} vehicle={selected} navigate={navigate} /> : <p>Nenhum veículo corresponde à busca e aos filtros.</p>}</div>
+    </div>
+  </section>;
+}
+
+function FleetVehicleDetail({ hud, vehicle, navigate }: { hud: HudSnapshot; vehicle: FleetVehicle; navigate: (patch: Partial<FleetNavigation>) => void }) {
+  const employee = hud.fleet.employees.find((item) => item.vehicleId === vehicle.id || item.id === vehicle.controllerId);
+  const garage = hud.fleet.garages.find((item) => item.serviceId === vehicle.baseGarageId);
+  const shift = hud.fleet.activeShift?.vehicleId === vehicle.id ? hud.fleet.activeShift : null;
+  const availableEmployees = hud.fleet.employees.filter((item) => !hud.fleet.activeShift || hud.fleet.activeShift.employeeId === item.id)
+    .filter((item) => canEmployeeDrive(item, vehicle));
+  const startAllowed = employee && !hud.fleet.activeShift && vehicle.id !== hud.activeVehicleId;
+
+  return <article className="vehicle-detail-card" data-testid="selected-fleet-vehicle" data-vehicle-id={vehicle.id}>
+    <header><div><small>{vehicleCategory(vehicle).toUpperCase()}</small><h3>{vehicle.model}</h3><span>Identificação {vehicle.id.slice(-8).toUpperCase()}</span></div><em>{vehicleStateLabel(vehicle.state)}</em></header>
+    <div className="vehicle-vitals"><span><small>Garagem</small><b>{garage?.name ?? 'Sem base'}</b></span><span><small>Condição</small><b>{vehicle.condition.toFixed(0)}%</b><i><em style={{ width: `${vehicle.condition}%` }} /></i></span><span><small>Combustível</small><b>{vehicle.fuel.toFixed(1)}/{vehicle.fuelCapacity} L</b><i><em style={{ width: `${vehicle.fuel / vehicle.fuelCapacity * 100}%` }} /></i></span><span><small>Operação</small><b>{shift ? employeeStateLabel(shift.state) : vehicleStateLabel(vehicle.state)}</b></span></div>
+    {garage && <button className="direct-link" onClick={() => navigate({ section: 'garages', garageId: garage.serviceId })}>Ver garagem • {garage.name}</button>}
+    {employee ? <section className="assigned-employee"><span className="candidate-avatar">{employee.avatar}</span><div><small>FUNCIONÁRIO ATRIBUÍDO</small><b>{employeeIdentification(employee.name)}</b><span>{employee.qualifications.map(qualificationLabel).join(' • ')}</span><em>{employeeStateLabel(employee.state)}</em></div><button onClick={() => navigate({ section: 'employees', employeeId: employee.id, vehicleId: vehicle.id })}>Ver funcionário</button></section> : <section className="unassigned-driver" data-testid="vehicle-without-employee"><b>Sem funcionário atribuído</b><p>Escolha alguém disponível, contrate um novo funcionário ou abra os treinamentos exigidos pelo modelo.</p></section>}
+    {!employee && vehicle.id !== hud.activeVehicleId && <div className="assignment-actions">{availableEmployees.map((item) => <button key={item.id} onClick={() => gameEvents.emit('command', { type: 'assign-employee', employeeId: item.id, vehicleId: vehicle.id })}>Atribuir {item.name}</button>)}<button onClick={() => navigate({ section: 'employees' })}>Contratar novo funcionário</button><button onClick={() => navigate({ section: 'training', employeeId: hud.fleet.employees[0]?.id ?? null })}>Treinar funcionário, se necessário</button></div>}
+    {employee && !shift && <div className="assignment-actions"><button disabled={!startAllowed} className="primary-button" onClick={() => gameEvents.emit('command', { type: 'start-fleet-shift', employeeId: employee.id, requestId: requestId(`shift-${employee.id}`) })}>Iniciar turno</button><button onClick={() => gameEvents.emit('command', { type: 'unassign-employee', employeeId: employee.id })}>Remover motorista</button>{availableEmployees.filter((item) => item.id !== employee.id).map((item) => <button key={item.id} onClick={() => gameEvents.emit('command', { type: 'assign-employee', employeeId: item.id, vehicleId: vehicle.id })}>Trocar por {item.name}</button>)}</div>}
+    {shift && <FleetActiveShiftCard hud={hud} />}
+  </article>;
+}
+
+function FleetEmployeeBrowser({ hud, navigation, navigate, confirm }: { hud: HudSnapshot; navigation: FleetNavigation; navigate: (patch: Partial<FleetNavigation>) => void; confirm: ConfirmFn }) {
+  const employees = hud.fleet.employees;
+  const selected = employees.find((employee) => employee.id === navigation.employeeId) ?? employees[0];
+  const index = selected ? employees.findIndex((employee) => employee.id === selected.id) : -1;
+  const cycle = (step: number) => employees.length && navigate({ employeeId: employees[(Math.max(index, 0) + step + employees.length) % employees.length].id });
+  const candidates = EMPLOYEE_CANDIDATES.filter((candidate) => !employees.some((employee) => employee.id === candidate.id));
+
+  return <section className="employee-browser" data-testid="fleet-employee-browser">
+    {employees.length ? <>
+      <div className="fleet-cycle-controls"><button onClick={() => cycle(-1)} disabled={employees.length < 2}>← Funcionário anterior</button><b>Funcionário {index + 1} de {employees.length}</b><button onClick={() => cycle(1)} disabled={employees.length < 2}>Próximo funcionário →</button></div>
+      {selected && <FleetEmployeeDetail hud={hud} employee={selected} navigate={navigate} />}
+    </> : <section className="fleet-card"><b>Nenhum funcionário contratado</b><p>Escolha um candidato abaixo para começar a formar sua equipe.</p></section>}
+    <h3>Candidatos disponíveis</h3>
+    <div className="candidate-list">{candidates.map((candidate) => <article key={candidate.id}><span className="candidate-avatar">{candidate.avatar}</span><div><b>{candidate.name}</b><small>{candidate.description}</small><em>{candidate.qualifications.map(qualificationLabel).join(' • ')}</em><em>Comissão {candidate.commissionPercent}% • contratação {formatCurrency(candidate.hireCost)}</em></div><button onClick={() => confirm(`contratar ${candidate.name} por ${formatCurrency(candidate.hireCost)}`, { type: 'hire-employee', candidateId: candidate.id, requestId: requestId(`hire-${candidate.id}`) })}>Contratar</button></article>)}</div>
+  </section>;
+}
+
+function FleetEmployeeDetail({ hud, employee, navigate }: { hud: HudSnapshot; employee: FleetEmployee; navigate: (patch: Partial<FleetNavigation>) => void }) {
+  const vehicle = hud.fleet.vehicles.find((item) => item.id === employee.vehicleId);
+  const garage = hud.fleet.garages.find((item) => item.serviceId === employee.baseGarageId);
+  const shift = hud.fleet.activeShift?.employeeId === employee.id ? hud.fleet.activeShift : null;
+  const compatible = hud.fleet.vehicles.filter((item) => item.id !== hud.activeVehicleId && !hud.fleet.activeShift && canEmployeeDrive(employee, item));
+  return <article className="employee-detail-card" data-testid="selected-fleet-employee" data-employee-id={employee.id}>
+    {navigationReturnVehicle(navigate)}
+    <header><span className="candidate-avatar large">{employee.avatar}</span><div><small>FUNCIONÁRIO</small><h3>{employeeIdentification(employee.name)}</h3><span>{employeeStateLabel(employee.state)} • comissão {employee.commissionPercent}%</span></div></header>
+    <div className="employee-skill-grid"><span><small>Direção</small><b>{employee.driving}</b></span><span><small>Segurança</small><b>{employee.safety}</b></span><span><small>Atendimento</small><b>{employee.service}</b></span><span><small>Eficiência</small><b>{employee.efficiency}</b></span></div>
+    <div className="qualification-chips">{employee.qualifications.map((qualification) => <span key={qualification}>{qualificationLabel(qualification)}</span>)}</div>
+    {vehicle ? <section className="assigned-vehicle"><div><small>VEÍCULO ATRIBUÍDO</small><b>{vehicle.model}</b><span>{vehicleStateLabel(vehicle.state)} • {vehicle.condition.toFixed(0)}%</span></div><button onClick={() => navigate({ section: 'vehicles', vehicleId: vehicle.id, employeeId: employee.id })}>Ver veículo</button></section> : <section className="unassigned-driver"><b>Sem veículo atribuído</b>{compatible.map((item) => <button key={item.id} onClick={() => gameEvents.emit('command', { type: 'assign-employee', employeeId: employee.id, vehicleId: item.id })}>Atribuir {item.model}</button>)}</section>}
+    {garage && <button className="direct-link" onClick={() => navigate({ section: 'garages', garageId: garage.serviceId, employeeId: employee.id })}>Ver garagem • {garage.name}</button>}
+    <div className="assignment-actions"><button onClick={() => navigate({ section: 'training', employeeId: employee.id })}>Treinamentos</button>{vehicle && !shift && <button className="primary-button" onClick={() => gameEvents.emit('command', { type: 'start-fleet-shift', employeeId: employee.id, requestId: requestId(`shift-${employee.id}`) })}>Iniciar turno</button>}{vehicle && !shift && <button onClick={() => gameEvents.emit('command', { type: 'unassign-employee', employeeId: employee.id })}>Remover veículo</button>}</div>
+    {shift && <FleetActiveShiftCard hud={hud} />}
+    <EmployeeRegionalSettings hud={hud} employee={employee} />
+  </article>;
+}
+
+function navigationReturnVehicle(navigate: (patch: Partial<FleetNavigation>) => void) {
+  return rememberedFleetNavigation.vehicleId ? <button className="back-link" onClick={() => navigate({ section: 'vehicles', vehicleId: rememberedFleetNavigation.vehicleId })}>← Voltar ao veículo</button> : null;
+}
+
+function EmployeeRegionalSettings({ hud, employee }: { hud: HudSnapshot; employee: FleetEmployee }) {
+  const disabled = hud.fleet.activeShift?.employeeId === employee.id;
+  const regions = hud.regionCatalog.filter((region) => region.playable && region.chunkIds.length > 0);
+  return <details className="regional-preferences"><summary>Área de trabalho e preferências</summary>
+    <label>Região preferida<select disabled={disabled} value={employee.regionalPreferences.preferredRegionId} onChange={(event) => gameEvents.emit('command', { type: 'set-employee-regional-preferences', employeeId: employee.id, preferences: { preferredRegionId: event.target.value } })}><option value="any">Qualquer região</option>{regions.map((region) => <option key={region.id} value={region.id}>{region.name}</option>)}</select></label>
+    <label>Distância máxima<select disabled={disabled} value={employee.regionalPreferences.maximumDistanceKm} onChange={(event) => gameEvents.emit('command', { type: 'set-employee-regional-preferences', employeeId: employee.id, preferences: { maximumDistanceKm: Number(event.target.value) } })}>{[8,12,18,25].map((value) => <option key={value} value={value}>{value} km</option>)}</select></label>
+    <label>Combustível mínimo<select disabled={disabled} value={employee.regionalPreferences.minimumFuelPercent} onChange={(event) => gameEvents.emit('command', { type: 'set-employee-regional-preferences', employeeId: employee.id, preferences: { minimumFuelPercent: Number(event.target.value) } })}>{[15,20,30,40].map((value) => <option key={value} value={value}>{value}%</option>)}</select></label>
+    <label>Condição mínima<select disabled={disabled} value={employee.regionalPreferences.minimumCondition} onChange={(event) => gameEvents.emit('command', { type: 'set-employee-regional-preferences', employeeId: employee.id, preferences: { minimumCondition: Number(event.target.value) } })}>{[35,45,55,70].map((value) => <option key={value} value={value}>{value}%</option>)}</select></label>
+    <label className="toggle-setting"><input disabled={disabled} type="checkbox" checked={employee.regionalPreferences.acceptLongTrips} onChange={(event) => gameEvents.emit('command', { type: 'set-employee-regional-preferences', employeeId: employee.id, preferences: { acceptLongTrips: event.target.checked } })} /> Aceitar viagens longas</label>
+    <label className="toggle-setting"><input disabled={disabled} type="checkbox" checked={employee.regionalPreferences.returnToGarage} onChange={(event) => gameEvents.emit('command', { type: 'set-employee-regional-preferences', employeeId: employee.id, preferences: { returnToGarage: event.target.checked } })} /> Retornar à garagem</label>
+  </details>;
+}
+
+function FleetGarageBrowser({ hud, navigation, navigate, confirm }: { hud: HudSnapshot; navigation: FleetNavigation; navigate: (patch: Partial<FleetNavigation>) => void; confirm: ConfirmFn }) {
+  const garage = hud.fleet.garages.find((item) => item.serviceId === navigation.garageId) ?? hud.fleet.garages[0];
+  const vehicles = hud.fleet.vehicles.filter((vehicle) => vehicle.baseGarageId === garage?.serviceId);
+  const employees = hud.fleet.employees.filter((employee) => employee.baseGarageId === garage?.serviceId);
+  const available = hud.serviceLocations.filter((service) => service.category === 'garage' && !hud.fleet.garages.some((item) => item.serviceId === service.id));
+  return <section className="garage-browser" data-testid="fleet-garage-browser"><div className="garage-capacity-grid">{hud.fleet.garages.map((item) => <button key={item.serviceId} className={garage?.serviceId === item.serviceId ? 'active' : ''} onClick={() => navigate({ garageId: item.serviceId })}><b>{item.name}</b><small>{item.regionId}</small></button>)}</div>{garage && <article className="garage-detail-card"><h3>{garage.name}</h3><p>{garage.regionId} • custo operacional {formatCurrency(garage.operatingCost)}</p><div className="fleet-stat-grid"><button onClick={() => navigate({ section: 'vehicles', garageId: garage.serviceId })}><b>{vehicles.length}/{garage.vehicleCapacity}</b><span>Veículos</span></button><button onClick={() => navigate({ section: 'employees', garageId: garage.serviceId })}><b>{employees.length}/{garage.employeeCapacity}</b><span>Funcionários</span></button></div><h4>Veículos nesta base</h4>{vehicles.map((vehicle) => <button className="direct-link" key={vehicle.id} onClick={() => navigate({ section: 'vehicles', vehicleId: vehicle.id, garageId: garage.serviceId })}>{vehicle.model} • {vehicleStateLabel(vehicle.state)}</button>)}<h4>Funcionários nesta base</h4>{employees.map((employee) => <button className="direct-link" key={employee.id} onClick={() => navigate({ section: 'employees', employeeId: employee.id, garageId: garage.serviceId })}>{employee.name} • {employeeStateLabel(employee.state)}</button>)}</article>}<h3>Novas garagens</h3><div className="service-list">{available.map((service) => <article className="fleet-card" key={service.id}><b>{service.gameName}</b><small>{service.address}</small><button onClick={() => confirm(`comprar ${service.gameName} por ${formatCurrency(GAME_CONFIG.fleet.regionalGaragePrice)}`, { type: 'buy-regional-garage', serviceId: service.id, requestId: requestId(`garage-${service.id}`) })}>Comprar • {formatCurrency(GAME_CONFIG.fleet.regionalGaragePrice)}</button></article>)}</div></section>;
+}
+
+function FleetTransfers({ hud, confirm, navigate }: { hud: HudSnapshot; confirm: ConfirmFn; navigate: (patch: Partial<FleetNavigation>) => void }) {
+  return <section className="fleet-transfers" data-testid="fleet-transfers"><p>Veículos em operação, reparo ou dirigidos pelo jogador permanecem travados até ficarem disponíveis.</p><h3>Veículos</h3>{hud.fleet.vehicles.map((vehicle) => { const locked = vehicle.id === hud.activeVehicleId || vehicle.controllerType === 'EMPLOYEE' || hud.fleet.activeShift?.vehicleId === vehicle.id || vehicle.state === 'maintenance'; return <article className="fleet-card" key={vehicle.id}><button className="direct-link" onClick={() => navigate({ section: 'vehicles', vehicleId: vehicle.id })}>{vehicle.model}</button><small>{locked ? 'Transferência bloqueada durante uso ou reparo' : 'Escolha a garagem de destino'}</small><div className="assignment-actions">{hud.fleet.garages.filter((garage) => garage.serviceId !== vehicle.baseGarageId).map((garage) => <button key={garage.serviceId} disabled={locked} onClick={() => confirm(`transferir ${vehicle.model} para ${garage.name}`, { type: 'transfer-fleet-entity', entityKind: 'vehicle', entityId: vehicle.id, targetGarageId: garage.serviceId, requestId: requestId(`transfer-${vehicle.id}`) })}>{garage.name}</button>)}</div></article>; })}<h3>Funcionários</h3>{hud.fleet.employees.map((employee) => <article className="fleet-card" key={employee.id}><button className="direct-link" onClick={() => navigate({ section: 'employees', employeeId: employee.id })}>{employee.name}</button><div className="assignment-actions">{hud.fleet.garages.filter((garage) => garage.serviceId !== employee.baseGarageId).map((garage) => <button key={garage.serviceId} disabled={hud.fleet.activeShift?.employeeId === employee.id} onClick={() => confirm(`transferir ${employee.name} para ${garage.name}`, { type: 'transfer-fleet-entity', entityKind: 'employee', entityId: employee.id, targetGarageId: garage.serviceId, requestId: requestId(`transfer-${employee.id}`) })}>{garage.name}</button>)}</div></article>)}</section>;
+}
+
+const TRAINING_QUALIFICATIONS: EmployeeQualification[] = ['TAXI', 'MOTORCYCLE', 'DELIVERY_VAN', 'LIGHT_FREIGHT', 'BUS'];
+
+function FleetTraining({ hud, navigation, navigate, confirm }: { hud: HudSnapshot; navigation: FleetNavigation; navigate: (patch: Partial<FleetNavigation>) => void; confirm: ConfirmFn }) {
+  const employee = hud.fleet.employees.find((item) => item.id === navigation.employeeId) ?? hud.fleet.employees[0];
+  return <section className="fleet-training" data-testid="fleet-training"><div className="training-employee-selector"><label>Funcionário<select value={employee?.id ?? ''} onChange={(event) => navigate({ employeeId: event.target.value })}><option value="" disabled>Selecione</option>{hud.fleet.employees.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>{employee && <button onClick={() => navigate({ section: 'employees', employeeId: employee.id })}>Ver funcionário</button>}</div>{employee ? <><h3>{employee.name} • qualificações</h3><div className="qualification-chips">{employee.qualifications.map((qualification) => <span key={qualification}>{qualificationLabel(qualification)}</span>)}</div><div className="training-grid">{TRAINING_QUALIFICATIONS.map((qualification) => { const cost = qualification === 'BUS' ? GAME_CONFIG.fleet.busQualificationCost : GAME_CONFIG.fleet.employeeTrainingCost; const reason = trainingDisabledReason(hud, employee, qualification, cost); return <button className="training-button" key={qualification} disabled={Boolean(reason)} title={reason ?? `Treinar por ${formatCurrency(cost)}`} onClick={() => confirm(`treinar ${employee.name} em ${qualificationLabel(qualification)} por ${formatCurrency(cost)}`, { type: 'train-employee', employeeId: employee.id, qualification, requestId: requestId(`train-${employee.id}-${qualification}`) })}><b>{qualificationLabel(qualification)}</b><span>{formatCurrency(cost)}</span><small>{reason ?? 'Disponível agora'}</small></button>; })}</div></> : <section className="fleet-card"><b>Contrate um funcionário antes de iniciar treinamentos.</b><button onClick={() => navigate({ section: 'employees' })}>Ver candidatos</button></section>}</section>;
+}
+
+function FleetActiveShiftCard({ hud }: { hud: HudSnapshot }) {
+  const shift = hud.fleet.activeShift;
+  if (!shift) return null;
+  const employee = hud.fleet.employees.find((item) => item.id === shift.employeeId);
+  const vehicle = hud.fleet.vehicles.find((item) => item.id === shift.vehicleId);
+  const repair = shift.repair;
+  const repairProgress = repair ? Math.min(100, repair.elapsedSeconds / Math.max(1, repair.durationSeconds) * 100) : 0;
+  const remainingRepairSeconds = repair ? Math.max(0, Math.ceil(repair.durationSeconds - repair.elapsedSeconds)) : 0;
+  return <section className="fleet-card shift-card" data-testid="active-fleet-shift"><div className="shift-driver-summary"><span className="candidate-avatar">{employee?.avatar ?? 'DR'}</span><div><small>MOTORISTA EM TURNO</small><b>{employee ? employeeIdentification(employee.name) : 'Funcionário atribuído'}</b><span>{vehicle?.model ?? 'Veículo da frota'} • {employeeStateLabel(shift.state)}</span></div><em>{shift.simulationLevel}</em></div>{repair && <div className={`shift-repair-progress ${repair.completedAt ? 'complete' : ''}`} data-testid="fleet-repair-progress"><div><b>{repair.completedAt ? 'Reparo concluído' : employeeStateLabel(shift.state)}</b><span>{repair.workshopName} • {formatCurrency(repair.cost)}</span></div><i><em style={{ width: `${repairProgress}%` }} /></i><small>{repair.completedAt ? `Condição restaurada para ${repair.targetCondition.toFixed(0)}%` : `${Math.round(repairProgress)}% • cerca de ${remainingRepairSeconds} s restantes`}</small></div>}<div className="spec-grid"><span><small>Corridas</small><b>{shift.rides}</b></span><span><small>Receita</small><b>{formatCurrency(shift.grossRevenue)}</b></span><span><small>Despesas</small><b>{formatCurrency(shift.fuelCost + shift.commission + shift.maintenanceCost + shift.fines)}</b></span><span><small>Lucro</small><b>{formatCurrency(shift.netProfit)}</b></span></div><div className="panel-actions"><button className="ghost-button" disabled={Boolean(repair && !repair.completedAt)} onClick={() => gameEvents.emit('command', { type: 'follow-fleet-vehicle' })}>{repair && !repair.completedAt ? 'Veículo em reparo' : hud.fleetVehicleVisible ? 'Acompanhar veículo' : 'Localizar veículo'}</button><button className="danger-button" onClick={() => gameEvents.emit('command', { type: 'end-fleet-shift' })}>Encerrar turno</button></div></section>;
+}
+
+function trainingDisabledReason(hud: HudSnapshot, employee: FleetEmployee, qualification: EmployeeQualification, cost: number) {
+  if (employee.qualifications.includes(qualification)) return 'Já adquirido';
+  if (hud.fleet.activeShift?.employeeId === employee.id) return 'Funcionário em operação';
+  if (qualification === 'BUS' && !employee.qualifications.includes('LIGHT_FREIGHT')) return 'Pré-requisito: Frete leve';
+  if (hud.money < cost) return `Saldo insuficiente: faltam ${formatCurrency(cost - hud.money)}`;
+  return null;
+}
+
+function canEmployeeDrive(employee: FleetEmployee, vehicle: FleetVehicle) {
+  const required: EmployeeQualification = vehicleCategory(vehicle) === 'ônibus' ? 'BUS'
+    : vehicleCategory(vehicle) === 'motos' ? 'MOTORCYCLE'
+      : ['Hatch Entrega', 'Furgão Compacto', 'Picape Leve'].includes(vehicle.model) ? 'DELIVERY_VAN'
+        : vehicleCategory(vehicle) === 'carga' ? 'LIGHT_FREIGHT'
+          : vehicle.taxiLicensed ? 'TAXI' : 'CAR';
+  return employee.qualifications.includes(required);
+}
+
+function vehicleCategory(vehicle: FleetVehicle) {
+  if (['Micro-ônibus Urbano', 'Ônibus Urbano Convencional'].includes(vehicle.model)) return 'ônibus';
+  if (['Moto Urbana 125', 'Moto Cargo 160', 'Scooter Express 150', 'Triciclo Cargo 200'].includes(vehicle.model)) return 'motos';
+  if (vehicle.model === 'Hatch Entrega') return 'entregas';
+  if (['Furgão Compacto', 'Van de Carga', 'Picape Leve', 'Furgão Médio', 'Utilitário Baú'].includes(vehicle.model)) return 'carga';
+  return 'passageiros';
+}
+
+function qualificationLabel(qualification: EmployeeQualification) {
+  return ({ CAR: 'Carros', TAXI: 'Táxi', MOTORCYCLE: 'Motos', DELIVERY_VAN: 'Entregas', LIGHT_FREIGHT: 'Frete leve', BUS: 'Ônibus' } as const)[qualification];
+}
+
+function vehicleStateLabel(state: FleetVehicle['state']) {
+  return ({ available: 'Disponível', 'player-driving': 'Com o jogador', 'employee-driving': 'Em operação', 'on-trip': 'Em viagem', returning: 'Retornando', refueling: 'Abastecendo', maintenance: 'Em reparo', 'out-of-fuel': 'Sem combustível', damaged: 'Danificado', parked: 'Estacionado' } as const)[state];
+}
+
+function employeeStateLabel(state: FleetEmployee['state']) {
+  return ({ available: 'Disponível', 'waiting-vehicle': 'Aguardando veículo', 'preparing-vehicle': 'Preparando veículo', 'going-to-repair': 'Indo para o reparo', repairing: 'Em reparo', 'starting-shift': 'Iniciando turno', 'seeking-trip': 'Buscando serviço', 'en-route': 'A caminho', 'with-passenger': 'Em atendimento', returning: 'Retornando', refueling: 'Abastecendo', break: 'Em pausa', blocked: 'Bloqueado', 'ending-shift': 'Encerrando turno', resting: 'Descansando' } as const)[state] ?? state;
+}
+
+function LegacyFleetPanel({ hud, confirm }: { hud: HudSnapshot; confirm: ConfirmFn }) {
   const licensed = hud.professionalStatus === 'licensed-taxi';
   const active = hud.fleet.vehicles.find((vehicle) => vehicle.id === hud.activeVehicleId);
   const employee = hud.fleet.employees[0];
@@ -282,16 +589,33 @@ function FleetReport({ hud }: { hud: HudSnapshot }) {
   return <section className="fleet-report" data-testid="fleet-report"><div className="panel-kicker">RELATÓRIO DA FROTA</div><div className="spec-grid"><span><small>Tempo</small><b>{report.elapsedMinutes} min</b></span><span><small>Corridas</small><b>{report.rides}</b></span><span><small>Quilômetros</small><b>{report.kilometers.toFixed(1)} km</b></span><span><small>Receita</small><b>{formatCurrency(report.grossRevenue)}</b></span><span><small>Combustível</small><b>{formatCurrency(report.fuelCost)}</b></span><span><small>Comissão</small><b>{formatCurrency(report.commission)}</b></span><span><small>Manutenção</small><b>{formatCurrency(report.repairs)}</b></span><span><small>Multas</small><b>{formatCurrency(report.fines)}</b></span></div><h3>Lucro {formatCurrency(report.netProfit)}</h3>{report.unvalidatedClock && <p>Horário local não validado; os limites seguros foram aplicados.</p>}{report.occurrences.map((occurrence) => <small key={occurrence}>• {occurrence}</small>)}{!report.acknowledged && <button className="ghost-button" onClick={() => gameEvents.emit('command', { type: 'ack-fleet-report' })}>Marcar como visto</button>}</section>;
 }
 
-function ServicesPanel({ hud, confirm }: { hud: HudSnapshot; confirm: ConfirmFn }) {
-  const nearby = hud.nearbyService;
+function ServicesPanel({ hud }: { hud: HudSnapshot; confirm: ConfirmFn }) {
+  const [section, setSection] = useState<'overview' | 'regions' | 'services'>('overview');
   const [filter, setFilter] = useState<'all' | 'fuel' | 'workshop' | 'garage'>('all');
-  const locations = filter === 'all' ? hud.serviceLocations : hud.serviceLocations.filter((service) => service.category === filter);
-  return <><div className="panel-kicker">CIDADE E SERVIÇOS REAIS</div><h2>{nearby ? nearby.gameName : hud.currentRegion}</h2><div className="map-region-summary"><b>Brasília expandida</b><small>{hud.mapRegions.length} regiões • {hud.loadedMapChunks} trechos carregados ao redor do veículo</small><div>{hud.regionCatalog.filter((region) => region.playable).map((region) => { const familiarity = hud.regionalFamiliarity[region.id]; const level = familiarity && familiarity.completedRides >= 12 ? 'região favorita' : familiarity && familiarity.completedRides >= 4 ? 'região conhecida' : 'região nova'; return <span className={region.id === hud.currentRegionId ? 'active' : ''} key={region.id} style={{ borderColor: region.color }}>{region.name} • {level}</span>; })}</div></div><div className="quick-service-buttons"><button onClick={() => gameEvents.emit('command', { type: 'navigate-nearest-service', category: 'fuel' })}>Posto mais próximo + piloto</button><button onClick={() => gameEvents.emit('command', { type: 'navigate-nearest-service', category: 'workshop' })}>Oficina mais próxima + piloto</button></div><div className="quick-service-buttons" aria-label="Filtros de serviços">{([['all','Todos'],['fuel','Postos'],['workshop','Oficinas'],['garage','Garagens']] as const).map(([id, label]) => <button key={id} className={filter === id ? 'active' : ''} onClick={() => setFilter(id)}>{label}</button>)}</div><div className="service-list">{locations.map((service) => <button key={service.id} className={hud.selectedService?.id === service.id ? 'active' : ''} onClick={() => gameEvents.emit('command', { type: 'navigate-service', serviceId: service.id })}><b>{service.gameName}</b><small>{service.category === 'fuel' ? 'Posto' : service.category === 'workshop' ? 'Oficina' : 'Garagem'} • {service.address}</small>{service.functionFictional && <small>Função adaptada fictícia em prédio real</small>}</button>)}</div>
-    {nearby?.category === 'fuel' && <div className="service-actions"><h3>Abastecer • R$ 5,79/L</h3>{[5,10].map((liters) => <button key={liters} onClick={() => confirm(`${liters} L por ${formatCurrency(fuelPurchaseCost(liters))}`, { type: 'buy-fuel', liters, requestId: requestId('fuel') })}>{liters} L • {formatCurrency(fuelPurchaseCost(liters))}</button>)}<button onClick={() => confirm('completar o tanque', { type: 'buy-fuel', liters: 'full', requestId: requestId('fuel-full') })}>Completar tanque</button></div>}
-    {nearby?.category === 'workshop' && <div className="service-actions"><h3>Serviços da oficina</h3>{(['diagnosis','quick','partial','full','preventive'] as WorkshopServiceId[]).map((service) => { const price = workshopPrice(service, hud.condition, hud.maintenanceWear); return <button key={service} onClick={() => confirm(`${workshopLabel(service)} por ${formatCurrency(price)}`, { type: 'workshop-service', service, requestId: requestId('repair') })}>{workshopLabel(service)} • {formatCurrency(price)}</button>; })}</div>}
-    {nearby?.category === 'garage' && !hud.fleet.garages.some((garage) => garage.serviceId === nearby.id) && <div className="service-actions"><h3>Comprar base regional</h3><button onClick={() => confirm(`${nearby.gameName} por ${formatCurrency(GAME_CONFIG.fleet.regionalGaragePrice)}`, { type: 'buy-regional-garage', serviceId: nearby.id, requestId: requestId('garage') })}>Comprar • {formatCurrency(GAME_CONFIG.fleet.regionalGaragePrice)}</button></div>}
-    {hud.selectedService && <button className="ghost-button" onClick={() => gameEvents.emit('command', { type: 'clear-service-route' })}>Cancelar rota de serviço</button>}
-    <p>O piloto leva até a entrada e para dentro do lote. Toda compra exige confirmação.</p></>;
+  const [search, setSearch] = useState('');
+  const normalized = search.trim().toLocaleLowerCase('pt-BR');
+  const locations = hud.serviceLocations.filter((service) =>
+    (filter === 'all' || service.category === filter)
+    && (!normalized || `${service.gameName} ${service.address}`.toLocaleLowerCase('pt-BR').includes(normalized))
+  );
+  const playableRegions = hud.regionCatalog.filter((region) => region.playable);
+  return <><div className="panel-kicker">CIDADE</div><h2>{hud.currentRegion}</h2><p className="current-address">{hud.currentAddress}</p>
+    <nav className="fleet-tabs city-tabs" aria-label="Áreas da cidade">{([['overview','Visão geral'],['regions','Regiões'],['services','Locais']] as const).map(([id,label]) => <button key={id} className={section === id ? 'active' : ''} onClick={() => setSection(id)} data-testid={`city-tab-${id}`}>{label}</button>)}</nav>
+    {section === 'overview' && <div className="city-overview"><div className="fleet-stat-grid"><button onClick={() => setSection('regions')}><small>Regiões</small><b>{playableRegions.length}</b><span>jogáveis</span></button><button onClick={() => { setFilter('fuel'); setSection('services'); }}><small>Postos</small><b>{hud.serviceLocations.filter((item) => item.category === 'fuel').length}</b><span>locais</span></button><button onClick={() => { setFilter('workshop'); setSection('services'); }}><small>Oficinas</small><b>{hud.serviceLocations.filter((item) => item.category === 'workshop').length}</b><span>locais</span></button><button onClick={() => { setFilter('garage'); setSection('services'); }}><small>Garagens</small><b>{hud.serviceLocations.filter((item) => item.category === 'garage').length}</b><span>bases</span></button></div><section className="fleet-card"><b>MAPA PROGRESSIVO</b><small>{hud.loadedMapChunks} trechos carregados ao redor do veículo • região atual {hud.currentRegion}</small></section><div className="quick-service-buttons"><button onClick={() => gameEvents.emit('command', { type: 'navigate-nearest-service', category: 'fuel' })}>Ir ao posto mais próximo</button><button onClick={() => gameEvents.emit('command', { type: 'navigate-nearest-service', category: 'workshop' })}>Ir à oficina mais próxima</button><button onClick={() => gameEvents.emit('command', { type: 'navigate-nearest-service', category: 'garage' })}>Ir à garagem mais próxima</button></div>{hud.selectedService && <section className="fleet-card selected-city-route"><small>ROTA ATIVA</small><b>{hud.selectedService.gameName}</b><span>{hud.selectedService.address}</span><button className="ghost-button" onClick={() => gameEvents.emit('command', { type: 'clear-service-route' })}>Cancelar rota</button></section>}</div>}
+    {section === 'regions' && <div className="city-region-list">{playableRegions.map((region) => { const familiarity = hud.regionalFamiliarity[region.id]; const level = familiarity && familiarity.completedRides >= 12 ? 'Favorita' : familiarity && familiarity.completedRides >= 4 ? 'Conhecida' : 'Nova'; return <button key={region.id} className={region.id === hud.currentRegionId ? 'active' : ''} onClick={() => gameEvents.emit('command', { type: 'set-preferred-region', regionId: region.id })}><i style={{ background: region.color }} /><span><b>{region.name}</b><small>{level} • demanda {region.demandLevel}</small></span><em>{hud.preferredRegionId === region.id ? 'PREFERIDA' : region.id === hud.currentRegionId ? 'ATUAL' : 'PRIORIZAR'}</em></button>; })}</div>}
+    {section === 'services' && <><div className="fleet-filter-grid city-filter-grid"><label className="fleet-search"><span>Buscar local</span><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Nome ou endereço" /></label><label><span>Tipo</span><select value={filter} onChange={(event) => setFilter(event.target.value as typeof filter)}><option value="all">Todos</option><option value="fuel">Postos</option><option value="workshop">Oficinas</option><option value="garage">Garagens</option></select></label></div><div className="service-list compact-service-list">{locations.map((service) => <button key={service.id} className={hud.selectedService?.id === service.id ? 'active' : ''} onClick={() => gameEvents.emit('command', { type: 'navigate-service', serviceId: service.id })}><b>{service.gameName}</b><small>{service.category === 'fuel' ? 'Posto' : service.category === 'workshop' ? 'Oficina' : 'Garagem'} • {service.address}</small></button>)}{!locations.length && <p>Nenhum local encontrado.</p>}</div></>}
+  </>;
+}
+
+function ServiceOperationPanel({ hud, confirm }: { hud: HudSnapshot; confirm: ConfirmFn }) {
+  const nearby = hud.nearbyService;
+  if (!nearby) return <><div className="panel-kicker">ATENDIMENTO</div><h2>Nenhum serviço aberto</h2><p>Estacione dentro de um posto, oficina ou garagem e use o botão de atendimento que aparece no mapa.</p></>;
+  const label = nearby.category === 'fuel' ? 'POSTO DE COMBUSTÍVEL' : nearby.category === 'workshop' ? 'OFICINA' : 'GARAGEM REGIONAL';
+  return <><div className="panel-kicker">{label}</div><h2>{nearby.gameName}</h2><section className="service-location-card"><small>{nearby.address}</small><b>Veículo parado • atendimento disponível</b></section>
+    {nearby.category === 'fuel' && <div className="service-actions standalone-service-actions"><h3>Abastecer • R$ 5,79/L</h3>{[5,10].map((liters) => <button key={liters} onClick={() => confirm(`${liters} L por ${formatCurrency(fuelPurchaseCost(liters))}`, { type: 'buy-fuel', liters, requestId: requestId('fuel') })}>{liters} L • {formatCurrency(fuelPurchaseCost(liters))}</button>)}<button onClick={() => confirm('completar o tanque', { type: 'buy-fuel', liters: 'full', requestId: requestId('fuel-full') })}>Completar tanque</button></div>}
+    {nearby.category === 'workshop' && <div className="service-actions standalone-service-actions"><h3>Serviços da oficina</h3>{(['diagnosis','quick','partial','full','preventive'] as WorkshopServiceId[]).map((service) => { const price = workshopPrice(service, hud.condition, hud.maintenanceWear); return <button key={service} onClick={() => confirm(`${workshopLabel(service)} por ${formatCurrency(price)}`, { type: 'workshop-service', service, requestId: requestId('repair') })}>{workshopLabel(service)} • {formatCurrency(price)}</button>; })}</div>}
+    {nearby.category === 'garage' && <><div className="spec-grid"><span><small>Veículos</small><b>{hud.fleet.vehicles.filter((vehicle) => vehicle.baseGarageId === nearby.id).length}</b></span><span><small>Funcionários</small><b>{hud.fleet.employees.filter((employee) => employee.baseGarageId === nearby.id).length}</b></span></div>{!hud.fleet.garages.some((garage) => garage.serviceId === nearby.id) ? <div className="service-actions standalone-service-actions"><h3>Comprar base regional</h3><button onClick={() => confirm(`${nearby.gameName} por ${formatCurrency(GAME_CONFIG.fleet.regionalGaragePrice)}`, { type: 'buy-regional-garage', serviceId: nearby.id, requestId: requestId('garage') })}>Comprar • {formatCurrency(GAME_CONFIG.fleet.regionalGaragePrice)}</button></div> : <p>Esta base já pertence à sua frota. Use a aba Garagem para veículos e melhorias.</p>}</>}
+    <p>Este atendimento é independente da aba Cidade. Toda compra exige confirmação.</p></>;
 }
 
 function CashPanel({ hud, confirm }: { hud: HudSnapshot; confirm: ConfirmFn }) {
@@ -319,19 +643,15 @@ function CommercialWorkActions({ hud }: { hud: HudSnapshot }) {
 }
 
 function BusinessFleetSection({ hud, confirm, primaryGarageId }: { hud: HudSnapshot; confirm: ConfirmFn; primaryGarageId?: string }) {
-  const atGarage = hud.nearbyService?.category === 'garage';
   const delivery = hud.businesses.some((business) => business.kind === 'delivery');
   const freight = hud.businesses.some((business) => business.kind === 'light-freight');
   const bus = hud.businesses.some((business) => business.kind === 'bus');
-  return <section className="business-fleet-section"><h3>Empresas e trabalho leve</h3>{atGarage && <div className="fleet-actions"><h3>Passageiros • 5 modelos</h3>{(['Compacto 2010','Sedan Executivo 2018','SUV Urbano 2020'] as const).map((model) => <button key={model} onClick={() => confirm(`comprar ${model} por ${formatCurrency(GAME_CONFIG.fleet.passengerVehiclePrices[model])}`, { type: 'buy-fleet-vehicle', model, requestId: requestId(`vehicle-${model}`) })}>{model} • {formatCurrency(GAME_CONFIG.fleet.passengerVehiclePrices[model])}</button>)}</div>}<div className="service-list">
+  return <section className="business-fleet-section"><h3>Empresas</h3><p>Veículos liberados por cada empresa ficam organizados por categoria na aba Garagem.</p><div className="service-list">
     <article className="fleet-card"><b>Central de Entregas</b><small>Documentos, comida, pequenos volumes e expresso.</small><em>{delivery ? 'ATIVA' : `5 corridas • ${formatCurrency(GAME_CONFIG.fleet.deliveryBusinessPrice)}`}</em>{!delivery && primaryGarageId && <button disabled={hud.completedRides < 5} onClick={() => confirm('abrir Central de Entregas', { type: 'purchase-business', kind: 'delivery', garageId: primaryGarageId, requestId: requestId('business-delivery') })}>Abrir empresa</button>}</article>
     <article className="fleet-card"><b>Frete Brasília</b><small>Fretes urbanos, grandes volumes, mudanças e abastecimento.</small><em>{freight ? 'ATIVA' : `Central + 10 corridas • ${formatCurrency(GAME_CONFIG.fleet.freightBusinessPrice)}`}</em>{!freight && primaryGarageId && <button disabled={!delivery || hud.completedRides < 10} onClick={() => confirm('abrir Frete Brasília', { type: 'purchase-business', kind: 'light-freight', garageId: primaryGarageId, requestId: requestId('business-freight') })}>Abrir empresa</button>}</article>
     <article className="fleet-card"><b>Rota Coletiva Brasília</b><small>Linhas reais, paradas, lotação, pontualidade e operação manual ou automática.</small><em>{bus ? 'ATIVA' : `Frete + 15 corridas • ${formatCurrency(GAME_CONFIG.fleet.busBusinessPrice)}`}</em>{!bus && primaryGarageId && <button disabled={!freight || hud.completedRides < 15} onClick={() => confirm('abrir Rota Coletiva Brasília', { type: 'purchase-business', kind: 'bus', garageId: primaryGarageId, requestId: requestId('business-bus') })}>Abrir empresa</button>}</article>
-  </div>{atGarage && hud.nearbyService && <div className="fleet-actions"><h3>Veículos comerciais • 5 por empresa</h3>{(['Moto Urbana 125','Moto Cargo 160','Scooter Express 150','Triciclo Cargo 200','Hatch Entrega','Furgão Compacto','Van de Carga','Picape Leve','Furgão Médio','Utilitário Baú'] as const).map((model) => <button key={model} onClick={() => confirm(`comprar ${model} por ${formatCurrency(GAME_CONFIG.fleet.vehiclePrices[model])}`, { type: 'purchase-light-vehicle', model, garageId: hud.nearbyService!.id, requestId: requestId(`vehicle-${model}`) })}>{model} • {formatCurrency(GAME_CONFIG.fleet.vehiclePrices[model])}</button>)}</div>}
-  {bus && atGarage && hud.nearbyService && <div className="fleet-actions"><h3>Transporte coletivo • 2 modelos</h3>{(['Micro-ônibus Urbano','Ônibus Urbano Convencional'] as const).map((model) => <button key={model} onClick={() => confirm(`comprar ${model} por ${formatCurrency(GAME_CONFIG.fleet.vehiclePrices[model])}`, { type: 'purchase-light-vehicle', model, garageId: hud.nearbyService!.id, requestId: requestId(`vehicle-${model}`) })}>{model} • {formatCurrency(GAME_CONFIG.fleet.vehiclePrices[model])}</button>)}</div>}
+  </div>
   {bus && <div className="service-list"><h3>Linhas públicas disponíveis</h3>{BUS_LINES.map((line) => <article className="fleet-card" key={line.id}><b>{line.publicCode} • {line.name}</b><small>{line.distanceKm.toFixed(1)} km • {line.estimatedMinutes} min • tarifa {formatCurrency(line.fare)} • demanda {line.demand}</small><small>Custo esperado {formatCurrency(line.expectedOperatingCost)} • lucro moderado {formatCurrency(line.expectedProfit)} • Semob/DF + OSM/ODbL</small><button disabled={!['Micro-ônibus Urbano','Ônibus Urbano Convencional'].includes(hud.fleet.vehicles.find((vehicle) => vehicle.id === hud.activeVehicleId)?.model ?? '')} onClick={() => gameEvents.emit('command', { type: 'start-bus-line', lineId: line.id })}>Iniciar linha</button></article>)}</div>}
-  {hud.fleet.employees.map((worker) => <article className="fleet-card" key={`training-${worker.id}`}><b>{worker.name} • qualificações</b><small>{worker.qualifications.join(' • ')}</small>{(['MOTORCYCLE','DELIVERY_VAN','LIGHT_FREIGHT','BUS'] as const).filter((qualification) => !worker.qualifications.includes(qualification)).map((qualification) => <button key={qualification} disabled={hud.fleet.activeShift?.employeeId === worker.id} onClick={() => confirm(`treinar ${worker.name}`, { type: 'train-employee', employeeId: worker.id, qualification, requestId: requestId(`train-${worker.id}`) })}>{qualification} • {formatCurrency(qualification === 'BUS' ? GAME_CONFIG.fleet.busQualificationCost : GAME_CONFIG.fleet.employeeTrainingCost)}</button>)}</article>)}
-  {hud.fleet.garages.length > 1 && <div className="fleet-actions"><h3>Transferências</h3>{hud.fleet.vehicles.filter((vehicle) => vehicle.id !== hud.activeVehicleId).map((vehicle) => { const target = hud.fleet.garages.find((garage) => garage.serviceId !== vehicle.baseGarageId); return target ? <button key={vehicle.id} disabled={vehicle.controllerType === 'EMPLOYEE'} onClick={() => confirm(`transferir ${vehicle.model} para ${target.name}`, { type: 'transfer-fleet-entity', entityKind: 'vehicle', entityId: vehicle.id, targetGarageId: target.serviceId, requestId: requestId(`transfer-${vehicle.id}`) })}>{vehicle.model} → {target.name}</button> : null; })}</div>}
   </section>;
 }
 

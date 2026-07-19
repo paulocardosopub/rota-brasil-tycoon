@@ -1,10 +1,11 @@
 import type { Point, RoadData } from '../../types/game';
-import { isDrivableRoad, offsetToRightOfTravel, rightHandLaneOffset, visibleRoadWidth } from '../../map/routing/roadRules';
+import { isDrivableRoad, offsetToRightOfTravel, rightHandLaneOffset, visibleRoadWidthAt } from '../../map/routing/roadRules';
 
 type Segment = {
   a: Point;
   b: Point;
-  halfWidth: number;
+  halfWidthStart: number;
+  halfWidthEnd: number;
   roadId: string;
   oneway: boolean;
   lanes: number;
@@ -37,20 +38,23 @@ export class RoadSurfaceIndex {
     for (const road of roads) {
       if (!isDrivableRoad(road)) continue;
       for (let index = 1; index < road.points.length; index += 1) {
-        const width = visibleRoadWidth(road);
+        const widthStart = visibleRoadWidthAt(road, index - 1);
+        const widthEnd = visibleRoadWidthAt(road, index);
         const segment: Segment = {
           a: road.points[index - 1],
           b: road.points[index],
-          halfWidth: width / 2,
+          halfWidthStart: widthStart / 2,
+          halfWidthEnd: widthEnd / 2,
           roadId: road.id,
           oneway: road.oneway,
           lanes: road.lanes,
-          width
+          width: (widthStart + widthEnd) / 2
         };
-        const minX = Math.floor((Math.min(segment.a.x, segment.b.x) - segment.halfWidth) / this.cellSize);
-        const maxX = Math.floor((Math.max(segment.a.x, segment.b.x) + segment.halfWidth) / this.cellSize);
-        const minY = Math.floor((Math.min(segment.a.y, segment.b.y) - segment.halfWidth) / this.cellSize);
-        const maxY = Math.floor((Math.max(segment.a.y, segment.b.y) + segment.halfWidth) / this.cellSize);
+        const maximumHalfWidth = Math.max(segment.halfWidthStart, segment.halfWidthEnd);
+        const minX = Math.floor((Math.min(segment.a.x, segment.b.x) - maximumHalfWidth) / this.cellSize);
+        const maxX = Math.floor((Math.max(segment.a.x, segment.b.x) + maximumHalfWidth) / this.cellSize);
+        const minY = Math.floor((Math.min(segment.a.y, segment.b.y) - maximumHalfWidth) / this.cellSize);
+        const maxY = Math.floor((Math.max(segment.a.y, segment.b.y) + maximumHalfWidth) / this.cellSize);
         for (let x = minX; x <= maxX; x += 1) for (let y = minY; y <= maxY; y += 1) {
           const key = `${x},${y}`;
           const cell = this.cells.get(key) ?? [];
@@ -73,9 +77,11 @@ export class RoadSurfaceIndex {
     let unionSurfaceDistance = Number.POSITIVE_INFINITY;
     for (let x = cx - 1; x <= cx + 1; x += 1) for (let y = cy - 1; y <= cy + 1; y += 1) {
       for (const segment of this.cells.get(`${x},${y}`) ?? []) {
-        const closest = closestPointOnSegment(point, segment.a, segment.b);
+        const projection = closestPointOnSegment(point, segment.a, segment.b);
+        const closest = projection.point;
+        const halfWidth = segment.halfWidthStart + (segment.halfWidthEnd - segment.halfWidthStart) * projection.t;
         const centerDistance = Math.hypot(point.x - closest.x, point.y - closest.y);
-        const surfaceDistance = centerDistance - segment.halfWidth;
+        const surfaceDistance = centerDistance - halfWidth;
         unionSurfaceDistance = Math.min(unionSurfaceDistance, surfaceDistance);
         const tangentAngle = Math.atan2(segment.b.y - segment.a.y, segment.b.x - segment.a.x);
         const candidate: NearestRoad = {
@@ -84,7 +90,7 @@ export class RoadSurfaceIndex {
           unionSurfaceDistance: surfaceDistance,
           closest,
           tangentAngle,
-          halfWidth: segment.halfWidth,
+          halfWidth,
           roadId: segment.roadId,
           oneway: segment.oneway,
           lanes: segment.lanes,
@@ -130,11 +136,11 @@ function angleDelta(from: number, to: number) {
   return Math.atan2(Math.sin(to - from), Math.cos(to - from));
 }
 
-function closestPointOnSegment(point: Point, a: Point, b: Point): Point {
+function closestPointOnSegment(point: Point, a: Point, b: Point): { point: Point; t: number } {
   const dx = b.x - a.x;
   const dy = b.y - a.y;
   const lengthSq = dx * dx + dy * dy;
-  if (!lengthSq) return { ...a };
+  if (!lengthSq) return { point: { ...a }, t: 0 };
   const t = Math.max(0, Math.min(1, ((point.x - a.x) * dx + (point.y - a.y) * dy) / lengthSq));
-  return { x: a.x + t * dx, y: a.y + t * dy };
+  return { point: { x: a.x + t * dx, y: a.y + t * dy }, t };
 }

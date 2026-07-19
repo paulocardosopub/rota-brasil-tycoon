@@ -3,10 +3,11 @@ import path from 'node:path';
 import { gunzipSync } from 'node:zlib';
 import { VEHICLE_PHYSICS } from '../../src/config/vehiclePhysics';
 import { GraphRouter } from '../../src/map/routing/GraphRouter';
-import { visibleRoadWidth } from '../../src/map/routing/roadRules';
+import { visibleRoadSegmentWidth } from '../../src/map/routing/roadRules';
+import type { PackedNavigationGraph } from '../../src/map/pipeline/RoadPipeline';
 import type { CityMapChunk, CityMapManifest, LaneData, MapServiceLocation, NavigationGraph, Point, RoadData } from '../../src/types/game';
 
-type AuditSegment = { from: Point; to: Point; halfWidth: number };
+type AuditSegment = { from: Point; to: Point; fromHalfWidth: number; toHalfWidth: number };
 
 class RoadSurfaceAudit {
   private readonly cells = new Map<string, AuditSegment[]>();
@@ -17,12 +18,14 @@ class RoadSurfaceAudit {
       const segment = {
         from: road.points[index - 1],
         to: road.points[index],
-        halfWidth: visibleRoadWidth(road) / 2
+        fromHalfWidth: visibleRoadSegmentWidth(road, index - 1, 0) / 2,
+        toHalfWidth: visibleRoadSegmentWidth(road, index - 1, 1) / 2
       };
-      const minX = Math.floor((Math.min(segment.from.x, segment.to.x) - segment.halfWidth) / this.cellSize);
-      const maxX = Math.floor((Math.max(segment.from.x, segment.to.x) + segment.halfWidth) / this.cellSize);
-      const minY = Math.floor((Math.min(segment.from.y, segment.to.y) - segment.halfWidth) / this.cellSize);
-      const maxY = Math.floor((Math.max(segment.from.y, segment.to.y) + segment.halfWidth) / this.cellSize);
+      const maximumHalfWidth = Math.max(segment.fromHalfWidth, segment.toHalfWidth);
+      const minX = Math.floor((Math.min(segment.from.x, segment.to.x) - maximumHalfWidth) / this.cellSize);
+      const maxX = Math.floor((Math.max(segment.from.x, segment.to.x) + maximumHalfWidth) / this.cellSize);
+      const minY = Math.floor((Math.min(segment.from.y, segment.to.y) - maximumHalfWidth) / this.cellSize);
+      const maxY = Math.floor((Math.max(segment.from.y, segment.to.y) + maximumHalfWidth) / this.cellSize);
       for (let x = minX; x <= maxX; x += 1) for (let y = minY; y <= maxY; y += 1) {
         const key = `${x},${y}`;
         const values = this.cells.get(key) ?? [];
@@ -39,7 +42,9 @@ class RoadSurfaceAudit {
     // Segments are indexed into every cell touched by their full road width,
     // so the point's own cell is sufficient for the required in-asphalt test.
     for (const segment of this.cells.get(`${cellX},${cellY}`) ?? []) {
-      distance = Math.min(distance, distanceFromSegment(point, segment.from, segment.to) - segment.halfWidth);
+      const projected = projectToSegment(point, segment.from, segment.to);
+      const halfWidth = segment.fromHalfWidth + (segment.toHalfWidth - segment.fromHalfWidth) * projected.progress;
+      distance = Math.min(distance, projected.distance - halfWidth);
     }
     return distance;
   }
@@ -47,9 +52,9 @@ class RoadSurfaceAudit {
 
 const mapRoot = path.resolve('public/data/cities/brasilia');
 const manifest = JSON.parse(readFileSync(path.join(mapRoot, 'manifest.json'), 'utf8')) as CityMapManifest;
-const graph = JSON.parse(gunzipSync(
+const graph = unpackNavigationGraph(JSON.parse(gunzipSync(
   readFileSync(path.join(mapRoot, manifest.graphFile))
-).toString('utf8')) as NavigationGraph;
+).toString('utf8')) as NavigationGraph | PackedNavigationGraph);
 const roads = new Map<string, RoadData>();
 const lanes = new Map<string, LaneData>();
 for (const entry of manifest.chunks) {
@@ -87,7 +92,7 @@ for (let sample = 0; sample < 96; sample += 1) {
   // Tiny imported OSM fragments do not represent a meaningful driving
   // direction, but every real entry segment must preserve the car heading.
   if (edge.distance >= 2 && entryError > 0.35) {
-    failures.push(`${start.id}: entrada divergiu ${(entryError * 180 / Math.PI).toFixed(1)}°`);
+    failures.push(`${start.id}: entrada divergiu ${(entryError * 180 / Math.PI).toFixed(1)}° rumo a ${target.id}; primeiro trecho ${formatDistance(Math.hypot(route[1].x - route[0].x, route[1].y - route[0].y))}`);
   }
   const end = route[route.length - 1];
   const endDistance = Math.hypot(end.x - target.x, end.y - target.y);
@@ -107,9 +112,9 @@ for (const service of serviceTargets) {
 }
 
 const surface = new RoadSurfaceAudit([...roads.values()]);
-const graphLaneIds = new Set(graph.nodes.flatMap((node) => node.laneId ? [node.laneId] : []));
+const graphRoadIds = new Set(graph.nodes.flatMap((node) => node.edges.map((edge) => edge.roadId)));
 const routingLanes = [...lanes.values()].filter((lane) => lane.index === 0);
-const missingRoutingLanes = routingLanes.filter((lane) => !graphLaneIds.has(lane.id));
+const missingRoutingLanes = routingLanes.filter((lane) => !graphRoadIds.has(lane.roadSegmentId));
 const nodeSurfaceFailures: string[] = [];
 const laneSurfaceFailures: string[] = [];
 const edgeSurfaceFailures: string[] = [];
@@ -121,8 +126,7 @@ let worstRouteDistance = Number.NEGATIVE_INFINITY;
 const requiredVehicleInset = VEHICLE_PHYSICS.widthMeters / 2;
 
 for (const node of graph.nodes) {
-  const road = node.roadSegmentId ? roads.get(node.roadSegmentId) : undefined;
-  const distance = road ? distanceFromOwnRoad(node, road) : Number.POSITIVE_INFINITY;
+  const distance = surface.distanceFromRoad(node);
   worstNodeDistance = Math.max(worstNodeDistance, distance);
   if (distance > -requiredVehicleInset) nodeSurfaceFailures.push(`${node.id}: margem ${formatDistance(-distance)} insuficiente`);
 }
@@ -188,8 +192,8 @@ for (const sample of sampledRoutes) for (let index = 1; index < sample.route.len
 
 console.log(`Navegação global: ${tested} rotas dirigidas auditadas, ${failures.length} falhas.`);
 console.log(
-  `Cobertura do grafo: ${graphLaneIds.size}/${routingLanes.length} faixas direcionais principais; `
-  + `${missingRoutingLanes.length} fora do componente global; núcleo retornável com ${routableCore.size} nós.`
+  `Cobertura do grafo: ${graphRoadIds.size} vias referenciadas e ${routingLanes.length} faixas direcionais principais; `
+  + `${missingRoutingLanes.length} faixas sem via no grafo global; núcleo retornável com ${routableCore.size} nós.`
 );
 console.log(
   `Superfície viária: ${graph.nodes.length} nós, ${lanes.size} faixas e arestas completas; `
@@ -208,19 +212,27 @@ if (failures.length || surfaceFailures.length) {
 function distanceFromOwnRoad(point: Point, road: RoadData) {
   let distance = Number.POSITIVE_INFINITY;
   for (let index = 1; index < road.points.length; index += 1) {
-    distance = Math.min(distance, distanceFromSegment(point, road.points[index - 1], road.points[index]));
+    const projected = projectToSegment(point, road.points[index - 1], road.points[index]);
+    distance = Math.min(distance, projected.distance - visibleRoadSegmentWidth(road, index - 1, projected.progress) / 2);
   }
-  return distance - visibleRoadWidth(road) / 2;
+  return distance;
 }
 
 function distanceFromSegment(point: Point, from: Point, to: Point) {
+  return projectToSegment(point, from, to).distance;
+}
+
+function projectToSegment(point: Point, from: Point, to: Point) {
   const dx = to.x - from.x;
   const dy = to.y - from.y;
   const lengthSquared = dx * dx + dy * dy;
   const progress = lengthSquared
     ? Math.max(0, Math.min(1, ((point.x - from.x) * dx + (point.y - from.y) * dy) / lengthSquared))
     : 0;
-  return Math.hypot(point.x - (from.x + dx * progress), point.y - (from.y + dy * progress));
+  return {
+    distance: Math.hypot(point.x - (from.x + dx * progress), point.y - (from.y + dy * progress)),
+    progress
+  };
 }
 
 function formatDistance(distance: number) {
@@ -229,6 +241,26 @@ function formatDistance(distance: number) {
 
 function angleDelta(from: number, to: number) {
   return Math.atan2(Math.sin(to - from), Math.cos(to - from));
+}
+
+function unpackNavigationGraph(graph: NavigationGraph | PackedNavigationGraph): NavigationGraph {
+  if (graph.kind !== 'packed-lane') return graph;
+  return {
+    kind: 'lane',
+    version: graph.version,
+    nodes: graph.nodes.map((packed, index) => ({
+      id: index.toString(36),
+      x: packed[0] / graph.precision,
+      y: packed[1] / graph.precision,
+      edges: packed[2].map((edge) => ({
+        to: edge[0].toString(36),
+        distance: edge[1] / graph.precision,
+        roadId: graph.roads[edge[2]],
+        highway: edge[3] >= 0 ? graph.highways[edge[3]] : undefined,
+        connector: edge[4] === 1 || undefined
+      }))
+    }))
+  };
 }
 
 function largestStrongComponent(nodes: NavigationGraph['nodes']) {

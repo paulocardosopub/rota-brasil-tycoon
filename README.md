@@ -1,4 +1,27 @@
-# Rota Brasil Tycoon — PLAYABLE 0.8.5
+# Rota Brasil Tycoon — PLAYABLE 0.8.6
+
+## Malha viária, piloto e carregamento progressivo
+
+- larguras e quantidades de faixas agora são normalizadas por corredor, com transições graduais e sem oscilações curtas artificiais;
+- asfalto, marcações, colisões e grafo dirigido compartilham a mesma geometria, inclusive em vias largas e conexões;
+- o piloto automático usa uma máquina de estados com cancelamento seguro, tentativas limitadas e continuidade entre corridas consecutivas;
+- o mapa abre com um núcleo global compacto e carrega blocos locais conforme posição, movimento e rota ativa;
+- caches do mapa e dos módulos são versionados, limitados e descartam automaticamente dados de versões anteriores;
+- a auditoria completa cobre 32.674 vias, 60.152 faixas, 304.109 nós e 780 blocos em 549,7 km².
+
+## Frota, funcionários e treinamentos
+
+- Minha Frota ganhou navegação direta entre visão geral, veículos, funcionários, garagens, transferências e treinamentos;
+- veículos e funcionários possuem busca, filtros, seleção anterior/próxima e links recíprocos sem sequência de janelas;
+- o layout usa lista lateral no desktop e seletor compacto no mobile, preservando a seleção atual entre as áreas;
+- treinamentos sempre exibem nome, preço e motivo de indisponibilidade com contraste legível;
+- funcionários podem levar um veículo danificado ao reparo, pagar o serviço uma única vez e iniciar o turno automaticamente após a manutenção.
+
+## Velocidade e Modo Sport
+
+- o fluxo médio dos veículos ficou aproximadamente 30% mais rápido;
+- o botão **Modo Sport** fica ao lado do piloto automático e usa a velocidade máxima do veículo;
+- o Sport aumenta o consumo de combustível em 18% enquanto estiver ativo.
 
 ## Expansão regional, economia e serviços
 
@@ -9,9 +32,9 @@
 - o progresso normal ficou 16,3% mais acessível, mantendo combustível, desgaste, reparos e risco de operação;
 - rotas de posto, oficina e garagem recalculam sozinhas quando o jogador assume a direção manual e se afasta;
 - piloto, funcionários e NPCs ativam recuperação imprudente após 10 segundos de bloqueio persistente;
-- save v7 preserva patrimônio anterior e acrescenta região, familiaridade, preferências regionais e linhagem segura da nuvem.
+- save v10 preserva patrimônio anterior e acrescenta região, familiaridade, preferências regionais e linhagem segura da nuvem.
 
-Esta versão foi validada localmente e será publicada como uma release própria, preservando a 0.8.1 e todo o histórico anterior.
+As alterações da 0.8.6 permanecem somente locais até a autorização da publicação, preservando todo o histórico anterior.
 
 Jogo 2.5D de transporte brasileiro para navegador. Você começa ao volante de um Hatch 1998 em Brasília, atende passageiros, torna-se taxista e monta uma frota com funcionários que percorrem a mesma cidade física do jogador.
 
@@ -94,7 +117,7 @@ O painel de desenvolvimento só aparece em `npm run dev` e abre com `Ctrl + Shif
 
 ## Dados de Brasília
 
-O manifesto está em `public/data/cities/brasilia/manifest.json`; os chunks ficam em `public/data/cities/brasilia/chunks/` e o grafo global compactado em `lane-graph.json.gz`. Durante a partida não ocorre consulta ao OpenStreetMap.
+O manifesto está em `public/data/cities/brasilia/manifest.json`; os chunks ficam em `public/data/cities/brasilia/chunks/` e o grafo global compactado em `routing-core-0.8.6.json.gz`. Durante a partida não ocorre consulta ao OpenStreetMap.
 
 Fonte: OpenStreetMap contributors, ODbL 1.0. A caixa geográfica, data de importação, licença e atribuição estão em `metadata.json`, e a atribuição permanece visível no HUD. A fonte bruta compactada e seus metadados ficam em `data/map-sources/brasilia/`; o cache temporário de download não entra no Git.
 
@@ -109,6 +132,9 @@ O workflow `.github/workflows/web.yml` testa, compila e publica `main`. Em **Set
 
 ## Auditorias
 
+- [malha viária 0.8.6](./docs/road-network-audit-0.8.6.md)
+- [desempenho 0.8.6](./docs/performance-0.8.6.json)
+- [auditoria final da PLAYABLE 0.8.6](./docs/playable-0.8.6-audit.md)
 - [auditoria da PLAYABLE 0.8.2](./docs/playable-0.8.2-audit.md)
 - [cobertura regional 0.8.2](./docs/regional-coverage-0.8.2.md)
 - [rebalanceamento econômico 0.8.2](./docs/economy-rebalance-0.8.2.md)

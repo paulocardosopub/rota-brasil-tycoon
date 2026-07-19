@@ -10,6 +10,21 @@ export function visibleRoadWidth(road: Pick<RoadData, 'width'>) {
   return Math.max(4.5, Math.min(36, road.width));
 }
 
+export function visibleRoadWidthAt(road: Pick<RoadData, 'width' | 'widthProfile'>, pointIndex: number) {
+  const profiled = road.widthProfile?.[pointIndex];
+  return Math.max(4.5, Math.min(36, Number.isFinite(profiled) ? profiled! : road.width));
+}
+
+export function visibleRoadSegmentWidth(
+  road: Pick<RoadData, 'width' | 'widthProfile'>,
+  pointIndex: number,
+  progress = 0.5
+) {
+  const from = visibleRoadWidthAt(road, pointIndex);
+  const to = visibleRoadWidthAt(road, pointIndex + 1);
+  return from + (to - from) * Math.max(0, Math.min(1, progress));
+}
+
 export function directionalLaneCount(road: Pick<RoadData, 'lanes' | 'oneway'> | undefined) {
   if (!road) return 1;
   return road.oneway ? Math.max(1, road.lanes) : Math.max(1, Math.floor(road.lanes / 2));

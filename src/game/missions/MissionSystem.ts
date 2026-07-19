@@ -28,7 +28,7 @@ export class MissionSystem {
   private rejectedOffers = 0;
 
   constructor(
-    private readonly router: GraphRouter,
+    private router: GraphRouter,
     start: Point,
     completedRides: number,
     savedMission?: MissionSnapshot | null,
@@ -38,11 +38,13 @@ export class MissionSystem {
     this.mission = savedMission && (savedMission.phase === 'offered' || savedMission.phase === 'pickup' || savedMission.phase === 'passenger-on-board')
       ? this.ensureEconomyFields(structuredClone(savedMission), completedRides, start)
       : this.createMission(start, completedRides);
-    if (savedMission && savedMission.phase !== 'offered') this.recalculate(start);
   }
 
   private pickReachableCandidates(start: Point) {
-    const all = this.router.candidates(80);
+    const connected = this.router.supportsRegionalRoutes()
+      ? this.router.distributedCandidates(900, 80)
+      : this.router.reachableCandidates(start, 80);
+    const all = connected.length >= 8 ? connected : this.router.candidates(80);
     const regions = this.vehicleContext.regions?.filter((region) => region.playable) ?? [];
     if (!regions.length) {
       const distributed = all.filter((_, index) => index % Math.max(1, Math.floor(all.length / 240)) === 0);
@@ -61,13 +63,17 @@ export class MissionSystem {
     const pool = this.candidateNodes.length >= 8 ? this.candidateNodes : this.router.candidates(40);
     const regions = this.vehicleContext.regions?.filter((region) => region.playable) ?? [];
     const currentRegion = regions.length ? regionAt(start, regions) : null;
-    const regionalPlan = chooseRegionalPlan(
-      regions,
-      currentRegion,
-      this.vehicleContext.preferredRegionId ?? 'any',
-      rideIndex,
-      pool
-    );
+    const regionalPlan = this.router.supportsRegionalRoutes()
+      ? chooseRegionalPlan(
+        regions,
+        currentRegion,
+        this.vehicleContext.preferredRegionId ?? 'any',
+        rideIndex,
+        pool
+      )
+      : currentRegion
+        ? { pickupRegion: currentRegion, destinationRegion: currentRegion, kind: 'within-region' as const }
+        : { pickupRegion: null, destinationRegion: null, kind: 'between-sectors' as const };
     const taxiPoints = this.vehicleContext.taxiPoints ?? [];
     const official = isOfficialTaxiRide(this.vehicleContext.taxiLicensed === true, taxiPoints.length);
     const requestTypes = ['taxi-rank', 'street-hail', 'dispatch'] as const;
@@ -77,28 +83,18 @@ export class MissionSystem {
       ? pool.filter((node) => regionAt(node, regions).id === regionalPlan.pickupRegion!.id)
       : pool;
     const pickupCandidates = taxiPoint ? [taxiPoint.entrance, ...pickupPool] : pickupPool;
-    let pickup: Point = pickupCandidates[(rideIndex * 7) % Math.max(1, pickupCandidates.length)]
-      ?? pool[(rideIndex * 7) % Math.max(1, pool.length)]
-      ?? this.router.nearest(start);
-    let pickupRoute: Point[] = [];
-    for (let offset = 0; offset < Math.min(36, pickupCandidates.length); offset += 1) {
-      const candidate = pickupCandidates[(rideIndex * 7 + offset) % pickupCandidates.length];
-      const testRoute = this.router.drivingRoute(start, candidate);
-      const distance = this.router.distance(testRoute);
-      if (testRoute.length >= 2 && distance >= 500 && distance <= 2_000) { pickup = candidate; pickupRoute = testRoute; break; }
-    }
-    if (pickupRoute.length < 2) for (const candidate of pool) {
-      const testRoute = this.router.drivingRoute(start, candidate);
-      const distance = this.router.distance(testRoute);
-      if (testRoute.length >= 2 && distance >= 500 && distance <= 2_000) { pickup = candidate; pickupRoute = testRoute; break; }
-    }
-    if (pickupRoute.length < 2) for (const candidate of this.router.candidates(40)) {
-      const testRoute = this.router.drivingRoute(start, candidate);
-      const distance = this.router.distance(testRoute);
-      if (testRoute.length >= 2 && distance >= 500 && distance <= 2_000) {
-        pickup = candidate; pickupRoute = testRoute; break;
-      }
-    }
+    const viablePickups = pickupCandidates.filter((candidate) => {
+      const estimated = estimatedDrivingDistance(start, candidate);
+      return estimated >= 500 && estimated <= 2_000;
+    });
+    const taxiPickupDistance = taxiPoint ? estimatedDrivingDistance(start, taxiPoint.entrance) : Number.POSITIVE_INFINITY;
+    const pickup: Point = taxiPoint && taxiPickupDistance >= 350 && taxiPickupDistance <= 2_500
+      ? taxiPoint.entrance
+      : viablePickups[(rideIndex * 7) % Math.max(1, viablePickups.length)]
+        ?? pickupCandidates[(rideIndex * 7) % Math.max(1, pickupCandidates.length)]
+        ?? pool[(rideIndex * 7) % Math.max(1, pool.length)]
+        ?? this.router.nearest(start);
+    const pickupDistance = estimatedDrivingDistance(start, pickup);
     const bands = [
       { id: 'short', min: 300, max: 1_500 },
       { id: 'medium', min: 1_500, max: 3_500 },
@@ -108,35 +104,14 @@ export class MissionSystem {
     const band = regionalPlan.kind === 'long' ? bands[3] : bands[rideIndex % 3];
     const destinationPool = pool.filter((candidate) => {
       if (regionalPlan.destinationRegion && regionAt(candidate, regions).id !== regionalPlan.destinationRegion.id) return false;
-      const direct = Math.hypot(candidate.x - pickup.x, candidate.y - pickup.y);
-      return direct >= band.min * 0.55 && direct <= band.max;
-    })
-      .sort((a, b) => Math.hypot(a.x - pickup.x, a.y - pickup.y) - Math.hypot(b.x - pickup.x, b.y - pickup.y));
-    let destination = destinationPool[(rideIndex * 11) % Math.max(1, destinationPool.length)] ?? pool[Math.floor(pool.length / 2)];
-    let rideRoute: Point[] = [];
-    for (let offset = 0; offset < Math.min(28, destinationPool.length); offset += 1) {
-      const candidate = destinationPool[(rideIndex * 7 + offset) % destinationPool.length];
-      const testRoute = this.router.drivingRoute(pickup, candidate);
-      const distance = this.router.distance(testRoute);
-      if (testRoute.length > 2 && distance >= band.min && distance <= band.max * 1.25) {
-        destination = candidate;
-        rideRoute = testRoute;
-        break;
-      }
-    }
-    destination ??= this.router.nearest({ x: -pickup.x * 0.55, y: -pickup.y * 0.55 });
-    if (!rideRoute.length) rideRoute = this.router.drivingRoute(pickup, destination);
-    if (rideRoute.length < 2) {
-      for (const candidate of pool) {
-        const testRoute = this.router.drivingRoute(pickup, candidate);
-        if (testRoute.length >= 2 && this.router.distance(testRoute) >= 300) {
-          destination = candidate;
-          rideRoute = testRoute;
-          break;
-        }
-      }
-    }
-    const rideDistance = this.router.distance(rideRoute);
+      const estimated = estimatedDrivingDistance(pickup, candidate);
+      return estimated >= band.min && estimated <= band.max * 1.1;
+    });
+    const destination: Point = destinationPool[(rideIndex * 11) % Math.max(1, destinationPool.length)]
+      ?? pool.find((candidate) => estimatedDrivingDistance(pickup, candidate) >= band.min * 0.7)
+      ?? pool[Math.floor(pool.length / 2)]
+      ?? this.router.nearest({ x: -pickup.x * 0.55, y: -pickup.y * 0.55 });
+    const rideDistance = Math.max(band.min, Math.min(band.max * 1.1, estimatedDrivingDistance(pickup, destination)));
     const category = categoryForRide(rideIndex);
     const pickupRegion = regions.length ? regionAt(pickup, regions) : null;
     const destinationRegion = regions.length ? regionAt(destination, regions) : null;
@@ -146,7 +121,7 @@ export class MissionSystem {
       ? ECONOMY_CONFIG.regional.favoriteEfficiencyBonus
       : familiarityClass === 'known' ? ECONOMY_CONFIG.regional.knownEfficiencyBonus : 0;
     const demand = demandMultiplier(pickupRegion?.demandLevel, rideIndex) * (1 + familiarityBonus);
-    const recommendedFuelLiters = Math.ceil((this.router.distance(pickupRoute) + rideDistance) / 8.8 * 1.15 / 100) / 10;
+    const recommendedFuelLiters = Math.ceil((pickupDistance + rideDistance) / 8.8 * 1.15 / 100) / 10;
     const usesTaxiPoint = taxiPoint && Math.hypot(pickup.x - taxiPoint.entrance.x, pickup.y - taxiPoint.entrance.y) < 2;
     return {
       id: `ride-${Date.now()}-${rideIndex}`,
@@ -154,8 +129,8 @@ export class MissionSystem {
       phase: 'offered',
       pickup: { x: pickup.x, y: pickup.y },
       destination: { x: destination.x, y: destination.y },
-      pickupLabel: usesTaxiPoint ? taxiPoint.gameName : `Embarque ${pickupRegion?.name ?? 'Brasília'}`,
-      destinationLabel: `Destino ${destinationRegion?.name ?? 'Brasília'}`,
+      pickupLabel: usesTaxiPoint ? taxiPoint.gameName : `Embarque • ${this.addressAt(pickup, pickupRegion?.name ?? 'Brasília')}`,
+      destinationLabel: `Destino • ${this.addressAt(destination, destinationRegion?.name ?? 'Brasília')}`,
       distanceTravelled: 0,
       elapsedSeconds: 0,
       category,
@@ -163,14 +138,14 @@ export class MissionSystem {
       region: pickupRegion && destinationRegion ? `${pickupRegion.name} → ${destinationRegion.name}` : 'Brasília ampliada',
       deadlineSeconds: category === 'urgent' ? Math.max(150, Math.round(rideDistance / 8.5 + 80)) : Math.max(240, Math.round(rideDistance / 7 + 150)),
       offerExpiresAt: new Date(Date.now() + 45_000).toISOString(),
-      pickupDistanceKm: this.router.distance(pickupRoute) / 1_000,
+      pickupDistanceKm: pickupDistance / 1_000,
       requirements: category === 'comfort' ? ['Conforto nível 1 recomendado'] : ['Hatch disponível'],
       quote: createFareQuote({
         distanceMeters: rideDistance,
         estimatedSeconds: Math.max(90, rideDistance / 7.5 + 75),
         category,
         demand,
-        difficulty: 1 + Math.min(0.09, pickupRoute.length / 900),
+        difficulty: 1 + Math.min(0.09, pickupDistance / 20_000),
         condition: this.vehicleContext.condition,
         comfortLevel: this.vehicleContext.comfortLevel,
         rating: this.vehicleContext.rating
@@ -209,7 +184,7 @@ export class MissionSystem {
     const stoppedCorrectly = distance <= interactionRadiusMeters && speedKmh <= maxInteractionSpeedKmh;
     if (this.mission.phase === 'pickup' && stoppedCorrectly) {
       this.mission.phase = 'passenger-on-board';
-      this.route = this.router.drivingRoute(position, this.mission.destination, heading);
+      this.route = [];
       return 'picked-up' as const;
     }
     if (this.mission.phase === 'passenger-on-board' && stoppedCorrectly) {
@@ -249,16 +224,19 @@ export class MissionSystem {
 
   next(position: Point, completedRides: number) {
     this.receipt = null;
+    this.route = [];
     this.mission = this.createMission(position, completedRides);
   }
 
   nextOfficial(position: Point, completedRides: number) {
     this.receipt = null;
+    this.route = [];
     this.mission = this.createMission(position, completedRides);
   }
 
   nextWork(position: Point, completedRides: number, business: 'delivery' | 'light-freight') {
     this.receipt = null;
+    this.route = [];
     this.mission = this.createMission(position, completedRides);
     const kinds: WorkKind[] = business === 'delivery'
       ? ['document', 'food', 'small-parcel', 'express', 'multi-stop']
@@ -270,8 +248,8 @@ export class MissionSystem {
     this.mission.fragile = completedRides % 4 === 0;
     this.mission.requiredVehicle = business === 'delivery' ? 'Moto Urbana 125' : 'Furgão Compacto';
     this.mission.passengerName = business === 'delivery' ? 'Cliente da Central de Entregas' : 'Cliente Frete Brasília';
-    this.mission.pickupLabel = `Coleta • ${this.mission.pickupLabel.replace(/^Embarque\s*/, '')}`;
-    this.mission.destinationLabel = `Entrega • ${this.mission.destinationLabel.replace(/^Destino\s*/, '')}`;
+    this.mission.pickupLabel = `Coleta • ${this.mission.pickupLabel.replace(/^Embarque\s*•?\s*/, '')}`;
+    this.mission.destinationLabel = `Entrega • ${this.mission.destinationLabel.replace(/^Destino\s*•?\s*/, '')}`;
     this.mission.requirements = [`${cargoWeightKg} kg`, this.mission.fragile ? 'Carga frágil' : 'Carga comum', business === 'delivery' ? 'Veículo de entrega' : 'Furgão ou van'];
   }
 
@@ -279,19 +257,63 @@ export class MissionSystem {
     this.vehicleContext = { ...this.vehicleContext, ...context };
   }
 
-  accept(position: Point, heading?: number) {
+  accept(_position: Point, _heading?: number) {
     if (this.mission.phase !== 'offered') return false;
     this.mission.phase = 'pickup';
     this.mission.quality = freshQuality();
-    this.route = this.router.drivingRoute(position, this.mission.pickup, heading);
-    return this.route.length >= 2;
+    this.route = [];
+    return true;
   }
 
   reject(position: Point, completedRides: number) {
     if (this.mission.phase !== 'offered') return false;
     this.rejectedOffers += 1;
+    this.route = [];
     this.mission = this.createMission(position, completedRides + this.rejectedOffers);
     return true;
+  }
+
+  setRoute(route: Point[]) {
+    this.route = route.map((point) => ({ ...point }));
+  }
+
+  updateRouter(router: GraphRouter, position?: Point) {
+    this.router = router;
+    if (position) this.candidateNodes = this.pickReachableCandidates(position);
+  }
+
+  /** Replaces a target created from a provisional local graph when the global
+   * graph cannot reach it. This keeps the accepted mission instead of leaving
+   * the autopilot stopped with an empty route. */
+  recoverTargetRoute(position: Point, heading?: number) {
+    if (this.mission.phase !== 'pickup' && this.mission.phase !== 'passenger-on-board') return [];
+    const pickup = this.mission.phase === 'pickup';
+    const minimum = pickup ? 300 : distanceBand(this.mission.distanceBand).min;
+    const maximum = pickup ? 2_000 : distanceBand(this.mission.distanceBand).max * 1.25;
+    const candidates = this.router.reachableCandidates(position, 160);
+    for (const candidate of candidates) {
+      const direct = Math.hypot(candidate.x - position.x, candidate.y - position.y);
+      if (direct < minimum * 0.55 || direct > maximum) continue;
+      const route = this.router.drivingRoute(position, candidate, heading);
+      const routedDistance = this.router.distance(route);
+      if (route.length < 2 || routedDistance < minimum || routedDistance > maximum) continue;
+      const regions = this.vehicleContext.regions?.filter((region) => region.playable) ?? [];
+      const region = regions.length ? regionAt(candidate, regions) : null;
+      if (pickup) {
+        this.mission.pickup = { x: candidate.x, y: candidate.y };
+        this.mission.pickupLabel = `Embarque • ${this.addressAt(candidate, region?.name ?? 'Brasília')}`;
+        this.mission.pickupDistanceKm = routedDistance / 1_000;
+        this.mission.pickupRegionId = region?.id;
+        this.mission.taxiPointId = undefined;
+      } else {
+        this.mission.destination = { x: candidate.x, y: candidate.y };
+        this.mission.destinationLabel = `Destino • ${this.addressAt(candidate, region?.name ?? 'Brasília')}`;
+        this.mission.destinationRegionId = region?.id;
+        this.mission.routeDistanceMeters = routedDistance;
+      }
+      return route;
+    }
+    return [];
   }
 
   recordCollision() {
@@ -333,11 +355,19 @@ export class MissionSystem {
     mission.region ??= 'Plano Piloto — região central';
     mission.quality ??= freshQuality();
     mission.deadlineSeconds ??= 360;
-    mission.pickupDistanceKm ??= this.router.distance(this.router.drivingRoute(currentPosition, mission.pickup)) / 1_000;
+    mission.pickupDistanceKm ??= estimatedDrivingDistance(currentPosition, mission.pickup) / 1_000;
     mission.requirements ??= mission.category === 'comfort' ? ['Conforto nível 1 recomendado'] : ['Hatch disponível'];
+    const regions = this.vehicleContext.regions?.filter((region) => region.playable) ?? [];
+    if (!mission.taxiPointId && !mission.pickupLabel.includes('Brasília, DF')) {
+      const pickupRegion = regions.length ? regionAt(mission.pickup, regions) : null;
+      mission.pickupLabel = `${mission.workKind ? 'Coleta' : 'Embarque'} • ${this.addressAt(mission.pickup, pickupRegion?.name ?? 'Brasília')}`;
+    }
+    if (!mission.destinationLabel.includes('Brasília, DF')) {
+      const destinationRegion = regions.length ? regionAt(mission.destination, regions) : null;
+      mission.destinationLabel = `${mission.workKind ? 'Entrega' : 'Destino'} • ${this.addressAt(mission.destination, destinationRegion?.name ?? 'Brasília')}`;
+    }
     if (!mission.quote) {
-      const route = this.router.drivingRoute(mission.pickup, mission.destination);
-      const distance = this.router.distance(route);
+      const distance = estimatedDrivingDistance(mission.pickup, mission.destination);
       mission.routeDistanceMeters = distance;
       mission.quote = createFareQuote({
         distanceMeters: distance, estimatedSeconds: Math.max(90, distance / 7.5 + 75), category: mission.category,
@@ -346,6 +376,12 @@ export class MissionSystem {
       });
     }
     return mission;
+  }
+
+  private addressAt(point: Point, regionName: string) {
+    return typeof this.router.addressAt === 'function'
+      ? this.router.addressAt(point, regionName)
+      : `${regionName}, Brasília, DF`;
   }
 
 }
@@ -358,6 +394,13 @@ function categoryForRide(index: number): RideCategory {
   return (['popular', 'urgent', 'popular', 'comfort'] as RideCategory[])[index % 4];
 }
 
+function distanceBand(id: MissionSnapshot['distanceBand']) {
+  if (id === 'medium') return { min: 1_500, max: 3_500 };
+  if (id === 'long') return { min: 3_500, max: 7_500 };
+  if (id === 'inter-region') return { min: 2_500, max: 18_000 };
+  return { min: 300, max: 1_500 };
+}
+
 function freshQuality(): RideQuality {
   return { collisions: 0, redLights: 0, deviationSeconds: 0, aggressiveSeconds: 0, startedAt: new Date().toISOString() };
 }
@@ -366,6 +409,12 @@ function evenlyDistributed(nodes: GraphNode[], maximum: number) {
   const count = Math.min(maximum, nodes.length);
   if (!count) return [];
   return Array.from({ length: count }, (_, index) => nodes[Math.floor(index * nodes.length / count)]);
+}
+
+function estimatedDrivingDistance(from: Point, to: Point) {
+  // The offer only needs an estimate. The exact directed route is calculated
+  // once after acceptance instead of dozens of times on the rendering thread.
+  return Math.hypot(to.x - from.x, to.y - from.y) * 1.18;
 }
 
 function chooseRegionalPlan(regions: MapRegion[], current: MapRegion | null, preferredId: RegionPreference, rideIndex: number, candidates: GraphNode[]) {

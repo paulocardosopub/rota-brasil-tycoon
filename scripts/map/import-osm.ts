@@ -1,6 +1,6 @@
 import { gunzip, gzip } from 'node:zlib';
 import { promisify } from 'node:util';
-import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { XMLParser } from 'fast-xml-parser';
 import type {
@@ -9,7 +9,7 @@ import type {
 import { latLonToLocalMeters } from '../../src/map/projection/localMeters';
 import { buildRegionCatalog, regionAt } from '../../src/map/regions/RegionCatalog';
 import {
-  buildLaneGraph, canonicalizeRoads, chunkIdFor,
+  buildLaneGraph, canonicalizeRoads, chunkIdFor, packNavigationGraph,
   type RawRoadSpec, type RoadOverride
 } from '../../src/map/pipeline/RoadPipeline';
 
@@ -36,7 +36,7 @@ const expansionAreas = [
   { id: 'lago-norte', bounds: { south: -15.79, west: -47.91, north: -15.68, east: -47.77 }, rows: 8, columns: 9 }
 ] as const;
 const chunkSizeMeters = 800;
-const mapVersion = 'brasilia-0.8.2';
+const mapVersion = 'brasilia-0.8.6';
 const gzipAsync = promisify(gzip);
 const gunzipAsync = promisify(gunzip);
 
@@ -251,25 +251,30 @@ async function main() {
     coordinateSystem: 'Coordenadas locais em metros, projeção equiretangular centrada na origem declarada.'
   };
   const manifest: CityMapManifest = {
-    mapVersion, city: 'Brasília', origin, bbox, chunkSizeMeters,
-    graphFile: 'lane-graph.json.gz', signalFile: 'traffic-signals.json', serviceBase: 'central/services',
+    mapVersion, dataRevision: importedAt, city: 'Brasília', origin, bbox, chunkSizeMeters,
+    graphFile: 'routing-core-0.8.6.json.gz', addressFile: 'road-addresses.json', signalFile: 'traffic-signals.json', serviceBase: 'central/services',
     regions, chunks: chunkEntries
   };
+  const roadAddresses = Object.fromEntries(roads
+    .filter((road) => road.name && !/^Via \d+$/.test(road.name))
+    .map((road) => [road.id, road.name]));
   const rawCompressed = await gzipAsync(Buffer.from(JSON.stringify(data)));
-  const graphCompressed = await gzipAsync(Buffer.from(JSON.stringify(graph)), { level: 9 });
+  const graphCompressed = await gzipAsync(Buffer.from(JSON.stringify(packNavigationGraph(graph))), { level: 9 });
   await Promise.all([
     writeJson(path.join(outputRoot, 'manifest.json'), manifest),
     writeJson(path.join(outputRoot, 'metadata.json'), metadata),
-    writeFile(path.join(outputRoot, 'lane-graph.json.gz'), graphCompressed),
+    writeJson(path.join(outputRoot, 'road-addresses.json'), roadAddresses),
+    writeAtomic(path.join(outputRoot, 'routing-core-0.8.6.json.gz'), graphCompressed),
     writeJson(path.join(outputRoot, 'traffic-signals.json'), signals),
     writeFile(sourceFile, rawCompressed),
     writeJson(path.join(sourceRoot, 'source-metadata.json'), {
       source: 'OpenStreetMap', license: 'ODbL 1.0', importedAt, bbox,
-      overpassQueryVersion: '0.8.2', modifications: ['expansão incremental Lago Sul/Jardim Botânico/Lago Norte', 'filtro de vias dirigíveis', 'inferência canônica de corredores', 'grafo por faixa', 'chunks de 800 m', 'geofences OSM'],
+      overpassQueryVersion: '0.8.6', modifications: ['normalização sistêmica de largura por corredor', 'transições graduais entre números de faixas', 'grafo global compacto por faixa', 'chunks progressivos de 800 m', 'geofences OSM'],
       overrideFile: 'data/map-overrides/brasilia/road-overrides.json'
     })
   ]);
   await rm(path.join(outputRoot, 'lane-graph.json'), { force: true });
+  await rm(path.join(outputRoot, 'lane-graph.json.gz'), { force: true });
   console.log(`Mapa ${mapVersion}: ${roads.length} vias, ${lanes.length} faixas, ${graph.nodes.length} nós, ${chunkEntries.length} chunks, ${buildings.length} prédios.`);
 }
 
@@ -332,7 +337,27 @@ function chunkSort(a: string, b: string) {
 
 async function writeJson(filename: string, value: unknown, pretty = true) {
   await mkdir(path.dirname(filename), { recursive: true });
-  await writeFile(filename, `${JSON.stringify(value, null, pretty ? 2 : undefined)}\n`);
+  const contents = `${JSON.stringify(value, null, pretty ? 2 : undefined)}\n`;
+  await writeAtomic(filename, contents);
+}
+
+async function writeAtomic(filename: string, contents: string | Uint8Array) {
+  await mkdir(path.dirname(filename), { recursive: true });
+  const temporary = `${filename}.tmp-${process.pid}`;
+  for (let attempt = 1; attempt <= 5; attempt += 1) {
+    try {
+      await writeFile(temporary, contents);
+      await rename(temporary, filename);
+      return;
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code;
+      if (!['EBUSY', 'EPERM', 'EEXIST', 'UNKNOWN'].includes(code ?? '') || attempt === 5) {
+        await rm(temporary, { force: true });
+        throw error;
+      }
+      await new Promise((resolve) => setTimeout(resolve, attempt * 80));
+    }
+  }
 }
 
 await main();

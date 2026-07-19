@@ -1,9 +1,9 @@
 import { COLLISION_PHYSICS, VEHICLE_PHYSICS } from './vehiclePhysics';
 
 export const GAME_CONFIG = {
-  version: '0.8.5',
+  version: '0.8.6',
   saveVersion: 10,
-  mapVersion: 'brasilia-0.8.2',
+  mapVersion: 'brasilia-0.8.6',
   map: {
     city: 'Brasília',
     district: 'Rodoviária do Plano Piloto e Eixo Monumental',
@@ -68,6 +68,7 @@ export const GAME_CONFIG = {
     npcUtilityCount: 9,
     maximumTerrestrialEntities: 350,
     npcSpeedMps: 8.5,
+    averageSpeedMultiplier: 1.3,
     safetyDistanceMeters: 9,
     collisionStunSeconds: COLLISION_PHYSICS.npcStunSeconds,
     autopilotCollisionGhostSeconds: COLLISION_PHYSICS.autopilotGhostSeconds,

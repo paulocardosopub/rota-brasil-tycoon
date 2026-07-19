@@ -6,6 +6,7 @@ export type GameCommand =
   | { type: 'pause' }
   | { type: 'camera' }
   | { type: 'autopilot' }
+  | { type: 'toggle-autopilot-sport' }
   | { type: 'set-quality'; quality: Quality }
   | { type: 'set-camera-zoom'; zoom: CameraZoom }
   | { type: 'set-camera-shake'; enabled: boolean }
@@ -23,7 +24,7 @@ export type GameCommand =
   | { type: 'reject-ride' }
   | { type: 'generate-work'; business: 'delivery' | 'light-freight' }
   | { type: 'navigate-service'; serviceId: string }
-  | { type: 'navigate-nearest-service'; category: Extract<ServiceCategory, 'fuel' | 'workshop'> }
+  | { type: 'navigate-nearest-service'; category: ServiceCategory }
   | { type: 'clear-service-route' }
   | { type: 'buy-fuel'; liters: number | 'full'; requestId: string }
   | { type: 'workshop-service'; service: WorkshopServiceId; requestId: string }

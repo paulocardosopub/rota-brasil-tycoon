@@ -9,6 +9,7 @@ export interface VehicleInput {
   assistanceEnabled?: boolean;
   assistanceHeading?: number;
   assistanceRoadAnchor?: Point;
+  fuelConsumptionMultiplier?: number;
 }
 
 export interface VehicleModifiers {
@@ -165,12 +166,17 @@ export class VehicleController {
     const travelled = Math.hypot(this.position.x - previous.x, this.position.y - previous.y);
     const accelerationLoad = input.throttle > 0.7 ? 1.08 : 1;
     const highSpeedLoad = Math.abs(this.speed) > config.maxSpeedMps * 0.72 ? 1.08 : 1;
-    this.fuelUsed += (config.idleFuelLitersPerSecond * deltaSeconds + travelled * config.movingFuelLitersPerMeter * accelerationLoad * highSpeedLoad) * this.modifiers.fuelMultiplier;
+    this.fuelUsed += (config.idleFuelLitersPerSecond * deltaSeconds + travelled * config.movingFuelLitersPerMeter * accelerationLoad * highSpeedLoad)
+      * this.modifiers.fuelMultiplier * Math.max(1, input.fuelConsumptionMultiplier ?? 1);
     return travelled;
   }
 
   setModifiers(modifiers: VehicleModifiers) {
     this.modifiers = { ...modifiers };
+  }
+
+  maximumSpeedMps() {
+    return GAME_CONFIG.vehicle.maxSpeedMps * this.modifiers.maxSpeedMultiplier;
   }
 
   alignToRoad(snapToCenter = false, preferredHeading = this.rotation) {

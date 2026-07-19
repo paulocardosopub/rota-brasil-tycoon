@@ -4,6 +4,77 @@ import { buildLaneGraph, canonicalizeRoads, chunkIdFor, type RawRoadSpec } from 
 
 const point = (id: string, x: number, y: number): RoadPoint => ({ nodeId: id, x, y, lat: 0, lon: 0 });
 
+describe('inferência de faixas ausentes', () => {
+  it('não transforma vias de mão dupla sem tag em avenidas de quatro faixas', () => {
+    const roads = canonicalizeRoads([
+      { id: 'primary', points: [point('p0', 0, 0), point('p1', 100, 0)], tags: { highway: 'primary' } },
+      { id: 'secondary', points: [point('s0', 0, 20), point('s1', 100, 20)], tags: { highway: 'secondary' } },
+      { id: 'living', points: [point('l0', 0, 40), point('l1', 100, 40)], tags: { highway: 'living_street' } }
+    ]);
+
+    expect(roads.map((road) => road.lanes)).toEqual([2, 2, 2]);
+    expect(roads.map((road) => road.width)).toEqual([6.7, 6.7, 6.7]);
+    expect(roads.every((road) => road.lanesForward === 1 && road.lanesBackward === 1)).toBe(true);
+  });
+
+  it('mantém uma via expressa de mão única com três faixas por padrão', () => {
+    const [road] = canonicalizeRoads([{
+      id: 'expressway', points: [point('e0', 0, 0), point('e1', 100, 0)],
+      tags: { highway: 'motorway', oneway: 'yes' }
+    }]);
+
+    expect(road.lanes).toBe(3);
+    expect(road.lanesForward).toBe(3);
+    expect(road.lanesBackward).toBe(0);
+  });
+});
+
+describe('transições em entroncamentos', () => {
+  it('reduz gradualmente a avenida antes de um acesso estreito e uma rotatória', () => {
+    const roads = canonicalizeRoads([
+      { id: 'avenue', points: [point('a0', 0, 0), point('join', 120, 0)], tags: { highway: 'primary', name: 'Avenida', lanes: '4' } },
+      { id: 'link', points: [point('join', 120, 0), point('round', 240, 0)], tags: { highway: 'primary_link', oneway: 'yes', lanes: '1' } },
+      { id: 'roundabout', points: [point('round', 240, 0), point('r1', 260, 20), point('r2', 240, 40), point('round', 240, 0)], tags: { highway: 'primary', junction: 'roundabout', lanes: '2' } }
+    ]);
+    const avenue = roads.find((road) => road.id === 'avenue')!;
+
+    expect(avenue.widthProfile?.[0]).toBeCloseTo(13.4);
+    expect(avenue.widthProfile?.at(-1)).toBeCloseTo(8.4);
+    expect(avenue.widthProfile?.length).toBe(avenue.points.length);
+    expect(Math.min(...avenue.widthProfile!)).toBeGreaterThanOrEqual(avenue.lanes * 2.1);
+    for (let index = 1; index < avenue.points.length; index += 1) {
+      const segmentLength = Math.hypot(
+        avenue.points[index].x - avenue.points[index - 1].x,
+        avenue.points[index].y - avenue.points[index - 1].y
+      );
+      expect(Math.abs(avenue.widthProfile![index] - avenue.widthProfile![index - 1]) / segmentLength).toBeLessThanOrEqual(0.121);
+    }
+  });
+
+  it('não alarga uma rua perpendicular em um cruzamento com avenida', () => {
+    const roads = canonicalizeRoads([
+      { id: 'avenue-west', points: [point('w', -100, 0), point('cross', 0, 0)], tags: { highway: 'primary', lanes: '4' } },
+      { id: 'avenue-east', points: [point('cross', 0, 0), point('e', 100, 0)], tags: { highway: 'primary', lanes: '4' } },
+      { id: 'side', points: [point('s', 0, -100), point('cross', 0, 0)], tags: { highway: 'residential', lanes: '2' } }
+    ]);
+    const side = roads.find((road) => road.id === 'side')!;
+
+    expect(side.widthProfile).toBeUndefined();
+  });
+
+  it('preserva a emenda de dois fragmentos da mesma avenida', () => {
+    const roads = canonicalizeRoads([
+      { id: 'avenue-a', points: [point('a', 0, 0), point('join', 100, 0)], tags: { highway: 'primary', name: 'Avenida Contínua', lanes: '4' } },
+      { id: 'avenue-b', points: [point('join', 100, 0), point('b', 200, 0)], tags: { highway: 'primary', name: 'Avenida Contínua', lanes: '4' } },
+      { id: 'access', points: [point('join', 100, 0), point('c', 160, 20)], tags: { highway: 'primary_link', oneway: 'yes', lanes: '1' } }
+    ]);
+    const first = roads.find((road) => road.id === 'avenue-a')!;
+    const second = roads.find((road) => road.id === 'avenue-b')!;
+
+    expect(first.widthProfile?.at(-1) ?? first.width).toBeCloseTo(second.widthProfile?.[0] ?? second.width);
+  });
+});
+
 describe('pipeline viário 0.7', () => {
   it('propaga faixas e largura pelo corredor quando um fragmento perde as tags', () => {
     const raw: RawRoadSpec[] = [
@@ -15,6 +86,27 @@ describe('pipeline viário 0.7', () => {
     expect(roads[1].width).toBe(14);
     expect(roads[1].lanesForward).toBe(2);
     expect(roads[1].lanesBackward).toBe(2);
+  });
+
+  it('elimina oscilacao curta 4 -> 6 -> 4 mesmo quando o fragmento traz faixa de conversao', () => {
+    const roads = canonicalizeRoads([
+      { id: 'before', points: [point('n0', 0, 0), point('n1', 120, 0)], tags: { highway: 'primary', name: 'Avenida Continua', lanes: '4' } },
+      { id: 'noise', points: [point('n1', 120, 0), point('n2', 180, 0)], tags: { highway: 'primary', name: 'Avenida Continua', lanes: '6', 'turn:lanes:forward': 'left|through|through' } },
+      { id: 'after', points: [point('n2', 180, 0), point('n3', 320, 0)], tags: { highway: 'primary', name: 'Avenida Continua', lanes: '4' } }
+    ]);
+    expect(roads.map((road) => road.lanes)).toEqual([4, 4, 4]);
+    expect(roads[1].width).toBeCloseTo(13.4);
+  });
+
+  it('preserva mudanca longa legitima com transicao gradual compartilhada', () => {
+    const roads = canonicalizeRoads([
+      { id: 'four', points: [point('n0', 0, 0), point('join', 120, 0)], tags: { highway: 'primary', name: 'Avenida Continua', lanes: '4' } },
+      { id: 'six', points: [point('join', 120, 0), point('n2', 520, 0)], tags: { highway: 'primary', name: 'Avenida Continua', lanes: '6' } }
+    ]);
+    expect(roads[1].lanes).toBe(6);
+    expect(roads[1].widthProfile?.[0]).toBeCloseTo(roads[0].widthProfile?.at(-1) ?? 0);
+    expect(roads[1].widthProfile?.at(-1)).toBeCloseTo(roads[1].width);
+    expect(roads[1].points.length).toBeGreaterThan(2);
   });
 
   it('normaliza oneway=-1 e nunca cria faixa no sentido contrário', () => {
@@ -110,6 +202,25 @@ describe('pipeline viário 0.7', () => {
     const feeder = graph.nodes.filter((node) => node.roadSegmentId === 'feeder');
     expect(feeder.length).toBe(2);
     expect(feeder.some((node) => node.edges.some((edge) => edge.roadId === 'a'))).toBe(true);
+  });
+
+  it('rejeita ganchos obtusos e prefere a saída direta em acessos de avenida', () => {
+    const roads = canonicalizeRoads([
+      { id: 'incoming', points: [point('in', -100, 0), point('join', 0, 0)], tags: { highway: 'residential', oneway: 'yes', lanes: '1' } },
+      { id: 'straight', points: [point('join', 0, 0), point('east', 100, 0)], tags: { highway: 'primary', oneway: 'yes', lanes: '2' } },
+      { id: 'right', points: [point('join', 0, 0), point('north', 0, 100)], tags: { highway: 'primary', oneway: 'yes', lanes: '2' } },
+      { id: 'hook', points: [point('join', 0, 0), point('back', -80, 40)], tags: { highway: 'primary', oneway: 'yes', lanes: '2' } }
+    ]);
+    const { graph } = buildLaneGraph(roads);
+    const arrival = graph.nodes.find((node) => node.sourceNodeId === 'join' && node.roadSegmentId === 'incoming')!;
+    const connectors = arrival.edges.filter((edge) => edge.connector);
+    const straight = connectors.find((edge) => edge.roadId === 'straight');
+    const right = connectors.find((edge) => edge.roadId === 'right');
+
+    expect(straight).toBeDefined();
+    expect(right).toBeDefined();
+    expect(connectors.some((edge) => edge.roadId === 'hook')).toBe(false);
+    expect(right!.distance).toBeGreaterThan(straight!.distance);
   });
 
   it('não funde como cruzamento vias em layers diferentes', () => {

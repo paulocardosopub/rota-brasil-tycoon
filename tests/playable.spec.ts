@@ -76,6 +76,100 @@ test('controle volta após trocar de aba e uma nova corrida continua dirigível'
   await otherPage.close();
 });
 
+test('frota navega entre veículos, funcionários e filtros no desktop e no celular', async ({ page }) => {
+  test.setTimeout(70_000);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto('./');
+  await page.getByTestId('guest-button').click();
+  await expect(page.locator('[data-game-ready="true"]')).toBeVisible({ timeout: 25_000 });
+
+  await page.keyboard.press('Control+Shift+D');
+  await page.getByRole('button', { name: 'Cumprir requisitos' }).click();
+  await page.getByRole('button', { name: 'Regularizar', exact: true }).click();
+  await page.getByRole('button', { name: 'Converter Hatch' }).click();
+  await page.getByRole('button', { name: 'Contratar Bia' }).click();
+  await page.getByRole('button', { name: 'Comprar Sedan' }).click();
+  await page.getByRole('button', { name: 'Atribuir motorista' }).click();
+  await page.keyboard.press('Control+Shift+D');
+
+  await page.getByTestId('fleet-button').click();
+  await page.getByTestId('fleet-tab-vehicles').click();
+  const selectedVehicle = page.getByTestId('selected-fleet-vehicle');
+  const firstVehicleId = await selectedVehicle.getAttribute('data-vehicle-id');
+  await page.getByRole('button', { name: 'Próximo veículo →' }).click();
+  await expect(selectedVehicle).not.toHaveAttribute('data-vehicle-id', firstVehicleId!);
+  const sedanId = await selectedVehicle.getAttribute('data-vehicle-id');
+  await expect(selectedVehicle).toContainText('Sedan 2012');
+  await page.getByRole('button', { name: '← Veículo anterior' }).click();
+  await expect(selectedVehicle).toHaveAttribute('data-vehicle-id', firstVehicleId!);
+  await page.getByRole('button', { name: 'Próximo veículo →' }).click();
+  await expect(selectedVehicle).toHaveAttribute('data-vehicle-id', sedanId!);
+
+  const search = page.getByTestId('fleet-vehicle-search');
+  await search.fill('Hatch');
+  await expect(selectedVehicle).toContainText('Hatch 1998');
+  await expect(page.getByText('Veículo 1 de 1', { exact: true })).toBeVisible();
+  await search.fill('');
+  await page.getByLabel('Somente veículos sem motorista').check();
+  await expect(selectedVehicle).toContainText('Sem funcionário atribuído');
+  await page.getByLabel('Somente veículos sem motorista').uncheck();
+  await expect(selectedVehicle).toHaveAttribute('data-vehicle-id', sedanId!);
+
+  await page.getByRole('button', { name: 'Ver funcionário' }).click();
+  const selectedEmployee = page.getByTestId('selected-fleet-employee');
+  const employeeId = await selectedEmployee.getAttribute('data-employee-id');
+  await expect(selectedEmployee).toContainText('Motorista Bia Rocha');
+  await page.getByRole('button', { name: '← Voltar ao veículo' }).click();
+  await expect(selectedVehicle).toHaveAttribute('data-vehicle-id', sedanId!);
+  await page.getByTestId('fleet-tab-employees').click();
+  await expect(selectedEmployee).toHaveAttribute('data-employee-id', employeeId!);
+  await page.getByRole('button', { name: 'Ver veículo', exact: true }).click();
+  await expect(selectedVehicle).toHaveAttribute('data-vehicle-id', sedanId!);
+  await page.getByTestId('fleet-tab-training').click();
+  await expect(page.getByTestId('fleet-training')).toContainText('Bia Rocha');
+  await page.getByTestId('fleet-tab-employees').click();
+  await expect(selectedEmployee).toHaveAttribute('data-employee-id', employeeId!);
+
+  await page.getByTestId('fleet-tab-vehicles').click();
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(page.locator('.fleet-mobile-selector')).toBeVisible();
+  await expect(page.locator('.fleet-side-list')).toBeHidden();
+  await expect(page.getByRole('button', { name: '← Veículo anterior' })).toBeInViewport();
+  await expect(page.getByRole('button', { name: 'Próximo veículo →' })).toBeInViewport();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
+});
+
+test('Cidade fica compacta e a Garagem organiza frota e catálogo por categoria', async ({ page }) => {
+  await page.goto('./');
+  await page.getByTestId('guest-button').click();
+  await expect(page.locator('[data-game-ready="true"]')).toBeVisible({ timeout: 25_000 });
+
+  await page.getByTestId('garage-button').click();
+  const panel = page.locator('.game-panel');
+  await expect(page.getByTestId('autopilot-button')).toHaveCount(0);
+  await expect(page.getByTestId('sport-mode-button')).toHaveCount(0);
+  await expect(panel).toContainText('Meus veículos');
+  await expect(panel).toContainText('Hatch 1998');
+  await page.getByRole('button', { name: 'Comprar', exact: true }).click();
+  await expect(panel).toContainText('Conclua a regularização de táxi');
+  await page.getByRole('button', { name: /Motos/ }).click();
+  await expect(panel).toContainText('Abra a Central de Entregas');
+  await page.getByRole('button', { name: 'Melhorias', exact: true }).click();
+  await expect(panel).toContainText('Condição');
+
+  await page.getByTestId('city-button').click();
+  await expect(page.getByTestId('autopilot-button')).toHaveCount(0);
+  await expect(page.getByTestId('city-tab-overview')).toHaveClass(/active/);
+  await expect(panel.locator('.current-address')).toContainText('Brasília, DF');
+  await expect(panel.locator('.current-address')).not.toHaveText('Setores Centrais');
+  await page.getByTestId('city-tab-regions').click();
+  await expect(panel).toContainText('Asa Norte');
+  await page.getByTestId('city-tab-services').click();
+  await expect(panel.getByPlaceholder('Nome ou endereço')).toBeVisible();
+  await expect(panel.getByText(/Abastecer •/)).toHaveCount(0);
+  await expect(panel.getByText('Serviços da oficina', { exact: true })).toHaveCount(0);
+});
+
 test('controles móveis aceleram o Hatch continuamente', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('./');
@@ -99,15 +193,25 @@ test('piloto automático dirige sozinho e recolhe os controles no celular', asyn
   await expect(hud).toBeVisible({ timeout: 25_000 });
   await expect(page.locator('.mobile-controls')).toBeVisible();
 
+  const sportButton = page.getByTestId('sport-mode-button');
+  await expect(sportButton).toBeVisible();
+
   await page.getByTestId('autopilot-button').click();
   await expect(hud).toHaveAttribute('data-autopilot-enabled', 'true');
   await expect(page.locator('.mobile-controls')).toBeHidden();
+  await expect.poll(async () => Number(await hud.getAttribute('data-speed-kmh')), { timeout: 8_000 }).toBeGreaterThan(10);
+  await sportButton.click();
+  await expect(hud).toHaveAttribute('data-autopilot-sport', 'true');
   const pilotBox = await page.getByTestId('autopilot-button').boundingBox();
+  const sportBox = await sportButton.boundingBox();
   const menuBox = await page.locator('.bottom-nav').boundingBox();
   expect(pilotBox).not.toBeNull();
+  expect(sportBox).not.toBeNull();
   expect(menuBox).not.toBeNull();
+  expect(sportBox!.x).toBeGreaterThan(pilotBox!.x);
+  expect(Math.abs(sportBox!.y - pilotBox!.y)).toBeLessThan(4);
   expect(pilotBox!.y + pilotBox!.height).toBeLessThanOrEqual(menuBox!.y + 3);
-  await expect.poll(async () => Number(await hud.getAttribute('data-speed-kmh')), { timeout: 8_000 }).toBeGreaterThan(10);
+  await expect.poll(async () => Number(await hud.getAttribute('data-speed-kmh')), { timeout: 4_000 }).toBeGreaterThan(10);
   // O piloto prefere a rua, mas pode atravessar uma pequena falha do mapa para
   // não ficar preso. Curvas e retorno ao asfalto são cobertos pelos testes do mapa.
   await expect.poll(async () => Number(await hud.getAttribute('data-autopilot-min-road-clearance'))).toBeGreaterThan(-6);
@@ -279,14 +383,19 @@ test('piloto entra no posto real, para e abastece somente após confirmação', 
   await expect(hud).toBeVisible({ timeout: 25_000 });
   const fuelBefore = Number(await hud.getAttribute('data-fuel'));
   await page.getByTestId('city-button').click();
+  await page.getByTestId('city-tab-services').click();
   await page.getByRole('button', { name: /Posto Eixo Norte/ }).click();
   await expect(hud).toHaveAttribute('data-selected-service', 'fuel-shn-br');
+  await page.getByRole('button', { name: 'Fechar' }).click();
   await page.keyboard.press('Control+Shift+D');
   await page.getByRole('button', { name: 'Ir à entrada do serviço' }).click();
   await page.keyboard.press('Control+Shift+D');
   await page.getByTestId('autopilot-button').click();
   await expect(hud).toHaveAttribute('data-nearby-service', 'fuel-shn-br', { timeout: 15_000 });
   await expect.poll(async () => Number(await hud.getAttribute('data-speed-kmh')), { timeout: 10_000 }).toBeLessThanOrEqual(4);
+  if (await page.locator('.dev-panel').isVisible()) await page.locator('.dev-panel > button').click();
+  await page.getByTestId('open-service-panel').click();
+  await expect(page.locator('.game-panel')).toContainText('POSTO DE COMBUSTÍVEL');
   await page.getByRole('button', { name: /5 L/ }).click();
   const confirmation = page.locator('.confirm-strip');
   await expect(confirmation).toContainText('Confirmar 5 L');
@@ -306,12 +415,17 @@ test('oficina real recebe o piloto e registra reparo sem atravessar prédio', as
   await page.getByRole('button', { name: 'Dano +25' }).click();
   await page.keyboard.press('Control+Shift+D');
   await page.getByTestId('city-button').click();
+  await page.getByTestId('city-tab-services').click();
   await page.getByRole('button', { name: /Oficina Central do Eixo/ }).click();
+  await page.getByRole('button', { name: 'Fechar' }).click();
   await page.keyboard.press('Control+Shift+D');
   await page.getByRole('button', { name: 'Ir à entrada do serviço' }).click();
   await page.keyboard.press('Control+Shift+D');
   await page.getByTestId('autopilot-button').click();
   await expect(hud).toHaveAttribute('data-nearby-service', 'workshop-shn-central', { timeout: 15_000 });
+  if (await page.locator('.dev-panel').isVisible()) await page.locator('.dev-panel > button').click();
+  await page.getByTestId('open-service-panel').click();
+  await expect(page.locator('.game-panel')).toContainText('OFICINA');
   await page.getByRole('button', { name: /Reparo rápido/ }).click();
   await page.locator('.confirm-strip').getByRole('button', { name: 'Confirmar' }).click();
   await expect.poll(async () => Number(await hud.getAttribute('data-ledger-count'))).toBeGreaterThanOrEqual(1);

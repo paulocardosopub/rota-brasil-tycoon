@@ -26,16 +26,38 @@ export default defineConfig({
         ]
       },
       workbox: {
-        globPatterns: ['**/*.{js,css,html,svg,json}'],
-        globIgnores: ['data/cities/brasilia/chunks/**'],
-        runtimeCaching: [{
-          urlPattern: /\/data\/cities\/brasilia\/(?:chunks\/|lane-graph\.json\.gz)/,
-          handler: 'CacheFirst',
-          options: {
-            cacheName: 'brasilia-map-0.7',
-            expiration: { maxEntries: 30, maxAgeSeconds: 30 * 24 * 60 * 60 }
+        globPatterns: ['**/*.{js,css,html,svg}'],
+        globIgnores: [
+          'assets/GameCanvas-*.js',
+          'assets/Hud-*.js',
+          'assets/BusTransitConfig-*.js'
+        ],
+        cleanupOutdatedCaches: true,
+        skipWaiting: true,
+        clientsClaim: true,
+        runtimeCaching: [
+          {
+            urlPattern: /\/data\/cities\/brasilia\/manifest\.json/,
+            handler: 'NetworkFirst',
+            options: { cacheName: 'brasilia-manifest-0.8.6', networkTimeoutSeconds: 2 }
+          },
+          {
+            urlPattern: /\/data\/cities\/brasilia\//,
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'brasilia-map-0.8.6',
+              expiration: { maxEntries: 110, maxAgeSeconds: 30 * 24 * 60 * 60 }
+            }
+          },
+          {
+            urlPattern: /\/assets\/(?:GameCanvas|Hud|BusTransitConfig)-[^/]+\.js$/,
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'rota-lazy-0.8.6',
+              expiration: { maxEntries: 8, maxAgeSeconds: 30 * 24 * 60 * 60 }
+            }
           }
-        }],
+        ],
         navigateFallback: 'index.html'
       }
     })
