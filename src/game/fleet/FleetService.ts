@@ -423,7 +423,7 @@ export function returnFleetVehicleControl(save: PlayerSave) {
   save.position = { ...previous.position };
   save.rotation = previous.rotation;
   save.temporaryVehicleControl = null;
-  save.viewedVehicleId = vehicle.id;
+  save.viewedVehicleId = null;
   return { applied: true as const, vehicle, employee, shift };
 }
 

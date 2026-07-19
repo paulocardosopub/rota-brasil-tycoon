@@ -54,6 +54,7 @@ export class MainScene extends Phaser.Scene {
   private mapVisuals: Phaser.GameObjects.GameObject[] = [];
   private mapRenderCenter: Point | null = null;
   private mapWindowRequestCenter: Point | null = null;
+  private mapWindowController: AbortController | null = null;
   private mapStreamingSafetyActive = false;
   private router?: GraphRouter;
   private vehicle?: VehicleController;
@@ -840,47 +841,67 @@ export class MainScene extends Phaser.Scene {
     }
     this.mapStreamingSafetyActive = false;
     if (!this.mapStream.needsWindow(focusPosition, streamOptions)) return;
-    this.mapStreamLoading = true;
-    this.mapWindowRequestCenter = { ...focusPosition };
     const previousRegion = this.save.currentRegion;
-    void this.mapStream.windowAt(focusPosition, streamOptions).then((map) => {
-      if (!this.vehicle || !this.traffic || !this.roadSurface || !this.mapStream) return;
-      const graphChanged = !this.router?.matchesGraph(map.graph);
-      this.map = map;
-      if (graphChanged || !this.router) {
-        this.router = new GraphRouter(map.graph, map.roads, map.roadNames);
-        this.mission?.updateRouter(this.router, focusPosition);
-      } else {
-        this.router.replaceRoads(map.roads);
-      }
-      this.roadSurface.replaceRoads(map.roads);
-      this.traffic.updateMap(map.roads, map.signals, focusPosition);
-      this.renderMap(map);
-      if (this.save.busOperation.status === 'heading-to-stop') this.rebuildBusRoute();
-      const location = this.mapStream.location(focusPosition);
-      this.save.currentChunk = location.chunkId;
-      this.save.currentRegion = location.region.name;
-      void this.online?.updateChunks(location.chunkId, this.adjacentChunks(location.chunkId));
-      if (previousRegion !== this.save.currentRegion) this.emitToast(`Entrando em ${this.save.currentRegion}.`, 'info');
-      if (this.showGraph) this.renderDebugGraph();
-      this.drawRoute();
-    }).catch((error) => {
-      console.error(error);
-      this.emitToast('O próximo trecho do mapa não pôde ser carregado. Tentando novamente.', 'warning');
-    }).finally(() => {
-      this.mapStreamLoading = false;
-      this.mapWindowRequestCenter = null;
-      this.mapStreamingSafetyActive = false;
+    void this.prepareMapWindow(focusPosition, this.vehicle.rotation, Math.abs(this.vehicle.speed)).then((map) => {
+      if (map) this.applyMapWindow(map, focusPosition, previousRegion);
     });
   }
 
-  private renderMap(map: CityMapData) {
+  private async prepareMapWindow(position: Point, heading: number, speedMps: number, radiusMeters?: number) {
+    if (!this.mapStream) return null;
+    this.mapWindowController?.abort('janela-substituída');
+    const controller = new AbortController();
+    this.mapWindowController = controller;
+    this.mapStreamLoading = true;
+    this.mapWindowRequestCenter = { ...position };
+    try {
+      return await this.mapStream.windowAt(position, { heading, speedMps, radiusMeters, signal: controller.signal });
+    } catch (error) {
+      if (!controller.signal.aborted) {
+        console.error(error);
+        this.emitToast('O próximo trecho do mapa não pôde ser carregado. Tentando novamente.', 'warning');
+      }
+      return null;
+    } finally {
+      if (this.mapWindowController === controller) {
+        this.mapWindowController = null;
+        this.mapStreamLoading = false;
+        this.mapWindowRequestCenter = null;
+        this.mapStreamingSafetyActive = false;
+      }
+    }
+  }
+
+  private applyMapWindow(map: CityMapData, focusPosition: Point, previousRegion = this.save.currentRegion) {
+    if (!this.vehicle || !this.traffic || !this.roadSurface || !this.mapStream) return;
+    const graphChanged = !this.router?.matchesGraph(map.graph);
+    this.map = map;
+    if (graphChanged || !this.router) {
+      this.router = new GraphRouter(map.graph, map.roads, map.roadNames);
+      this.mission?.updateRouter(this.router, focusPosition);
+    } else {
+      this.router.replaceRoads(map.roads);
+    }
+    this.roadSurface.replaceRoads(map.roads);
+    this.traffic.updateMap(map.roads, map.signals, focusPosition);
+    this.renderMap(map, focusPosition);
+    if (this.save.busOperation.status === 'heading-to-stop') this.rebuildBusRoute();
+    const location = this.mapStream.location(focusPosition);
+    this.save.currentChunk = location.chunkId;
+    this.save.currentRegion = location.region.name;
+    void this.online?.updateChunks(location.chunkId, this.adjacentChunks(location.chunkId));
+    if (previousRegion !== this.save.currentRegion) this.emitToast(`Entrando em ${this.save.currentRegion}.`, 'info');
+    if (this.showGraph) this.renderDebugGraph();
+    this.drawRoute();
+  }
+
+  private renderMap(map: CityMapData, centerOverride?: Point) {
     for (const visual of this.mapVisuals) visual.destroy();
     this.mapVisuals = [];
     this.signalVisuals = [];
-    const renderCenter = this.followFleetVehicle
+    const renderCenter = centerOverride ?? (this.followFleetVehicle
       ? this.fleetVehicles?.activePosition() ?? this.vehicle?.position ?? this.save.position
-      : this.vehicle?.position ?? this.save.position;
+      : this.vehicle?.position ?? this.save.position);
     this.mapRenderCenter = { ...renderCenter };
     const renderRadius = this.save.settings.quality === 'high'
       ? this.save.settings.cameraZoom === 'far' ? 560 : 420
@@ -1590,11 +1611,11 @@ export class MainScene extends Phaser.Scene {
       return;
     }
     if (command.type === 'view-fleet-vehicle') {
-      this.viewFleetVehicle(command.vehicleId);
+      void this.viewFleetVehicle(command.vehicleId);
       return;
     }
     if (command.type === 'stop-viewing-vehicle') {
-      this.stopViewingFleetVehicle();
+      void this.stopViewingFleetVehicle();
       return;
     }
     if (command.type === 'assume-fleet-vehicle') {
@@ -1867,10 +1888,17 @@ export class MainScene extends Phaser.Scene {
 
   private rebuildPlayerVehicle() {
     if (!this.roadSurface) return;
+    this.followFleetVehicle = false;
+    this.fleetVehicles?.setFollowEnabled(false);
     this.vehicle = new VehicleController(this.save.position, this.save.rotation, this.roadSurface);
     this.vehicle.setModifiers(this.activeVehicleModifiers());
     this.vehicle.alignToRoad(true, this.save.rotation);
     this.refreshPlayerVehicleVisual();
+    if (this.vehicleVisual) {
+      this.cameras.main.stopFollow();
+      this.cameras.main.centerOn(this.vehicleVisual.x, this.vehicleVisual.y);
+      this.cameras.main.startFollow(this.vehicleVisual, true, GAME_CONFIG.camera.followLerp, GAME_CONFIG.camera.followLerp);
+    }
     this.updateMissionVehicleContext();
     if (this.currentRouteKey()) this.requestActiveRoute('vehicle-changed');
     this.syncMissionVisuals();
@@ -1920,16 +1948,24 @@ export class MainScene extends Phaser.Scene {
     }
   }
 
-  private viewFleetVehicle(vehicleId: string) {
+  private async viewFleetVehicle(vehicleId: string) {
     const vehicle = this.save.fleet.vehicles.find((item) => item.id === vehicleId);
     if (!vehicle || !this.fleetVehicles) return;
+    const previousRegion = this.save.currentRegion;
+    const preparedMap = await this.prepareMapWindow(vehicle.position, vehicle.rotation, 0, 260);
+    if (!preparedMap) return;
+    this.applyMapWindow(preparedMap, vehicle.position, previousRegion);
     this.save.viewedVehicleId = vehicle.id;
     const isActiveShift = this.save.fleet.activeShift?.vehicleId === vehicle.id && !this.save.temporaryVehicleControl;
     this.followFleetVehicle = isActiveShift;
     this.fleetVehicles.setFollowEnabled(isActiveShift);
     this.fleetVehicles.update(this.save, this.vehicle?.position ?? this.save.position, 0.01);
     const target = this.fleetVehicles.viewedObject(vehicle.id);
-    if (target) this.cameras.main.startFollow(target, true, GAME_CONFIG.camera.followLerp, GAME_CONFIG.camera.followLerp);
+    if (target) {
+      this.cameras.main.stopFollow();
+      this.cameras.main.centerOn(target.x, target.y);
+      this.cameras.main.startFollow(target, true, GAME_CONFIG.camera.followLerp, GAME_CONFIG.camera.followLerp);
+    }
     else {
       const projected = this.project(vehicle.position);
       this.cameras.main.stopFollow();
@@ -1939,11 +1975,21 @@ export class MainScene extends Phaser.Scene {
     this.emitToast(`Visualizando ${vehicle.model}. A operação continua normalmente.`, 'info');
   }
 
-  private stopViewingFleetVehicle() {
+  private async stopViewingFleetVehicle() {
+    if (!this.vehicle) return;
+    const position = { ...this.vehicle.position };
+    const previousRegion = this.save.currentRegion;
+    const preparedMap = await this.prepareMapWindow(position, this.vehicle.rotation, 0, 260);
+    if (!preparedMap) return;
+    this.applyMapWindow(preparedMap, position, previousRegion);
     this.save.viewedVehicleId = null;
     this.followFleetVehicle = false;
     this.fleetVehicles?.setFollowEnabled(false);
-    if (this.vehicleVisual) this.cameras.main.startFollow(this.vehicleVisual, true, GAME_CONFIG.camera.followLerp, GAME_CONFIG.camera.followLerp);
+    if (this.vehicleVisual) {
+      this.cameras.main.stopFollow();
+      this.cameras.main.centerOn(this.vehicleVisual.x, this.vehicleVisual.y);
+      this.cameras.main.startFollow(this.vehicleVisual, true, GAME_CONFIG.camera.followLerp, GAME_CONFIG.camera.followLerp);
+    }
     this.persist();
   }
 
@@ -1955,6 +2001,9 @@ export class MainScene extends Phaser.Scene {
       this.emitToast(shift ? 'Aguarde o fim da preparação do veículo.' : 'Este veículo já está sob seu controle.', 'warning');
       return;
     }
+    const previousRegion = this.save.currentRegion;
+    const preparedMap = await this.prepareMapWindow(target.position, target.rotation, 0, 260);
+    if (!preparedMap) return;
     if (this.online && !await this.online.switchVehicleControl(target.id, target.stateVersion)) {
       this.emitToast('Outro jogador ou outra aba já controla este veículo.', 'warning');
       return;
@@ -1967,6 +2016,7 @@ export class MainScene extends Phaser.Scene {
     this.fleetVehicles?.releaseForControlChange();
     this.followFleetVehicle = false;
     this.autopilotEnabled = false;
+    this.applyMapWindow(preparedMap, result.vehicle.position, previousRegion);
     this.rebuildPlayerVehicle();
     this.persist();
     this.emitToast(result.employee
@@ -1978,6 +2028,10 @@ export class MainScene extends Phaser.Scene {
     const control = this.save.temporaryVehicleControl;
     if (!control) return;
     const previous = this.save.fleet.vehicles.find((item) => item.id === control.previousActiveVehicleId);
+    if (!previous) return;
+    const previousRegion = this.save.currentRegion;
+    const preparedMap = await this.prepareMapWindow(previous.position, previous.rotation, 0, 260);
+    if (!preparedMap) return;
     if (previous && this.online && !await this.online.switchVehicleControl(previous.id, previous.stateVersion)) {
       this.emitToast('Não foi possível recuperar o controle do veículo anterior nesta sessão.', 'warning');
       return;
@@ -1985,6 +2039,7 @@ export class MainScene extends Phaser.Scene {
     const result = returnFleetVehicleControl(this.save);
     if (!result.applied) return;
     this.fleetVehicles?.releaseForControlChange();
+    this.applyMapWindow(preparedMap, previous.position, previousRegion);
     this.rebuildPlayerVehicle();
     this.persist();
     const needsService = result.vehicle.fuel / result.vehicle.fuelCapacity * 100 < 25 || result.vehicle.condition < 45;
@@ -2399,6 +2454,12 @@ export class MainScene extends Phaser.Scene {
       headingDelta: Phaser.Math.Angle.Wrap(desiredAngle - this.vehicle.rotation),
       vehicleHeading: this.vehicle.rotation,
       fps: Math.round(this.game.loop.actualFps),
+      cameraPlayerDistance: this.vehicleVisual
+        ? Math.hypot(this.cameras.main.midPoint.x - this.vehicleVisual.x, this.cameras.main.midPoint.y - this.vehicleVisual.y)
+        : 0,
+      mapRenderPlayerDistance: this.mapRenderCenter
+        ? Math.hypot(this.vehicle.position.x - this.mapRenderCenter.x, this.vehicle.position.y - this.mapRenderCenter.y)
+        : 0,
       redLightWarning: time < this.redLightWarningUntil,
       trafficVehicles: trafficStats.total,
       trafficBuses: trafficStats.buses,

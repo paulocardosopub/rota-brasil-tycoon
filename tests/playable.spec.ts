@@ -141,6 +141,65 @@ test('frota navega entre veículos, funcionários e filtros no desktop e no celu
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
 });
 
+test('troca para veículo distante e retorna ao carro principal com mapa e câmera restaurados', async ({ page }) => {
+  test.setTimeout(120_000);
+  await page.goto('./');
+  await page.getByTestId('guest-button').click();
+  const hud = page.locator('[data-game-ready="true"]');
+  await expect(hud).toBeVisible({ timeout: 25_000 });
+
+  await page.keyboard.press('Control+Shift+D');
+  await page.getByRole('button', { name: 'Cumprir requisitos' }).click();
+  await page.getByRole('button', { name: 'Regularizar', exact: true }).click();
+  await page.getByRole('button', { name: 'Converter Hatch' }).click();
+  await page.getByRole('button', { name: 'Contratar Bia' }).click();
+  await page.getByRole('button', { name: 'Comprar Sedan' }).click();
+  await page.getByRole('button', { name: 'Atribuir motorista' }).click();
+  await page.getByRole('button', { name: 'Iniciar turno' }).click();
+  await page.keyboard.press('Control+Shift+D');
+  await expect(hud).toHaveAttribute('data-fleet-shift', /starting-shift|seeking-trip|with-passenger/);
+
+  const principalChunk = await hud.getAttribute('data-current-chunk');
+  await page.evaluate(() => {
+    const key = 'rota-brasil-tycoon-save';
+    const raw = localStorage.getItem(key);
+    if (!raw) throw new Error('Save local não encontrado');
+    const save = JSON.parse(raw);
+    const sedan = save.fleet.vehicles.find((vehicle: { model: string }) => vehicle.model === 'Sedan 2012');
+    if (!sedan) throw new Error('Sedan da frota não encontrado');
+    sedan.position = { x: 8607.938438504762, y: 8691.441131865826 };
+    sedan.rotation = 0;
+    sedan.currentChunk = '10_10';
+    sedan.currentRegion = 'Jardim Botânico';
+    sedan.updatedAt = new Date().toISOString();
+    localStorage.setItem(key, JSON.stringify(save));
+  });
+  await page.reload();
+  await page.getByRole('button', { name: 'Continuar' }).click();
+  await expect(hud).toBeVisible({ timeout: 25_000 });
+
+  await page.getByTestId('fleet-button').click();
+  await page.getByTestId('fleet-tab-vehicles').click();
+  await page.locator('.fleet-side-list').getByRole('button', { name: /Sedan 2012/ }).click();
+  await expect(page.getByTestId('selected-fleet-vehicle')).toContainText('Sedan 2012');
+  await page.getByRole('button', { name: 'Assumir direção', exact: true }).click();
+
+  await expect(hud).toHaveAttribute('data-vehicle-name', 'Sedan 2012', { timeout: 25_000 });
+  await expect(hud).toHaveAttribute('data-current-chunk', '10_10');
+  await expect.poll(async () => Number(await hud.getAttribute('data-camera-player-distance'))).toBeLessThan(2);
+  await expect.poll(async () => Number(await hud.getAttribute('data-map-render-player-distance'))).toBeLessThan(20);
+
+  await page.getByTestId('fleet-button').click();
+  await page.getByTestId('fleet-tab-vehicles').click();
+  await expect(page.getByTestId('selected-fleet-vehicle')).toContainText('Sedan 2012');
+  await page.getByRole('button', { name: 'Devolver ao funcionário', exact: true }).click();
+
+  await expect(hud).toHaveAttribute('data-vehicle-name', 'Hatch 1998', { timeout: 25_000 });
+  await expect(hud).toHaveAttribute('data-current-chunk', principalChunk!);
+  await expect.poll(async () => Number(await hud.getAttribute('data-camera-player-distance'))).toBeLessThan(2);
+  await expect.poll(async () => Number(await hud.getAttribute('data-map-render-player-distance'))).toBeLessThan(20);
+});
+
 test('Cidade fica compacta e a Garagem organiza frota e catálogo por categoria', async ({ page }) => {
   await page.goto('./');
   await page.getByTestId('guest-button').click();
