@@ -5,7 +5,7 @@
 - Ritmo global centralizado em `GAMEPLAY_SPEED_MULTIPLIER = 2`; dia completo em 48 minutos reais e HUD “Ritmo do mundo: 2×”.
 - Simulação física em passos de até 67 ms, com colisão varrida no trajeto, maior orçamento por quadro e descarte seguro de travadas longas para evitar teletransporte.
 - Piloto com limpeza de ruído/duplicatas/emendas, curvas leves/médias/fechadas, antecipação 2×, histerese de retomada e perfis para motos, carros, vans, micro-ônibus e ônibus.
-- Streaming com bloco atual prioritário, prefetch direcional e do corredor da rota, três buscas seguras, cancelamento de trabalho obsoleto, cache persistente e parsing em worker quando disponível.
+- Streaming com bloco atual prioritário, prefetch direcional e do corredor da rota, três buscas seguras (uma em conexão limitada), cancelamento de trabalho obsoleto, cache persistente e parsing em worker quando disponível. A renderização recentraliza durante a viagem e limita temporariamente a velocidade se o carro alcançar a margem segura antes de o próximo bloco ficar pronto.
 - Preparação remota confirmável com combustível, reparo, taxa de conveniência de 10% (mínimo R$ 5), tempo e total; uma cobrança idempotente e início automático após o serviço.
 - Visualização de qualquer veículo sem alterar a operação; controle temporário do carro do funcionário com pausa da renda, lease online, posição final preservada e retomada sem duplicidade.
 - Mapa geral lazy de Brasília em WebP (aprox. 94 KiB), gerado de 5.156 vias principais OSM; marcadores dinâmicos apenas para jogador, frota própria, funcionários, garagens próprias e jogadores online.

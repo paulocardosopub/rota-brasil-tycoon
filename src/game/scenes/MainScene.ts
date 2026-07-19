@@ -53,6 +53,9 @@ export class MainScene extends Phaser.Scene {
   private mapStreamLoading = false;
   private mapVisuals: Phaser.GameObjects.GameObject[] = [];
   private mapRenderCenter: Point | null = null;
+  private mapWindowRequestCenter: Point | null = null;
+  private mapStreamingSafetyActive = false;
+  private mapStreamingSafetyNotified = false;
   private router?: GraphRouter;
   private vehicle?: VehicleController;
   private vehicleVisual?: Phaser.GameObjects.Container;
@@ -737,7 +740,7 @@ export class MainScene extends Phaser.Scene {
         )
         : null;
       const rawTargetSpeed = guidance
-        ? Math.min(advice.targetSpeed, missionTargetSpeed, guidance.targetSpeedMps)
+        ? Math.min(advice.targetSpeed, missionTargetSpeed, guidance.targetSpeedMps, this.mapStreamingSafetyActive ? 4.2 : Number.POSITIVE_INFINITY)
         : 0;
       const previousTarget = this.autopilotSmoothedTargetSpeedMps;
       const targetSpeed = previousTarget === null || rawTargetSpeed < previousTarget - 0.7
@@ -769,8 +772,11 @@ export class MainScene extends Phaser.Scene {
     this.autopilotState = 'off';
     this.autopilotTargetSpeedKmh = 0;
     this.autopilotSmoothedTargetSpeedMps = null;
+    const safeThrottle = this.mapStreamingSafetyActive
+      ? Math.abs(this.vehicle?.speed ?? 0) > 4.2 ? Math.min(throttle, -0.35) : Math.min(throttle, 0.2)
+      : throttle;
     return {
-      throttle,
+      throttle: safeThrottle,
       steering: manualSteering,
       handbrake,
       assistanceEnabled: false
@@ -817,13 +823,31 @@ export class MainScene extends Phaser.Scene {
   }
 
   private updateMapStreaming() {
-    if (!this.mapStream || !this.vehicle || !this.traffic || !this.roadSurface || this.mapStreamLoading) return;
+    if (!this.mapStream || !this.vehicle || !this.traffic || !this.roadSurface) return;
     const focusPosition = this.followFleetVehicle
       ? this.fleetVehicles?.activePosition() ?? this.vehicle.position
       : this.vehicle.position;
     const streamOptions = { heading: this.vehicle.rotation, speedMps: Math.abs(this.vehicle.speed) };
+    const renderDistance = this.mapRenderCenter
+      ? Math.hypot(focusPosition.x - this.mapRenderCenter.x, focusPosition.y - this.mapRenderCenter.y)
+      : 0;
+    if (this.map && renderDistance > 150) this.renderMap(this.map);
+    if (this.mapStreamLoading) {
+      const requestDistance = this.mapWindowRequestCenter
+        ? Math.hypot(focusPosition.x - this.mapWindowRequestCenter.x, focusPosition.y - this.mapWindowRequestCenter.y)
+        : 0;
+      this.mapStreamingSafetyActive = requestDistance > 220;
+      if (this.mapStreamingSafetyActive && !this.mapStreamingSafetyNotified) {
+        this.mapStreamingSafetyNotified = true;
+        this.emitToast('Preparando o próximo trecho do mapa. Velocidade reduzida por segurança.', 'info');
+      }
+      return;
+    }
+    this.mapStreamingSafetyActive = false;
+    this.mapStreamingSafetyNotified = false;
     if (!this.mapStream.needsWindow(focusPosition, streamOptions)) return;
     this.mapStreamLoading = true;
+    this.mapWindowRequestCenter = { ...focusPosition };
     const previousRegion = this.save.currentRegion;
     void this.mapStream.windowAt(focusPosition, streamOptions).then((map) => {
       if (!this.vehicle || !this.traffic || !this.roadSurface || !this.mapStream) return;
@@ -851,6 +875,8 @@ export class MainScene extends Phaser.Scene {
       this.emitToast('O próximo trecho do mapa não pôde ser carregado. Tentando novamente.', 'warning');
     }).finally(() => {
       this.mapStreamLoading = false;
+      this.mapWindowRequestCenter = null;
+      this.mapStreamingSafetyActive = false;
     });
   }
 

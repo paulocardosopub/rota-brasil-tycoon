@@ -320,16 +320,17 @@ export class CityMapStream {
   }
 
   private scheduleExplorationPrefetch(position: Point, heading?: number, speed = 0) {
-    if (prefetchShouldPause()) return;
+    const constrainedConnection = prefetchShouldPause();
     const center = this.entryAt(position);
     const direction = heading === undefined ? { x: 0, y: 0 } : { x: Math.cos(heading), y: Math.sin(heading) };
     const candidates = center.adjacent
       .map((id) => this.entries.get(id))
       .filter((entry): entry is NonNullable<typeof entry> => Boolean(entry))
       .sort((a, b) => directionalPriority(center, b, direction, speed) - directionalPriority(center, a, direction, speed));
-    this.cancelObsoletePrefetch(new Set([center.id, ...this.currentIds, ...this.protectedIds, ...candidates.map((entry) => entry.id)]));
-    for (const entry of candidates) this.enqueuePrefetch(entry.id, false);
-    scheduleIdle(() => this.pumpPrefetch());
+    const prioritized = constrainedConnection ? candidates.slice(0, 1) : candidates;
+    this.cancelObsoletePrefetch(new Set([center.id, ...this.currentIds, ...this.protectedIds, ...prioritized.map((entry) => entry.id)]));
+    for (const entry of prioritized) this.enqueuePrefetch(entry.id, constrainedConnection);
+    if (constrainedConnection) this.pumpPrefetch(); else scheduleIdle(() => this.pumpPrefetch());
   }
 
   private enqueuePrefetch(id: string, urgent: boolean) {
@@ -338,8 +339,7 @@ export class CityMapStream {
   }
 
   private pumpPrefetch() {
-    if (prefetchShouldPause()) return;
-    const maximum = isSlowConnection() ? 1 : 3;
+    const maximum = prefetchShouldPause() || isSlowConnection() ? 1 : 3;
     while (this.prefetchActive < maximum && this.prefetchQueue.length) {
       const id = this.prefetchQueue.shift()!;
       const controller = new AbortController();
