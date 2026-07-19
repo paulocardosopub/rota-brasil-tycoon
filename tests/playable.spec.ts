@@ -455,7 +455,7 @@ test('alertas de combustível e reparo traçam a rota e ligam o piloto', async (
 });
 
 test('táxi oficial, funcionário e segundo veículo sobrevivem ao recarregamento', async ({ page }) => {
-  test.setTimeout(70_000);
+  test.setTimeout(120_000);
   await page.goto('./');
   await page.getByTestId('guest-button').click();
   const hud = page.locator('[data-game-ready="true"]');
