@@ -1,5 +1,5 @@
 import { GAME_CONFIG } from '../../config/gameConfig';
-import type { CameraZoom, ClockGuard, DriverGoals, EmployeeRegionalPreferences, FleetEmployee, FleetVehicle, LedgerTransaction, PlayerFleet, PlayerSave, PlayerSettings, Quality, RegionalFamiliarity, TaxiLicense, TrafficDensity, UpgradeLevels } from '../../types/game';
+import type { CameraZoom, ClockGuard, DriverGoals, EmployeeRegionalPreferences, FleetEmployee, FleetVehicle, LedgerTransaction, PlayerFleet, PlayerSave, PlayerSettings, Quality, RegionalFamiliarity, TaxiLicense, TemporaryVehicleControl, TrafficDensity, UpgradeLevels } from '../../types/game';
 import { createFleetVehicle } from '../../game/fleet/FleetService';
 import { createTaxiMeter } from '../../game/taxi/TaxiMeter';
 import { localMetersToLatLon } from '../../map/projection/localMeters';
@@ -82,6 +82,8 @@ export function createNewSave(position = { x: 0, y: 0 }): PlayerSave {
     taxiMeter: createTaxiMeter(),
     officialTaxiRides: 0,
     activeVehicleId: hatch.id,
+    viewedVehicleId: null,
+    temporaryVehicleControl: null,
     fleet: {
       id: fleetId, ownerId, name: 'Minha Frota', garageServiceId: 'garage-shs-hatch',
       capacity: GAME_CONFIG.fleet.capacity, vehicles: [hatch], employees: [], activeShift: null, lastReport: null,
@@ -168,6 +170,8 @@ export function migrateSave(input: unknown): PlayerSave {
     taxiMeter: { ...createTaxiMeter(), ...(raw.taxiMeter ?? {}) },
     officialTaxiRides: Math.max(0, Math.floor(finite(raw.officialTaxiRides, 0))),
     activeVehicleId: typeof raw.activeVehicleId === 'string' ? raw.activeVehicleId : fresh.activeVehicleId,
+    viewedVehicleId: typeof raw.viewedVehicleId === 'string' ? raw.viewedVehicleId : null,
+    temporaryVehicleControl: migrateTemporaryVehicleControl(raw.temporaryVehicleControl),
     fleet: fresh.fleet,
     clockGuard: migrateClockGuard(raw.clockGuard, fresh.clockGuard),
     worldClock: migrateWorldClock(raw.worldClock, fresh.worldClock),
@@ -371,6 +375,7 @@ function migrateFleet(input: Partial<PlayerFleet> | undefined, save: PlayerSave)
     employees: Array.isArray(input?.employees) ? input.employees.map(migrateEmployee) : [],
     activeShift: input?.activeShift && typeof input.activeShift === 'object' ? {
       ...input.activeShift,
+      preparation: input.activeShift.preparation ?? null,
       repair: input.activeShift.repair ?? null,
       policy: {
         ...input.activeShift.policy,
@@ -461,6 +466,22 @@ function migrateEmployeeRegionalPreferences(input: Partial<EmployeeRegionalPrefe
     preferredWorkshopServiceId: typeof input?.preferredWorkshopServiceId === 'string' ? input.preferredWorkshopServiceId : null,
     minimumCondition: clamp(finite(input?.minimumCondition, DEFAULT_EMPLOYEE_REGIONAL_PREFERENCES.minimumCondition), 10, 95),
     minimumFuelPercent: clamp(finite(input?.minimumFuelPercent, DEFAULT_EMPLOYEE_REGIONAL_PREFERENCES.minimumFuelPercent), 5, 80)
+  };
+}
+
+function migrateTemporaryVehicleControl(input: Partial<TemporaryVehicleControl> | null | undefined): TemporaryVehicleControl | null {
+  if (!input || typeof input.vehicleId !== 'string' || typeof input.previousActiveVehicleId !== 'string') return null;
+  return {
+    vehicleId: input.vehicleId,
+    previousActiveVehicleId: input.previousActiveVehicleId,
+    employeeId: typeof input.employeeId === 'string' ? input.employeeId : null,
+    shiftId: typeof input.shiftId === 'string' ? input.shiftId : null,
+    previousEmployeeState: input.previousEmployeeState ?? null,
+    previousVehicleState: input.previousVehicleState ?? 'parked',
+    previousControllerType: input.previousControllerType ?? 'PLAYER',
+    previousControllerId: typeof input.previousControllerId === 'string' ? input.previousControllerId : null,
+    previousSimulationLevel: input.previousSimulationLevel ?? 'economic',
+    startedAt: validDate(input.startedAt) ?? new Date().toISOString()
   };
 }
 

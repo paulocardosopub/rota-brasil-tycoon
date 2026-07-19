@@ -1,5 +1,5 @@
-import { GAME_CONFIG } from '../../config/gameConfig';
-import type { BusinessKind, EmployeeCandidate, EmployeeQualification, EmployeeRegionalPreferences, FleetEmployee, FleetReport, FleetShift, FleetSimulationLevel, FleetVehicle, MapServiceLocation, PlayerSave, Point, UpgradeLevels, VehicleModel } from '../../types/game';
+import { GAME_CONFIG, GAMEPLAY_SPEED_MULTIPLIER } from '../../config/gameConfig';
+import type { BusinessKind, EmployeeCandidate, EmployeeQualification, EmployeeRegionalPreferences, FleetEmployee, FleetPreparationQuote, FleetReport, FleetShift, FleetSimulationLevel, FleetVehicle, MapServiceLocation, PlayerSave, Point, UpgradeLevels, VehicleModel } from '../../types/game';
 import { EconomyService } from '../economy/EconomyService';
 import { roundMoney } from '../economy/TransactionLedger';
 import { DEFAULT_SHIFT_POLICY, EMPLOYEE_CANDIDATES } from './FleetConfig';
@@ -318,27 +318,11 @@ function createPreShiftRepair(
     target = repairOutcome(vehicle, service);
   }
   const cost = workshopPrice(service, vehicle.condition, vehicle.maintenanceWear);
-  const available = save.money;
   const workshopName = nearest?.gameName ?? garage?.name ?? 'Garagem da frota';
-  const charge = new EconomyService(save).expense(
-    cost,
-    'repair',
-    `Reparo pré-turno • ${workshopName}`,
-    `${requestId}:repair`,
-    false,
-    fleetContext(save, vehicle.id, employee.id, 'pre-shift-repair')
-  );
-  if (!charge.applied) return {
-    applied: false as const,
-    reason: 'repair-insufficient' as const,
-    requiredValue: cost,
-    availableValue: available
-  };
   const durationSeconds = Math.round(Math.max(60, Math.min(360,
     45 + (100 - vehicle.condition) * 2.1 + (service === 'full' ? 60 : service === 'partial' ? 25 : 0)
   )));
   return {
-    applied: true as const,
     repair: {
       requestId: `${requestId}:repair`,
       workshopServiceId: nearest?.id ?? garage?.serviceId ?? 'fleet-garage',
@@ -354,6 +338,169 @@ function createPreShiftRepair(
       completedAt: null
     }
   };
+}
+
+export function assumeFleetVehicleControl(save: PlayerSave, vehicleId: string) {
+  if (save.temporaryVehicleControl) return { applied: false as const, reason: 'already-controlling' as const };
+  const shift = save.fleet.activeShift;
+  const vehicle = save.fleet.vehicles.find((item) => item.id === vehicleId);
+  const vehicleShift = shift?.vehicleId === vehicle?.id ? shift : null;
+  const employee = save.fleet.employees.find((item) => item.id === vehicleShift?.employeeId) ?? null;
+  if (!vehicle || vehicle.id === save.activeVehicleId) {
+    return { applied: false as const, reason: 'unavailable-vehicle' as const };
+  }
+  if (vehicleShift && (vehicleShift.preparation && !vehicleShift.preparation.completedAt || vehicleShift.repair && !vehicleShift.repair.completedAt)) {
+    return { applied: false as const, reason: 'preparing' as const };
+  }
+  syncActiveVehicleFromLegacy(save);
+  const previous = save.fleet.vehicles.find((item) => item.id === save.activeVehicleId);
+  if (!previous) return { applied: false as const, reason: 'missing-player-vehicle' as const };
+  save.temporaryVehicleControl = {
+    vehicleId: vehicle.id,
+    previousActiveVehicleId: previous.id,
+    employeeId: employee?.id ?? null,
+    shiftId: vehicleShift?.id ?? null,
+    previousEmployeeState: employee?.state ?? null,
+    previousVehicleState: vehicle.state,
+    previousControllerType: vehicle.controllerType,
+    previousControllerId: vehicle.controllerId,
+    previousSimulationLevel: vehicle.simulationLevel,
+    startedAt: new Date().toISOString()
+  };
+  previous.state = 'parked';
+  previous.controllerId = null;
+  previous.simulationLevel = 'economic';
+  save.activeVehicleId = vehicle.id;
+  vehicle.controllerType = 'PLAYER';
+  vehicle.controllerId = save.ownerId;
+  vehicle.state = 'player-driving';
+  vehicle.simulationLevel = 'detailed';
+  if (employee) employee.state = 'break';
+  save.fuel = vehicle.fuel;
+  save.condition = vehicle.condition;
+  save.collisionDamage = vehicle.collisionDamage;
+  save.maintenanceWear = vehicle.maintenanceWear;
+  save.totalKm = vehicle.totalKm;
+  save.upgrades = { ...vehicle.upgrades };
+  save.position = { ...vehicle.position };
+  save.rotation = vehicle.rotation;
+  save.viewedVehicleId = vehicle.id;
+  return { applied: true as const, vehicle, employee, shift: vehicleShift };
+}
+
+export function returnFleetVehicleControl(save: PlayerSave) {
+  const control = save.temporaryVehicleControl;
+  if (!control) return { applied: false as const, reason: 'not-controlling' as const };
+  syncActiveVehicleFromLegacy(save);
+  const vehicle = save.fleet.vehicles.find((item) => item.id === control.vehicleId);
+  const previous = save.fleet.vehicles.find((item) => item.id === control.previousActiveVehicleId);
+  const employee = save.fleet.employees.find((item) => item.id === control.employeeId);
+  const shift = save.fleet.activeShift?.id === control.shiftId ? save.fleet.activeShift : null;
+  if (!vehicle || !previous) return { applied: false as const, reason: 'missing-vehicle' as const };
+  vehicle.controllerType = control.previousControllerType;
+  vehicle.controllerId = control.previousControllerId;
+  vehicle.state = control.previousVehicleState;
+  vehicle.simulationLevel = control.previousSimulationLevel;
+  vehicle.stateVersion += 1;
+  if (employee) employee.state = control.previousEmployeeState ?? 'seeking-trip';
+  if (shift) {
+    shift.state = employee?.state ?? 'seeking-trip';
+    const pausedMilliseconds = Math.max(0, Date.now() - Date.parse(control.startedAt)) * GAMEPLAY_SPEED_MULTIPLIER;
+    shift.scheduledEndAt = new Date(Date.parse(shift.scheduledEndAt) + pausedMilliseconds).toISOString();
+    shift.lastSimulatedAt = new Date().toISOString();
+  }
+  save.activeVehicleId = previous.id;
+  previous.controllerType = 'PLAYER';
+  previous.controllerId = save.ownerId;
+  previous.state = 'player-driving';
+  previous.simulationLevel = 'detailed';
+  save.fuel = previous.fuel;
+  save.condition = previous.condition;
+  save.collisionDamage = previous.collisionDamage;
+  save.maintenanceWear = previous.maintenanceWear;
+  save.totalKm = previous.totalKm;
+  save.upgrades = { ...previous.upgrades };
+  save.position = { ...previous.position };
+  save.rotation = previous.rotation;
+  save.temporaryVehicleControl = null;
+  save.viewedVehicleId = vehicle.id;
+  return { applied: true as const, vehicle, employee, shift };
+}
+
+export function quoteFleetShiftPreparation(
+  save: PlayerSave,
+  employeeId: string,
+  requestId: string,
+  now = new Date(),
+  serviceLocations: MapServiceLocation[] = []
+) {
+  const employee = save.fleet.employees.find((item) => item.id === employeeId);
+  const vehicle = save.fleet.vehicles.find((item) => item.id === employee?.vehicleId);
+  if (!employee || !vehicle) return null;
+  const minimumFuel = vehicle.fuelCapacity * DEFAULT_SHIFT_POLICY.minimumFuelPercent / 100;
+  const requiredFuelLiters = roundMoney(Math.max(0, minimumFuel - vehicle.fuel));
+  const fuelCost = roundMoney(requiredFuelLiters * GAME_CONFIG.services.fuelPricePerLiter);
+  const repairPlan = vehicle.condition < DEFAULT_SHIFT_POLICY.minimumCondition
+    ? createPreShiftRepair(save, employee, vehicle, requestId, now, serviceLocations)
+    : null;
+  const repairCost = roundMoney(repairPlan?.repair.cost ?? 0);
+  const subtotal = roundMoney(fuelCost + repairCost);
+  const convenienceFee = subtotal > 0 ? roundMoney(Math.max(5, subtotal * 0.1)) : 0;
+  const preparationSeconds = subtotal > 0
+    ? Math.round(25 + (requiredFuelLiters > 0 ? Math.max(30, Math.min(120, requiredFuelLiters * 2)) : 0))
+    : 0;
+  const quote: FleetPreparationQuote = {
+    employeeId,
+    vehicleId: vehicle.id,
+    requiredFuelLiters,
+    fuelCost,
+    repairCost,
+    convenienceFee,
+    preparationSeconds: preparationSeconds + (repairPlan?.repair.durationSeconds ?? 0),
+    total: roundMoney(subtotal + convenienceFee)
+  };
+  return { quote, repair: repairPlan?.repair ?? null };
+}
+
+export function prepareActiveShiftVehicle(
+  save: PlayerSave,
+  requestId: string,
+  now = new Date(),
+  serviceLocations: MapServiceLocation[] = []
+) {
+  const shift = save.fleet.activeShift;
+  if (!shift) return { applied: false as const, reason: 'missing-shift' as const };
+  const employee = save.fleet.employees.find((item) => item.id === shift.employeeId);
+  const vehicle = save.fleet.vehicles.find((item) => item.id === shift.vehicleId);
+  if (!employee || !vehicle) return { applied: false as const, reason: 'assignment' as const };
+  const plan = quoteFleetShiftPreparation(save, employee.id, requestId, now, serviceLocations)!;
+  if (plan.quote.total <= 0) return { applied: false as const, reason: 'not-needed' as const };
+  const available = save.money;
+  const charge = new EconomyService(save).expense(
+    plan.quote.total, 'repair', `Preparação após devolução • ${vehicle.model}`,
+    `${requestId}:remote-preparation`, false,
+    { ...fleetContext(save, vehicle.id, employee.id, 'returned-vehicle-preparation'), ...plan.quote }
+  );
+  if (!charge.applied) return { applied: false as const, reason: 'preparation-insufficient' as const, requiredValue: plan.quote.total, availableValue: available };
+  const startedAt = now.toISOString();
+  const preparation = {
+    requestId: `${requestId}:remote-preparation`, requiredFuelLiters: plan.quote.requiredFuelLiters,
+    fuelCost: plan.quote.fuelCost, repairCost: plan.quote.repairCost, convenienceFee: plan.quote.convenienceFee,
+    total: plan.quote.total, durationSeconds: Math.max(1, plan.quote.preparationSeconds - (plan.repair?.durationSeconds ?? 0)),
+    elapsedSeconds: 0, chargedAt: startedAt, fuelAppliedAt: null, completedAt: null
+  };
+  if (plan.repair) plan.repair.chargedAt = startedAt;
+  shift.preparation = preparation;
+  shift.repair = plan.repair;
+  shift.state = 'preparing-vehicle';
+  shift.simulationLevel = 'economic';
+  shift.scheduledEndAt = new Date(Date.parse(shift.scheduledEndAt) + plan.quote.preparationSeconds * 1_000).toISOString();
+  shift.maintenanceCost = roundMoney(shift.maintenanceCost + plan.quote.repairCost + plan.quote.convenienceFee);
+  shift.netProfit = roundMoney(shift.netProfit - plan.quote.total);
+  employee.state = 'preparing-vehicle';
+  vehicle.state = 'maintenance';
+  vehicle.simulationLevel = 'economic';
+  return { applied: true as const, preparation, repair: plan.repair };
 }
 
 function repairOutcome(vehicle: FleetVehicle, service: 'quick' | 'partial' | 'full') {
@@ -388,7 +535,38 @@ function advancePreShiftRepair(shift: FleetShift, employee: FleetEmployee, vehic
   employee.state = 'starting-shift';
 }
 
-export function startFleetShift(save: PlayerSave, employeeId: string, requestId: string, now = new Date(), serviceLocations: MapServiceLocation[] = []) {
+function advanceRemotePreparation(shift: FleetShift, employee: FleetEmployee, vehicle: FleetVehicle, seconds: number) {
+  const preparation = shift.preparation;
+  if (!preparation || preparation.completedAt || seconds <= 0) return;
+  preparation.elapsedSeconds = Math.min(preparation.durationSeconds, preparation.elapsedSeconds + seconds);
+  const progress = preparation.elapsedSeconds / Math.max(1, preparation.durationSeconds);
+  const state = preparation.requiredFuelLiters > 0 && progress >= 0.25 ? 'refueling' : 'preparing-vehicle';
+  shift.state = state;
+  employee.state = state;
+  vehicle.state = 'maintenance';
+  vehicle.simulationLevel = 'economic';
+  if (progress < 1) return;
+  if (!preparation.fuelAppliedAt) {
+    vehicle.fuel = Math.min(vehicle.fuelCapacity, vehicle.fuel + preparation.requiredFuelLiters);
+    preparation.fuelAppliedAt = shift.lastSimulatedAt;
+  }
+  preparation.completedAt = shift.lastSimulatedAt;
+  shift.state = shift.repair && !shift.repair.completedAt ? 'going-to-repair' : 'starting-shift';
+  employee.state = shift.state;
+  if (!shift.repair) {
+    vehicle.state = 'employee-driving';
+    vehicle.simulationLevel = 'detailed';
+  }
+}
+
+export function startFleetShift(
+  save: PlayerSave,
+  employeeId: string,
+  requestId: string,
+  now = new Date(),
+  serviceLocations: MapServiceLocation[] = [],
+  remoteServiceConfirmed = false
+) {
   if (save.fleet.activeShift) return { applied: false, reason: 'shift-active' as const };
   const employee = save.fleet.employees.find((item) => item.id === employeeId);
   const vehicle = save.fleet.vehicles.find((item) => item.id === employee?.vehicleId);
@@ -399,31 +577,67 @@ export function startFleetShift(save: PlayerSave, employeeId: string, requestId:
     || (freightVehicle && save.businesses.some((business) => business.kind === 'light-freight'));
   if (!vehicle.taxiLicensed && !commercialAuthorized) return { applied: false, reason: 'taxi-required' as const };
   if (vehicle.id === save.activeVehicleId) return { applied: false, reason: 'player-vehicle' as const };
-  if (vehicle.fuel / vehicle.fuelCapacity * 100 < DEFAULT_SHIFT_POLICY.minimumFuelPercent) {
-    return { applied: false, reason: 'vehicle-unfit' as const };
-  }
   const startedAt = now.toISOString();
-  const repairPlan = vehicle.condition < DEFAULT_SHIFT_POLICY.minimumCondition
-    ? createPreShiftRepair(save, employee, vehicle, requestId, now, serviceLocations)
-    : null;
-  if (repairPlan && !repairPlan.applied) return repairPlan;
-  const repair = repairPlan?.repair ?? null;
+  const preparationPlan = quoteFleetShiftPreparation(save, employeeId, requestId, now, serviceLocations)!;
+  if (preparationPlan.quote.total > 0 && !remoteServiceConfirmed) {
+    return { applied: false, reason: 'preparation-required' as const, quote: preparationPlan.quote };
+  }
+  if (preparationPlan.quote.total > 0) {
+    const available = save.money;
+    const charge = new EconomyService(save).expense(
+      preparationPlan.quote.total,
+      'repair',
+      `Preparação remota • ${vehicle.model}`,
+      `${requestId}:remote-preparation`,
+      false,
+      {
+        ...fleetContext(save, vehicle.id, employee.id, 'remote-preparation'),
+        fuelLiters: preparationPlan.quote.requiredFuelLiters,
+        fuelCost: preparationPlan.quote.fuelCost,
+        repairCost: preparationPlan.quote.repairCost,
+        convenienceFee: preparationPlan.quote.convenienceFee
+      }
+    );
+    if (!charge.applied) return {
+      applied: false,
+      reason: 'preparation-insufficient' as const,
+      requiredValue: preparationPlan.quote.total,
+      availableValue: available,
+      quote: preparationPlan.quote
+    };
+  }
+  const repair = preparationPlan.repair;
+  if (repair) repair.chargedAt = startedAt;
+  const preparation = preparationPlan.quote.total > 0 ? {
+    requestId: `${requestId}:remote-preparation`,
+    requiredFuelLiters: preparationPlan.quote.requiredFuelLiters,
+    fuelCost: preparationPlan.quote.fuelCost,
+    repairCost: preparationPlan.quote.repairCost,
+    convenienceFee: preparationPlan.quote.convenienceFee,
+    total: preparationPlan.quote.total,
+    durationSeconds: Math.max(1, preparationPlan.quote.preparationSeconds - (repair?.durationSeconds ?? 0)),
+    elapsedSeconds: 0,
+    chargedAt: startedAt,
+    fuelAppliedAt: null,
+    completedAt: null
+  } : null;
   const shift: FleetShift = {
     id: entityId('shift'), fleetId: save.fleet.id, ownerId: save.ownerId, employeeId, vehicleId: vehicle.id,
-    state: repair ? 'preparing-vehicle' : 'starting-shift', simulationLevel: repair ? 'economic' : 'detailed', startedAt, lastSimulatedAt: startedAt,
-    scheduledEndAt: new Date(now.getTime() + (DEFAULT_SHIFT_POLICY.durationMinutes * 60 + (repair?.durationSeconds ?? 0)) * 1_000).toISOString(),
-    tripId: null, routeProgress: 0, repair, policy: {
+    state: preparation ? 'preparing-vehicle' : 'starting-shift', simulationLevel: preparation ? 'economic' : 'detailed', startedAt, lastSimulatedAt: startedAt,
+    scheduledEndAt: new Date(now.getTime() + (DEFAULT_SHIFT_POLICY.durationMinutes * 60 + (preparation?.durationSeconds ?? 0) + (repair?.durationSeconds ?? 0)) * 1_000).toISOString(),
+    tripId: null, routeProgress: 0, preparation, repair, policy: {
       ...DEFAULT_SHIFT_POLICY,
       categories: [...DEFAULT_SHIFT_POLICY.categories],
       regional: { ...employee.regionalPreferences, allowedRegionIds: [...employee.regionalPreferences.allowedRegionIds] }
     },
     rides: 0, kilometers: 0, grossRevenue: 0, fuelCost: 0, commission: 0,
-    maintenanceCost: repair?.cost ?? 0, fines: 0, netProfit: repair ? -repair.cost : 0,
+    maintenanceCost: roundMoney((repair?.cost ?? 0) + (preparation?.convenienceFee ?? 0)), fines: 0,
+    netProfit: preparation ? -preparation.total : 0,
     startedWorldMinute: save.worldClock.gameMinute, operatingSeconds: 0, trafficExposure: 0, passengerDemandExposure: 0
   };
   save.fleet.activeShift = shift;
   employee.state = shift.state;
-  vehicle.state = repair ? 'maintenance' : 'employee-driving'; vehicle.simulationLevel = shift.simulationLevel;
+  vehicle.state = preparation ? 'maintenance' : 'employee-driving'; vehicle.simulationLevel = shift.simulationLevel;
   vehicle.leaseExpiresAt = shift.scheduledEndAt; vehicle.updatedAt = startedAt; vehicle.stateVersion += 1;
   return { applied: true, shift };
 }
@@ -442,15 +656,23 @@ export function advanceFleetShift(
 
   const remainingShift = Math.max(0, (Date.parse(shift.scheduledEndAt) - Date.parse(shift.lastSimulatedAt)) / 1_000);
   const seconds = Math.max(0, Math.min(elapsedSeconds, remainingShift));
+  const preparationRemaining = shift.preparation && !shift.preparation.completedAt
+    ? Math.max(0, shift.preparation.durationSeconds - shift.preparation.elapsedSeconds)
+    : 0;
+  const preparationSeconds = Math.min(seconds, preparationRemaining);
+  if (preparationSeconds > 0) {
+    shift.lastSimulatedAt = new Date(Date.parse(shift.lastSimulatedAt) + preparationSeconds * 1_000).toISOString();
+    advanceRemotePreparation(shift, employee, vehicle, preparationSeconds);
+  }
   const repairRemaining = shift.repair && !shift.repair.completedAt
     ? Math.max(0, shift.repair.durationSeconds - shift.repair.elapsedSeconds)
     : 0;
-  const repairSeconds = Math.min(seconds, repairRemaining);
+  const repairSeconds = Math.min(Math.max(0, seconds - preparationSeconds), repairRemaining);
   if (repairSeconds > 0) {
     shift.lastSimulatedAt = new Date(Date.parse(shift.lastSimulatedAt) + repairSeconds * 1_000).toISOString();
     advancePreShiftRepair(shift, employee, vehicle, repairSeconds);
   }
-  const operationSeconds = Math.max(0, seconds - repairSeconds);
+  const operationSeconds = Math.max(0, seconds - preparationSeconds - repairSeconds);
   if (!operationSeconds) return { completedRides: 0, report: null as FleetReport | null };
 
   const trafficMultiplier = Math.max(0.4, Math.min(1, world.trafficMultiplier));
@@ -475,7 +697,7 @@ export function advanceFleetShift(
   const maintenanceStop = vehicle.condition < shift.policy.minimumCondition;
   const scheduledEnd = Date.parse(shift.lastSimulatedAt) >= Date.parse(shift.scheduledEndAt) - 1;
   let report: FleetReport | null = null;
-  const operatingNet = shift.netProfit + (shift.repair?.cost ?? 0);
+  const operatingNet = shift.netProfit + (shift.preparation?.total ?? shift.repair?.cost ?? 0);
   if (outOfFuel || maintenanceStop || scheduledEnd || (shift.policy.pauseOnLoss && operatingNet < -20)) {
     const occurrences = [
       ...(outOfFuel ? ['Turno encerrado por combustível insuficiente.'] : []),
@@ -498,21 +720,22 @@ export function simulateOfflineReturn(save: PlayerSave, now = new Date()) {
   }
   if (!save.fleet.activeShift) { save.clockGuard.lastSeenAt = now.toISOString(); return null; }
   const rawSeconds = (nowMs - lastSeenMs) / 1_000;
-  if (rawSeconds < 30) return null;
+  const gameplaySeconds = rawSeconds * GAMEPLAY_SPEED_MULTIPLIER;
+  if (gameplaySeconds < 30) return null;
   const maximum = GAME_CONFIG.fleet.offlineMaximumHours * 3_600;
-  const capped = Math.min(rawSeconds, maximum);
+  const capped = Math.min(gameplaySeconds, maximum);
   const first = Math.min(capped, GAME_CONFIG.fleet.reducedEfficiencyAfterHours * 3_600);
   const reduced = Math.max(0, capped - first) * 0.65;
   save.clockGuard.unvalidated = true;
-  if (rawSeconds > maximum) save.clockGuard.unvalidated = true;
-  const world = averageWorldConditions(save.worldClock.gameMinute, first + reduced);
+  if (gameplaySeconds > maximum) save.clockGuard.unvalidated = true;
+  const world = averageWorldConditions(save.worldClock.gameMinute, (first + reduced) / GAMEPLAY_SPEED_MULTIPLIER);
   const result = advanceFleetShift(save, first + reduced, true, world);
   save.worldClock.gameMinute = world.endGameMinute;
   save.worldClock.targetGameMinute = world.endGameMinute;
   save.worldClock.lastPeriod = periodAt(world.endGameMinute);
   const report = result.report ?? snapshotFleetReport(save, [
     'Operação offline calculada por veículo, motorista, combustível e condição.',
-    ...(rawSeconds > maximum ? [`Acúmulo limitado a ${GAME_CONFIG.fleet.offlineMaximumHours} horas.`] : [])
+    ...(gameplaySeconds > maximum ? [`Acúmulo limitado a ${GAME_CONFIG.fleet.offlineMaximumHours} horas de jogo.`] : [])
   ], true);
   save.fleet.lastReport = report;
   save.clockGuard.lastSeenAt = now.toISOString();
@@ -527,7 +750,10 @@ export function endFleetShift(save: PlayerSave, occurrences: string[] = [], unva
   const repairOccurrence = shift.repair
     ? [`Reparo pré-turno ${shift.repair.completedAt ? 'concluído' : 'interrompido'} em ${shift.repair.workshopName}: ${roundMoney(shift.repair.cost).toFixed(2)}.`]
     : [];
-  const report = reportFromShift(shift, [...repairOccurrence, ...occurrences], unvalidatedClock);
+  const preparationOccurrence = shift.preparation
+    ? [`Preparação remota ${shift.preparation.completedAt ? 'concluída' : 'interrompida'}: combustível ${roundMoney(shift.preparation.fuelCost).toFixed(2)}, reparo ${roundMoney(shift.preparation.repairCost).toFixed(2)}, conveniência ${roundMoney(shift.preparation.convenienceFee).toFixed(2)}.`]
+    : [];
+  const report = reportFromShift(shift, [...preparationOccurrence, ...repairOccurrence, ...occurrences], unvalidatedClock);
   if (employee) employee.state = 'resting';
   if (vehicle) {
     vehicle.state = shift.policy.returnToGarage ? 'parked' : 'available';

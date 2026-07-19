@@ -15,9 +15,9 @@ describe('WorldClock', () => {
     expect(periodAt(1_320)).toBe('noite-avancada');
   });
 
-  it('usa 96 minutos reais por dia e persiste o avanço', () => {
+  it('usa 48 minutos reais por dia e persiste o avanço em ritmo 2×', () => {
     const clock = new WorldClock({ gameMinute: 360, targetGameMinute: 360, lastPeriod: 'amanhecer', lastServerTimeMs: null });
-    for (let second = 0; second < 240; second += 1) clock.update(1_000);
+    for (let second = 0; second < 120; second += 1) clock.update(1_000);
     expect(clock.snapshot().gameMinute).toBeCloseTo(420, 4);
     expect(formatWorldTime(clock.snapshot().gameMinute)).toBe('07:00');
     const restored = new WorldClock(clock.saveState());
@@ -32,7 +32,7 @@ describe('WorldClock', () => {
       lastPeriod: 'amanhecer',
       lastServerTimeMs: null
     });
-    expect(clock.snapshot().gameMinute).toBeCloseTo(361, 1);
+    expect(clock.snapshot().gameMinute).toBeCloseTo(362, 1);
   });
 
   it('aplica densidade e bônus somente nos períodos configurados', () => {
@@ -45,7 +45,7 @@ describe('WorldClock', () => {
   });
 
   it('pondera operações que atravessam períodos diferentes', () => {
-    const conditions = averageWorldConditions(410, 40 * 60, 48);
+    const conditions = averageWorldConditions(410, 20 * 60, 48);
     expect(conditions.trafficMultiplier).toBeGreaterThan(0.75);
     expect(conditions.trafficMultiplier).toBeLessThan(1);
     expect(conditions.passengerDemandBonus).toBeGreaterThan(0);

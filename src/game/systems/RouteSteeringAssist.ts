@@ -1,10 +1,45 @@
-import type { Point } from '../../types/game';
+import type { Point, VehicleModel } from '../../types/game';
+
+export type RouteCurveClass = 'straight' | 'light' | 'medium' | 'sharp';
+
+export interface AutopilotHandlingProfile {
+  anticipationMultiplier: number;
+  lightCurveSpeedFactor: number;
+  mediumCurveSpeedFactor: number;
+  sharpCurveSpeedFactor: number;
+  safeDistanceMultiplier: number;
+}
 
 export interface RouteGuidance {
   steering: number;
   preferredRoadHeading: number;
   roadAnchor: Point;
   targetSpeedMps: number;
+  curveClass: RouteCurveClass;
+}
+
+const CAR_PROFILE: AutopilotHandlingProfile = {
+  anticipationMultiplier: 2,
+  lightCurveSpeedFactor: 0.94,
+  mediumCurveSpeedFactor: 0.72,
+  sharpCurveSpeedFactor: 0.38,
+  safeDistanceMultiplier: 1
+};
+
+export function autopilotProfileForVehicle(model?: VehicleModel): AutopilotHandlingProfile {
+  if (model && ['Moto Urbana 125', 'Moto Cargo 160', 'Scooter Express 150'].includes(model)) {
+    return { ...CAR_PROFILE, anticipationMultiplier: 1.75, lightCurveSpeedFactor: 0.9, mediumCurveSpeedFactor: 0.66, sharpCurveSpeedFactor: 0.34, safeDistanceMultiplier: 0.82 };
+  }
+  if (model === 'Micro-ônibus Urbano') {
+    return { ...CAR_PROFILE, anticipationMultiplier: 2.35, lightCurveSpeedFactor: 0.86, mediumCurveSpeedFactor: 0.6, sharpCurveSpeedFactor: 0.29, safeDistanceMultiplier: 1.35 };
+  }
+  if (model === 'Ônibus Urbano Convencional') {
+    return { ...CAR_PROFILE, anticipationMultiplier: 2.65, lightCurveSpeedFactor: 0.8, mediumCurveSpeedFactor: 0.52, sharpCurveSpeedFactor: 0.25, safeDistanceMultiplier: 1.6 };
+  }
+  if (model && ['Furgão Compacto', 'Van de Carga', 'Furgão Médio', 'Utilitário Baú'].includes(model)) {
+    return { ...CAR_PROFILE, anticipationMultiplier: 2.25, lightCurveSpeedFactor: 0.88, mediumCurveSpeedFactor: 0.64, sharpCurveSpeedFactor: 0.31, safeDistanceMultiplier: 1.25 };
+  }
+  return CAR_PROFILE;
 }
 
 export function guidanceForRoute(
@@ -13,22 +48,26 @@ export function guidanceForRoute(
   speedMps: number,
   route: Point[],
   cruiseSpeedMps = 16,
-  brakingMps2 = 10
+  brakingMps2 = 10,
+  profile: AutopilotHandlingProfile = CAR_PROFILE
 ): RouteGuidance {
   if (route.length < 2) {
-    return { steering: 0, preferredRoadHeading: rotation, roadAnchor: { ...position }, targetSpeedMps: 0 };
+    return { steering: 0, preferredRoadHeading: rotation, roadAnchor: { ...position }, targetSpeedMps: 0, curveClass: 'straight' };
   }
 
   const location = locateOnActiveRoute(position, route);
-  const activePath = [location.point, ...route.slice(location.segmentIndex + 1)];
+  const activePath = normalizeRouteNoise([location.point, ...route.slice(location.segmentIndex + 1)]);
   const totalLength = pathLength(activePath);
   if (totalLength < 0.05) {
-    return { steering: 0, preferredRoadHeading: rotation, roadAnchor: location.point, targetSpeedMps: 0 };
+    return { steering: 0, preferredRoadHeading: rotation, roadAnchor: location.point, targetSpeedMps: 0, curveClass: 'straight' };
   }
 
   // A compact look-ahead starts the turn before the junction without aiming
   // across a whole block or cutting a long chord through the sidewalk.
-  const compactCurve = denseCurveAhead(activePath, 24);
+  const curveClass = classifyCurveAhead(activePath, 24 * profile.anticipationMultiplier);
+  // Só encurta a mira em curvas compostas. Um canto único precisa ser visto
+  // com antecedência; tratá-lo como geometria densa faz o carro virar tarde.
+  const compactCurve = activePath.length >= 4 && (curveClass === 'medium' || curveClass === 'sharp');
   const lookAhead = compactCurve
     ? clamp(4.2 + Math.abs(speedMps) * 0.25, 4.2, 7.2)
     : clamp(5.5 + Math.abs(speedMps) * 0.5, 5.5, 11.5);
@@ -61,24 +100,54 @@ export function guidanceForRoute(
     roadAnchor: location.point,
     targetSpeedMps: Math.min(
       headingTargetSpeed,
-      speedForUpcomingCurves(activePath, compactCurve ? Math.min(cruiseSpeedMps, 5.55) : cruiseSpeedMps, brakingMps2)
-    )
+      speedForUpcomingCurves(activePath, cruiseSpeedMps, brakingMps2, profile)
+    ),
+    curveClass
   };
 }
 
-function denseCurveAhead(path: Point[], maximumDistance: number) {
-  let travelled = 0;
-  let accumulatedTurn = 0;
-  let shortSegments = 0;
-  for (let index = 1; index < path.length - 1 && travelled <= maximumDistance; index += 1) {
-    const incomingLength = Math.hypot(path[index].x - path[index - 1].x, path[index].y - path[index - 1].y);
-    travelled += incomingLength;
-    if (incomingLength <= 12) shortSegments += 1;
-    const incoming = Math.atan2(path[index].y - path[index - 1].y, path[index].x - path[index - 1].x);
-    const outgoing = Math.atan2(path[index + 1].y - path[index].y, path[index + 1].x - path[index].x);
-    accumulatedTurn += Math.abs(angleDelta(incoming, outgoing));
+export function normalizeRouteNoise(path: Point[]) {
+  if (path.length <= 2) return path.map((point) => ({ ...point }));
+  const deduplicated: Point[] = [];
+  for (const point of path) {
+    const previous = deduplicated[deduplicated.length - 1];
+    if (!previous || Math.hypot(point.x - previous.x, point.y - previous.y) >= 0.75) deduplicated.push({ ...point });
   }
-  return shortSegments >= 2 && accumulatedTurn >= 0.65;
+  if (deduplicated.length <= 2) return deduplicated;
+  const clean = [deduplicated[0]];
+  for (let index = 1; index < deduplicated.length - 1; index += 1) {
+    const previous = clean[clean.length - 1];
+    const current = deduplicated[index];
+    const next = deduplicated[index + 1];
+    const incoming = Math.atan2(current.y - previous.y, current.x - previous.x);
+    const outgoing = Math.atan2(next.y - current.y, next.x - current.x);
+    const turn = Math.abs(angleDelta(incoming, outgoing));
+    const seamLength = Math.min(
+      Math.hypot(current.x - previous.x, current.y - previous.y),
+      Math.hypot(next.x - current.x, next.y - current.y)
+    );
+    if (turn < 0.075 || (seamLength < 2.2 && turn < 0.28)) continue;
+    clean.push(current);
+  }
+  clean.push(deduplicated[deduplicated.length - 1]);
+  return clean;
+}
+
+function classifyCurveAhead(path: Point[], maximumDistance: number): RouteCurveClass {
+  const total = pathLength(path);
+  let strongest = 0;
+  for (let distance = 5; distance < Math.min(total - 2, maximumDistance); distance += 4) {
+    const before = pointAtDistance(path, Math.max(0, distance - 7));
+    const center = pointAtDistance(path, distance);
+    const after = pointAtDistance(path, Math.min(total, distance + 7));
+    const incoming = Math.atan2(center.y - before.y, center.x - before.x);
+    const outgoing = Math.atan2(after.y - center.y, after.x - center.x);
+    strongest = Math.max(strongest, Math.abs(angleDelta(incoming, outgoing)));
+  }
+  if (strongest >= 0.72) return 'sharp';
+  if (strongest >= 0.42) return 'medium';
+  if (strongest >= 0.2) return 'light';
+  return 'straight';
 }
 
 export function steeringForRoute(position: Point, rotation: number, speedMps: number, route: Point[]) {
@@ -101,9 +170,9 @@ function locateOnActiveRoute(position: Point, route: Point[]) {
   return { point: best.point, segmentIndex: best.segmentIndex };
 }
 
-function speedForUpcomingCurves(path: Point[], cruiseSpeedMps: number, brakingMps2: number) {
+function speedForUpcomingCurves(path: Point[], cruiseSpeedMps: number, brakingMps2: number, profile: AutopilotHandlingProfile) {
   const totalLength = pathLength(path);
-  const scanDistance = Math.min(58, totalLength);
+  const scanDistance = Math.min(58 * profile.anticipationMultiplier, totalLength);
   let targetSpeed = cruiseSpeedMps;
 
   // Measure the direction on both sides of samples along the route. This sees
@@ -119,9 +188,14 @@ function speedForUpcomingCurves(path: Point[], cruiseSpeedMps: number, brakingMp
     const incoming = Math.atan2(center.y - before.y, center.x - before.x);
     const outgoing = Math.atan2(after.y - center.y, after.x - center.x);
     const turn = Math.abs(angleDelta(incoming, outgoing));
-    if (turn < 0.3) continue;
+    if (turn < 0.2) continue;
 
-    const cornerSpeed = clamp(15 - turn * 7.1, 3.6, cruiseSpeedMps);
+    const factor = turn >= 0.72
+      ? profile.sharpCurveSpeedFactor
+      : turn >= 0.42
+        ? profile.mediumCurveSpeedFactor
+        : profile.lightCurveSpeedFactor;
+    const cornerSpeed = clamp(cruiseSpeedMps * factor, 3.6, cruiseSpeedMps);
     const brakingDistance = Math.max(0, distance - 4);
     const permittedSpeed = Math.sqrt(cornerSpeed ** 2 + 2 * brakingMps2 * 0.48 * brakingDistance);
     targetSpeed = Math.min(targetSpeed, permittedSpeed);

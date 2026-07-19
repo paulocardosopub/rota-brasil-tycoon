@@ -1,0 +1,16 @@
+{
+  "cityId": "brasilia",
+  "image": "overview-map.webp",
+  "width": 1440,
+  "height": 1040,
+  "padding": 38,
+  "bounds": {
+    "minX": -10863.402493980402,
+    "minY": -11796.018891494014,
+    "maxX": 15026.440652511757,
+    "maxY": 21066.019145323047
+  },
+  "mapVersion": "brasilia-0.8.6",
+  "source": "OpenStreetMap contributors",
+  "license": "ODbL"
+}

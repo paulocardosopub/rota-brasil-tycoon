@@ -46,8 +46,14 @@ export type GameCommand =
   | { type: 'assign-employee'; employeeId: string; vehicleId: string }
   | { type: 'unassign-employee'; employeeId: string }
   | { type: 'start-fleet-shift'; employeeId: string; requestId: string }
+  | { type: 'confirm-fleet-shift-preparation'; employeeId: string; requestId: string }
+  | { type: 'cancel-fleet-shift-preparation' }
   | { type: 'end-fleet-shift' }
   | { type: 'select-vehicle'; vehicleId: string }
+  | { type: 'view-fleet-vehicle'; vehicleId: string }
+  | { type: 'stop-viewing-vehicle' }
+  | { type: 'assume-fleet-vehicle'; vehicleId: string }
+  | { type: 'return-fleet-vehicle' }
   | { type: 'ack-fleet-report' }
   | { type: 'follow-fleet-vehicle' }
   | { type: 'dev'; action: string };

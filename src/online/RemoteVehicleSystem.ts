@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import { GAME_CONFIG } from '../config/gameConfig';
-import type { OnlineHudSnapshot, PlayerSettings, Point } from '../types/game';
+import type { OnlineHudSnapshot, OverviewMapMarker, PlayerSettings, Point } from '../types/game';
 import { createFleetVehicleVisual, setVehicleLighting } from '../game/entities/VehicleVisual';
 import type { PriorityTrafficVehicle, TrafficSystem } from '../game/traffic/TrafficSystem';
 import { interestLevel } from './adaptiveRate';
@@ -109,6 +109,21 @@ export class RemoteVehicleSystem {
   }
 
   count() { return this.remotes.size; }
+
+  overviewMarkers(now = Date.now()): OverviewMapMarker[] {
+    return [...this.remotes.values()].flatMap((remote) => {
+      if (remote.snapshot.controllerType !== 'PLAYER' || now - remote.receivedAt > GAME_CONFIG.online.removeAfterMs) return [];
+      const profile = remote.presence ?? this.profileFor(remote.snapshot.publicPlayerId);
+      return [{
+        id: `online-${remote.snapshot.vehicleId}`,
+        kind: 'online' as const,
+        position: { ...remote.currentPosition },
+        label: profile?.driverName ?? 'Jogador online',
+        detail: `${profile?.fleetName ?? 'Sem frota pública'} • ${remote.snapshot.vehicleModel}`,
+        status: Math.abs(remote.snapshot.speed) > 0.2 ? 'Em movimento' : 'Parado'
+      }];
+    });
+  }
 
   injectFake(position: Point, index = this.remotes.size + 1) {
     if (!import.meta.env.DEV) return;

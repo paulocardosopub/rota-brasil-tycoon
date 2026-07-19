@@ -1,8 +1,17 @@
 import { COLLISION_PHYSICS, VEHICLE_PHYSICS } from './vehiclePhysics';
 
+/**
+ * Única fonte de verdade para o ritmo do mundo. Valores físicos, timers de
+ * gameplay e simulações em segundo plano derivam deste multiplicador.
+ */
+export const GAMEPLAY_SPEED_MULTIPLIER = 2;
+
+export const gameplayDurationMs = (milliseconds: number) => milliseconds / GAMEPLAY_SPEED_MULTIPLIER;
+export const gameplayDurationSeconds = (seconds: number) => seconds / GAMEPLAY_SPEED_MULTIPLIER;
+
 export const GAME_CONFIG = {
-  version: '0.8.7',
-  saveVersion: 11,
+  version: '0.8.8',
+  saveVersion: 12,
   mapVersion: 'brasilia-0.8.6',
   map: {
     city: 'Brasília',
@@ -84,7 +93,7 @@ export const GAME_CONFIG = {
     redLightPenalty: 2
   },
   worldClock: {
-    realDayMinutes: 96,
+    realDayMinutes: 96 / GAMEPLAY_SPEED_MULTIPLIER,
     referenceEpochMs: Date.UTC(2026, 0, 1, 0, 0, 0),
     referenceGameMinute: 390,
     maximumVisualCorrectionGameMinutesPerSecond: 6,
@@ -170,6 +179,15 @@ export const GAME_CONFIG = {
     defaultShiftMinutes: 240,
     physicalDetailRadiusMeters: 650,
     simplifiedRadiusMeters: 1_600
+  },
+  gameplay: {
+    speedMultiplier: GAMEPLAY_SPEED_MULTIPLIER,
+    // 67 ms keeps a 2x world at one ordinary 30 FPS step; collision checks
+    // still sweep the whole segment travelled by the vehicle.
+    physicsStepSeconds: 0.067,
+    maximumStepsPerFrame: 6,
+    maximumFrameSeconds: 0.1,
+    maximumPendingSeconds: 0.25
   },
   online: {
     protocolVersion: 1,

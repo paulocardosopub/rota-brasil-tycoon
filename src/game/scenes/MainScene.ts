@@ -1,16 +1,16 @@
 import Phaser from 'phaser';
-import { GAME_CONFIG } from '../../config/gameConfig';
+import { GAME_CONFIG, GAMEPLAY_SPEED_MULTIPLIER } from '../../config/gameConfig';
 import { CityMapStream } from '../../map/loadCityMap';
 import { localMetersToLatLon } from '../../map/projection/localMeters';
 import { GraphRouter } from '../../map/routing/GraphRouter';
 import { visibleRoadWidth, visibleRoadWidthAt } from '../../map/routing/roadRules';
-import type { CollisionSeverity, CityMapData, FleetReport, HudSnapshot, MapServiceLocation, MapSignal, PlayerSave, Point, RoadData, WorldClockSnapshot } from '../../types/game';
+import type { CollisionSeverity, CityMapData, FleetPreparationQuote, FleetReport, HudSnapshot, MapServiceLocation, MapSignal, OverviewMapSnapshot, PlayerSave, Point, RoadData, WorldClockSnapshot } from '../../types/game';
 import { gameEvents, type GameCommand } from '../events';
 import { createFleetVehicleVisual, createPassengerVisual, setVehicleLighting } from '../entities/VehicleVisual';
 import { MissionSystem } from '../missions/MissionSystem';
 import { RoadSurfaceIndex } from '../systems/RoadSurfaceIndex';
 import { advanceActiveRoute } from '../systems/RouteProgress';
-import { guidanceForRoute } from '../systems/RouteSteeringAssist';
+import { autopilotProfileForVehicle, guidanceForRoute } from '../systems/RouteSteeringAssist';
 import { AutopilotRouteMachine, automaticThrottle, missionApproachTargetSpeed } from '../systems/Autopilot';
 import { VehicleController, type VehicleInput } from '../systems/VehicleController';
 import { TrafficSystem } from '../traffic/TrafficSystem';
@@ -29,7 +29,7 @@ import { finishTaxiMeter, markTaxiBoarding, prepareTaxiMeter, resetTaxiMeter, st
 import { convertActiveVehicleToTaxi, regularizeTaxi } from '../progression/RegularizationService';
 import {
   acknowledgeFleetReport, advanceFleetShift, assignEmployee, dismissEmployee, endFleetShift,
-  hireEmployee, purchaseRegionalGarage, purchaseSecondVehicle, selectPlayerVehicle, simulateOfflineReturn,
+  assumeFleetVehicleControl, hireEmployee, prepareActiveShiftVehicle, purchaseRegionalGarage, purchaseSecondVehicle, quoteFleetShiftPreparation, returnFleetVehicleControl, selectPlayerVehicle, simulateOfflineReturn,
   startFleetShift, syncActiveVehicleFromLegacy, unassignEmployee,
   updateEmployeeRegionalPreferences, purchaseBusiness, purchaseLightVehicle, trainEmployee, transferFleetEntity
 } from '../fleet/FleetService';
@@ -96,6 +96,7 @@ export class MainScene extends Phaser.Scene {
   private autopilotSportMode = false;
   private autopilotState: HudSnapshot['autopilotState'] = 'off';
   private autopilotTargetSpeedKmh = 0;
+  private autopilotSmoothedTargetSpeedMps: number | null = null;
   private autopilotNextMissionAt = 0;
   private autopilotCollisionRecoveryUntil = 0;
   private autopilotStuckSeconds = 0;
@@ -111,6 +112,7 @@ export class MainScene extends Phaser.Scene {
   private repositionConsumed = false;
   private followFleetVehicle = false;
   private fleetReportNotifiedId: string | null = null;
+  private pendingFleetPreparation: FleetPreparationQuote | null = null;
   private offlineReport?: FleetReport | null;
   private online?: OnlineWorldClient;
   private remoteVehicles?: RemoteVehicleSystem;
@@ -294,20 +296,23 @@ export class MainScene extends Phaser.Scene {
     }
     // Never replay a long blocked frame. Catching up several seconds after map
     // parsing or route work made the vehicle visibly jump along the road.
-    const frameSeconds = Math.min(0.1, Math.max(0, delta / 1000));
-    this.pendingSimulationSeconds = Math.min(0.15, this.pendingSimulationSeconds + frameSeconds * this.traffic.timeScale);
+    const frameSeconds = Math.min(GAME_CONFIG.gameplay.maximumFrameSeconds, Math.max(0, delta / 1000));
+    this.pendingSimulationSeconds = Math.min(
+      GAME_CONFIG.gameplay.maximumPendingSeconds,
+      this.pendingSimulationSeconds + frameSeconds * this.traffic.timeScale * GAMEPLAY_SPEED_MULTIPLIER
+    );
     let simulationSteps = 0;
-    while (this.pendingSimulationSeconds > 0.0001 && simulationSteps < 3) {
-      const dt = Math.min(0.05, this.pendingSimulationSeconds);
+    while (this.pendingSimulationSeconds > 0.0001 && simulationSteps < GAME_CONFIG.gameplay.maximumStepsPerFrame) {
+      const dt = Math.min(GAME_CONFIG.gameplay.physicsStepSeconds, this.pendingSimulationSeconds);
       this.simulateStep(dt, time);
       this.pendingSimulationSeconds -= dt;
       simulationSteps += 1;
     }
-    if (simulationSteps >= 3) this.pendingSimulationSeconds = 0;
+    if (simulationSteps >= GAME_CONFIG.gameplay.maximumStepsPerFrame) this.pendingSimulationSeconds = 0;
     this.services?.update(this.simulationSeconds);
     this.updateBusArrival();
     this.taxiPoints?.update(this.simulationSeconds);
-    this.airTraffic?.update(Math.min(0.1, delta / 1000), this.simulationSeconds);
+    this.airTraffic?.update(Math.min(0.1, delta / 1000) * GAMEPLAY_SPEED_MULTIPLIER, this.simulationSeconds);
     this.updateMapStreaming();
     if (this.remoteVehicles?.count()) this.remoteVehicles.update(Date.now(), this.vehicle.position, this.save.settings, this.worldSnapshot.headlights);
     if (this.online?.isOnline()) this.publishOnlineMovement();
@@ -335,7 +340,7 @@ export class MainScene extends Phaser.Scene {
       this.lastHudUpdate = time;
     }
     if (this.keys?.R?.isDown && !this.repositionConsumed) {
-      this.repositionProgress = Math.min(1, this.repositionProgress + delta / 1000 / GAME_CONFIG.vehicle.repositionHoldSeconds);
+      this.repositionProgress = Math.min(1, this.repositionProgress + delta / 1000 * GAMEPLAY_SPEED_MULTIPLIER / GAME_CONFIG.vehicle.repositionHoldSeconds);
       if (this.repositionProgress >= 1) {
         this.vehicle.reposition();
         new EconomyService(this.save).expense(
@@ -357,7 +362,9 @@ export class MainScene extends Phaser.Scene {
     if (!this.vehicle || !this.mission || !this.traffic) return;
     this.simulationSeconds += dt;
     if (this.save.busOperation.doors === 'open') this.save.busOperation = advanceBusDwell(this.save.busOperation, dt);
-    const fleetResult = advanceFleetShift(this.save, dt, false, this.worldSnapshot);
+    const fleetResult = this.save.temporaryVehicleControl
+      ? { report: null as FleetReport | null, completedRides: 0 }
+      : advanceFleetShift(this.save, dt, false, this.worldSnapshot);
     if (fleetResult.report && fleetResult.report.id !== this.fleetReportNotifiedId) {
       this.fleetReportNotifiedId = fleetResult.report.id;
       this.emitToast(`Turno encerrado: ${fleetResult.report.rides} corridas, lucro ${this.formatMoney(fleetResult.report.netProfit)}.`, 'success');
@@ -403,7 +410,8 @@ export class MainScene extends Phaser.Scene {
         this.vehicle.speed,
         recoveryRoute,
         this.autopilotCruiseSpeedMps(),
-        GAME_CONFIG.vehicle.brakeMps2
+        GAME_CONFIG.vehicle.brakeMps2,
+        autopilotProfileForVehicle(this.activeFleetVehicle()?.model)
       );
       this.vehicle.recoverAutopilotToLane(guidance.preferredRoadHeading);
       this.recalculateActiveRoute();
@@ -411,7 +419,7 @@ export class MainScene extends Phaser.Scene {
       this.autopilotCollisionRecoveryUntil = this.simulationSeconds + GAME_CONFIG.traffic.stuckRecoveryMaximumSeconds;
       this.emitToast('Destravamento automático: saindo da fila com prioridade temporária.', 'warning');
     }
-    this.fleetVehicles?.update(this.save, this.vehicle.position, dt);
+    if (!this.save.temporaryVehicleControl) this.fleetVehicles?.update(this.save, this.vehicle.position, dt);
     const fleetCollision = this.fleetVehicles?.handlePlayerCollision(
       this.vehicle.position,
       this.vehicle.speed,
@@ -561,7 +569,7 @@ export class MainScene extends Phaser.Scene {
       if ((this.mission.mission.quality?.collisions ?? 0) === 0) this.save.goals.collisionFreeRide = true;
       refreshProgression(this.save);
       this.traffic.clearPlayerDrivingAdvice();
-      if (this.autopilotEnabled) this.autopilotNextMissionAt = time + GAME_CONFIG.mission.newRideDelayMs;
+      if (this.autopilotEnabled) this.autopilotNextMissionAt = time + GAME_CONFIG.mission.newRideDelayMs / GAMEPLAY_SPEED_MULTIPLIER;
       this.emitToast(
         this.autopilotEnabled
           ? `${this.pickLine(GAME_CONFIG.mission.dropoffLines)} Aguardando a próxima recomendação.`
@@ -646,7 +654,8 @@ export class MainScene extends Phaser.Scene {
         this.vehicle.speed,
         this.activeRoute(),
         this.autopilotCruiseSpeedMps(),
-        GAME_CONFIG.vehicle.brakeMps2
+        GAME_CONFIG.vehicle.brakeMps2,
+        autopilotProfileForVehicle(this.activeFleetVehicle()?.model)
       );
       if (this.vehicle.recoverAutopilotToLane(guidance.preferredRoadHeading)) {
         // Re-anchor the graph after moving back to the lane. Advancing the old
@@ -675,6 +684,7 @@ export class MainScene extends Phaser.Scene {
       this.autopilotEnabled = false;
       this.autopilotState = 'off';
       this.autopilotTargetSpeedKmh = 0;
+      this.autopilotSmoothedTargetSpeedMps = null;
       this.autopilotNextMissionAt = 0;
       this.autopilotStuckSeconds = 0;
       this.routeMachine.reset();
@@ -722,12 +732,18 @@ export class MainScene extends Phaser.Scene {
           this.vehicle.speed,
           activeRoute,
           this.autopilotCruiseSpeedMps(),
-          GAME_CONFIG.vehicle.brakeMps2
+          GAME_CONFIG.vehicle.brakeMps2,
+          autopilotProfileForVehicle(this.activeFleetVehicle()?.model)
         )
         : null;
-      const targetSpeed = guidance
+      const rawTargetSpeed = guidance
         ? Math.min(advice.targetSpeed, missionTargetSpeed, guidance.targetSpeedMps)
         : 0;
+      const previousTarget = this.autopilotSmoothedTargetSpeedMps;
+      const targetSpeed = previousTarget === null || rawTargetSpeed < previousTarget - 0.7
+        ? rawTargetSpeed
+        : Math.min(rawTargetSpeed, previousTarget + 0.18);
+      this.autopilotSmoothedTargetSpeedMps = targetSpeed;
       this.autopilotTargetSpeedKmh = Math.max(0, targetSpeed) * 3.6;
       this.autopilotState = navigationCompleted
         ? 'waiting'
@@ -752,6 +768,7 @@ export class MainScene extends Phaser.Scene {
     this.traffic?.clearPlayerDrivingAdvice();
     this.autopilotState = 'off';
     this.autopilotTargetSpeedKmh = 0;
+    this.autopilotSmoothedTargetSpeedMps = null;
     return {
       throttle,
       steering: manualSteering,
@@ -1157,14 +1174,15 @@ export class MainScene extends Phaser.Scene {
             this.vehicle.speed,
             route,
             this.autopilotCruiseSpeedMps(),
-            GAME_CONFIG.vehicle.brakeMps2
+            GAME_CONFIG.vehicle.brakeMps2,
+            autopilotProfileForVehicle(this.activeFleetVehicle()?.model)
           )
           : null;
         if (this.vehicle?.engageAutopilot(guidance?.preferredRoadHeading) && this.mission && this.currentRouteKey()) {
           this.requestActiveRoute('autopilot-enabled');
         }
         if (this.mission?.mission.phase === 'completed') {
-          this.autopilotNextMissionAt = this.time.now + GAME_CONFIG.mission.newRideDelayMs;
+          this.autopilotNextMissionAt = this.time.now + GAME_CONFIG.mission.newRideDelayMs / GAMEPLAY_SPEED_MULTIPLIER;
         }
       } else {
         this.autopilotNextMissionAt = 0;
@@ -1434,7 +1452,9 @@ export class MainScene extends Phaser.Scene {
         const previousRevenue = this.save.busOperation.grossRevenue;
         this.save.busOperation = departBusStop(this.save.busOperation, line);
         if (this.save.busOperation.status === 'completed') {
-          const elapsedMinutes = this.save.busOperation.startedAt ? (Date.now() - Date.parse(this.save.busOperation.startedAt)) / 60_000 : line.estimatedMinutes;
+          const elapsedMinutes = this.save.busOperation.startedAt
+            ? (Date.now() - Date.parse(this.save.busOperation.startedAt)) / 60_000 * GAMEPLAY_SPEED_MULTIPLIER
+            : line.estimatedMinutes;
           const lateMinutes = Math.max(0, elapsedMinutes - line.estimatedMinutes);
           const safetyFactor = Math.max(0.72, 1 - this.collisionEvents * 0.04);
           const punctualityFactor = Math.max(0.82, 1 - lateMinutes * 0.006);
@@ -1483,18 +1503,48 @@ export class MainScene extends Phaser.Scene {
     }
     if (command.type === 'start-fleet-shift') {
       const result = startFleetShift(this.save, command.employeeId, command.requestId, new Date(), this.services?.locations ?? []);
+      if (!result.applied && result.reason === 'preparation-required') {
+        this.pendingFleetPreparation = result.quote;
+        this.emitHud();
+        return;
+      }
       const repairPlanned = Boolean(result.applied && result.shift?.repair);
       const failureMessage = result.reason === 'taxi-required'
         ? 'O funcionário precisa de um veículo convertido em táxi.'
-        : result.reason === 'vehicle-unfit'
-          ? 'Abasteça o veículo antes do turno.'
-          : result.reason === 'repair-insufficient' && 'requiredValue' in result
-            ? `Reparo necessário: ${this.formatMoney(result.requiredValue)}. Saldo disponível: ${this.formatMoney(result.availableValue)}.`
-            : 'Atribua um veículo livre ao motorista.';
+        : result.reason === 'preparation-insufficient' && 'requiredValue' in result
+          ? `Preparação necessária: ${this.formatMoney(result.requiredValue)}. Saldo disponível: ${this.formatMoney(result.availableValue)}.`
+          : 'Atribua um veículo livre ao motorista.';
       this.emitToast(result.applied
         ? repairPlanned ? 'Turno iniciado. O veículo está seguindo para o reparo automático.' : 'Turno iniciado. O veículo do funcionário entrou na operação.'
         : failureMessage, result.applied ? 'success' : 'warning');
       if (result.applied) { this.persist(); void this.online?.createFleetDeployment(); }
+      return;
+    }
+    if (command.type === 'confirm-fleet-shift-preparation') {
+      const returnedVehicle = this.save.fleet.activeShift?.employeeId === command.employeeId && !this.save.temporaryVehicleControl;
+      const result = returnedVehicle
+        ? prepareActiveShiftVehicle(this.save, command.requestId, new Date(), this.services?.locations ?? [])
+        : startFleetShift(this.save, command.employeeId, command.requestId, new Date(), this.services?.locations ?? [], true);
+      if (result.applied) {
+        this.pendingFleetPreparation = null;
+        this.emitToast('Preparação confirmada. O funcionário abastecerá e reparará o veículo antes de sair.', 'success');
+        this.persist();
+        void this.online?.createFleetDeployment();
+      } else if (result.reason === 'preparation-insufficient' && 'requiredValue' in result) {
+        this.emitToast(`Saldo insuficiente: faltam ${this.formatMoney(Math.max(0, result.requiredValue - result.availableValue))}.`, 'warning');
+      } else {
+        this.pendingFleetPreparation = null;
+        this.emitToast('A preparação não está mais disponível para este veículo.', 'warning');
+      }
+      this.emitHud();
+      return;
+    }
+    if (command.type === 'cancel-fleet-shift-preparation') {
+      this.pendingFleetPreparation = null;
+      if (this.save.fleet.activeShift?.state === 'waiting-vehicle') {
+        this.emitToast('O funcionário ficará aguardando até o veículo ser preparado.', 'warning');
+      }
+      this.emitHud();
       return;
     }
     if (command.type === 'end-fleet-shift') {
@@ -1517,6 +1567,22 @@ export class MainScene extends Phaser.Scene {
         this.persist();
         void this.online?.setMode(this.save.onlinePreference, this.save.currentChunk, this.adjacentChunks(this.save.currentChunk));
       }
+      return;
+    }
+    if (command.type === 'view-fleet-vehicle') {
+      this.viewFleetVehicle(command.vehicleId);
+      return;
+    }
+    if (command.type === 'stop-viewing-vehicle') {
+      this.stopViewingFleetVehicle();
+      return;
+    }
+    if (command.type === 'assume-fleet-vehicle') {
+      void this.assumeFleetVehicle(command.vehicleId);
+      return;
+    }
+    if (command.type === 'return-fleet-vehicle') {
+      void this.returnFleetVehicle();
       return;
     }
     if (command.type === 'ack-fleet-report') {
@@ -1834,6 +1900,88 @@ export class MainScene extends Phaser.Scene {
     }
   }
 
+  private viewFleetVehicle(vehicleId: string) {
+    const vehicle = this.save.fleet.vehicles.find((item) => item.id === vehicleId);
+    if (!vehicle || !this.fleetVehicles) return;
+    this.save.viewedVehicleId = vehicle.id;
+    const isActiveShift = this.save.fleet.activeShift?.vehicleId === vehicle.id && !this.save.temporaryVehicleControl;
+    this.followFleetVehicle = isActiveShift;
+    this.fleetVehicles.setFollowEnabled(isActiveShift);
+    this.fleetVehicles.update(this.save, this.vehicle?.position ?? this.save.position, 0.01);
+    const target = this.fleetVehicles.viewedObject(vehicle.id);
+    if (target) this.cameras.main.startFollow(target, true, GAME_CONFIG.camera.followLerp, GAME_CONFIG.camera.followLerp);
+    else {
+      const projected = this.project(vehicle.position);
+      this.cameras.main.stopFollow();
+      this.cameras.main.centerOn(projected.x, projected.y);
+    }
+    this.persist();
+    this.emitToast(`Visualizando ${vehicle.model}. A operação continua normalmente.`, 'info');
+  }
+
+  private stopViewingFleetVehicle() {
+    this.save.viewedVehicleId = null;
+    this.followFleetVehicle = false;
+    this.fleetVehicles?.setFollowEnabled(false);
+    if (this.vehicleVisual) this.cameras.main.startFollow(this.vehicleVisual, true, GAME_CONFIG.camera.followLerp, GAME_CONFIG.camera.followLerp);
+    this.persist();
+  }
+
+  private async assumeFleetVehicle(vehicleId: string) {
+    const target = this.save.fleet.vehicles.find((item) => item.id === vehicleId);
+    if (!target) return;
+    const shift = this.save.fleet.activeShift?.vehicleId === target.id ? this.save.fleet.activeShift : null;
+    if (target.id === this.save.activeVehicleId || (shift && (shift.preparation && !shift.preparation.completedAt || shift.repair && !shift.repair.completedAt))) {
+      this.emitToast(shift ? 'Aguarde o fim da preparação do veículo.' : 'Este veículo já está sob seu controle.', 'warning');
+      return;
+    }
+    if (this.online && !await this.online.switchVehicleControl(target.id, target.stateVersion)) {
+      this.emitToast('Outro jogador ou outra aba já controla este veículo.', 'warning');
+      return;
+    }
+    const result = assumeFleetVehicleControl(this.save, vehicleId);
+    if (!result.applied) {
+      this.emitToast(result.reason === 'preparing' ? 'Aguarde o fim da preparação do veículo.' : 'Não foi possível assumir este veículo agora.', 'warning');
+      return;
+    }
+    this.fleetVehicles?.releaseForControlChange();
+    this.followFleetVehicle = false;
+    this.autopilotEnabled = false;
+    this.rebuildPlayerVehicle();
+    this.persist();
+    this.emitToast(result.employee
+      ? `Controle de ${result.vehicle.model} assumido. A renda automática ficou pausada.`
+      : `Controle de ${result.vehicle.model} assumido na posição em que estava.`, 'success');
+  }
+
+  private async returnFleetVehicle() {
+    const control = this.save.temporaryVehicleControl;
+    if (!control) return;
+    const previous = this.save.fleet.vehicles.find((item) => item.id === control.previousActiveVehicleId);
+    if (previous && this.online && !await this.online.switchVehicleControl(previous.id, previous.stateVersion)) {
+      this.emitToast('Não foi possível recuperar o controle do veículo anterior nesta sessão.', 'warning');
+      return;
+    }
+    const result = returnFleetVehicleControl(this.save);
+    if (!result.applied) return;
+    this.fleetVehicles?.releaseForControlChange();
+    this.rebuildPlayerVehicle();
+    this.persist();
+    const needsService = result.vehicle.fuel / result.vehicle.fuelCapacity * 100 < 25 || result.vehicle.condition < 45;
+    if (needsService && result.employee) {
+      result.employee.state = 'waiting-vehicle';
+      if (result.shift) result.shift.state = 'waiting-vehicle';
+      this.pendingFleetPreparation = quoteFleetShiftPreparation(
+        this.save, result.employee.id, `returned-${result.vehicle.id}`, new Date(), this.services?.locations ?? []
+      )?.quote ?? null;
+      this.persist();
+      this.emitHud();
+    }
+    this.emitToast(needsService
+      ? 'Veículo devolvido no ponto atual. O funcionário retomará após preparar combustível e reparos.'
+      : 'Veículo devolvido no ponto atual. O funcionário retomou a operação e recalculou a rota.', needsService ? 'warning' : 'success');
+  }
+
   private toggleFleetFollow() {
     if (!this.vehicle || !this.fleetVehicles || !this.save.fleet.activeShift) {
       this.emitToast('Inicie um turno para acompanhar o veículo do funcionário.', 'warning');
@@ -1854,6 +2002,61 @@ export class MainScene extends Phaser.Scene {
 
   private formatMoney(value: number) {
     return value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+  }
+
+  private overviewMapSnapshot(): OverviewMapSnapshot {
+    const regions = this.map?.manifest?.regions ?? [];
+    const bounds = regions.length ? {
+      minX: Math.min(...regions.map((region) => region.bounds.minX)),
+      minY: Math.min(...regions.map((region) => region.bounds.minY)),
+      maxX: Math.max(...regions.map((region) => region.bounds.maxX)),
+      maxY: Math.max(...regions.map((region) => region.bounds.maxY))
+    } : { minX: -7_180, minY: -11_800, maxX: 15_030, maxY: 10_975 };
+    const active = this.activeFleetVehicle();
+    const ownMarkers = this.save.fleet.vehicles.flatMap((vehicle) => {
+      if (vehicle.id === this.save.activeVehicleId) return [];
+      const employee = this.save.fleet.employees.find((item) => item.vehicleId === vehicle.id);
+      const working = employee && !['available', 'waiting-vehicle', 'resting'].includes(employee.state);
+      const shift = this.save.fleet.activeShift?.vehicleId === vehicle.id ? this.save.fleet.activeShift : null;
+      const garage = this.save.fleet.garages.find((item) => item.serviceId === vehicle.baseGarageId);
+      return [{
+        id: `fleet-${vehicle.id}`,
+        kind: working ? 'employee' as const : 'fleet' as const,
+        position: { ...vehicle.position },
+        label: working ? employee.name : vehicle.model,
+        detail: `${vehicle.model} • ${employee?.name ?? 'Sem motorista'}`,
+        meta: [
+          `Localização: ${vehicle.currentRegion}`,
+          `Garagem: ${garage?.name ?? 'Garagem central'}`,
+          `Operação: ${shift ? `${shift.state} • ${shift.rides} serviços` : 'Sem operação ativa'}`,
+          `Combustível ${vehicle.fuel.toFixed(1)}/${vehicle.fuelCapacity.toFixed(1)} L • condição ${vehicle.condition.toFixed(0)}%`,
+          `Receita atual: ${this.formatMoney(shift?.grossRevenue ?? vehicle.grossRevenue)}`,
+          shift?.tripId ? `Próximo destino: operação ${shift.tripId}` : 'Próximo destino: não definido',
+          working && shift?.simulationLevel === 'economic' ? 'Posição estimada pelo progresso da rota' : 'Posição sincronizada'
+        ],
+        vehicleId: vehicle.id,
+        employeeId: employee?.id,
+        status: working ? employee.state : vehicle.state
+      }];
+    });
+    const garageMarkers = this.save.fleet.garages.flatMap((garage) => {
+      const service = this.services?.locations.find((item) => item.id === garage.serviceId);
+      if (!service) return [];
+      return [{
+        id: `garage-${garage.serviceId}`, kind: 'garage' as const, position: { ...service.stopPoint }, label: garage.name,
+        detail: service.address, garageId: garage.serviceId, status: 'Garagem própria'
+      }];
+    });
+    return {
+      cityId: 'brasilia',
+      imageUrl: `${import.meta.env.BASE_URL}data/cities/brasilia/overview-map.webp`,
+      bounds,
+      markers: [{
+        id: 'player-current', kind: 'player', position: { ...(this.vehicle?.position ?? this.save.position) },
+        label: this.save.publicDriverName, detail: active?.model ?? 'Veículo atual', vehicleId: active?.id,
+        status: this.save.temporaryVehicleControl ? 'Controle temporário' : 'Você'
+      }, ...ownMarkers, ...garageMarkers, ...(this.remoteVehicles?.overviewMarkers() ?? [])]
+    };
   }
 
   private handleDevAction(action: string) {
@@ -2153,6 +2356,7 @@ export class MainScene extends Phaser.Scene {
     const snapshot: HudSnapshot = {
       ready: this.initialized,
       settings: { ...this.save.settings },
+      gameplaySpeedMultiplier: GAMEPLAY_SPEED_MULTIPLIER,
       worldClock: { ...this.worldSnapshot },
       money: this.save.money,
       speedKmh: Math.abs(this.vehicle.speed) * 3.6,
@@ -2230,6 +2434,9 @@ export class MainScene extends Phaser.Scene {
       taxiMeter: { ...this.save.taxiMeter },
       officialTaxiRides: this.save.officialTaxiRides,
       activeVehicleId: this.save.activeVehicleId,
+      viewedVehicleId: this.save.viewedVehicleId,
+      temporaryVehicleControl: this.save.temporaryVehicleControl,
+      pendingFleetPreparation: this.pendingFleetPreparation,
       fleet: structuredClone(this.save.fleet),
       businesses: structuredClone(this.save.businesses),
       busOperation: structuredClone(this.save.busOperation),
@@ -2252,6 +2459,7 @@ export class MainScene extends Phaser.Scene {
       preferredRegionId: this.save.preferredRegionId,
       currentRegionId: this.save.currentRegionId,
       regionalFamiliarity: structuredClone(this.save.regionalFamiliarity),
+      overviewMap: this.overviewMapSnapshot(),
       online: onlineTelemetry
     };
     gameEvents.emit('hud', snapshot);

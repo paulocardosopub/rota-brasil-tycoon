@@ -3,7 +3,7 @@ import { GAME_CONFIG } from '../../config/gameConfig';
 import { createNewSave, migrateSave } from '../../services/storage/saveService';
 import { regularizeTaxi } from '../progression/RegularizationService';
 import type { MapServiceLocation } from '../../types/game';
-import { advanceFleetShift, assignEmployee, availableCandidates, fleetOperationalState, fleetSimulationLevel, hireEmployee, purchaseBusiness, purchaseLightVehicle, purchaseSecondVehicle, simulateOfflineReturn, startFleetShift, trainEmployee, transferFleetEntity, updateEmployeeRegionalPreferences } from './FleetService';
+import { advanceFleetShift, assignEmployee, assumeFleetVehicleControl, availableCandidates, fleetOperationalState, fleetSimulationLevel, hireEmployee, purchaseBusiness, purchaseLightVehicle, purchaseSecondVehicle, returnFleetVehicleControl, simulateOfflineReturn, startFleetShift, trainEmployee, transferFleetEntity, updateEmployeeRegionalPreferences } from './FleetService';
 
 function fleetReady() {
   const save = createNewSave();
@@ -114,17 +114,20 @@ describe('primeira frota', () => {
     } as MapServiceLocation;
     const balanceBefore = save.money;
 
-    const started = startFleetShift(save, employee.id, 'damaged-shift', new Date('2026-07-18T12:00:00.000Z'), [workshop]);
+    const quote = startFleetShift(save, employee.id, 'damaged-shift', new Date('2026-07-18T12:00:00.000Z'), [workshop]);
+    expect(quote).toMatchObject({ applied: false, reason: 'preparation-required' });
+    const started = startFleetShift(save, employee.id, 'damaged-shift', new Date('2026-07-18T12:00:00.000Z'), [workshop], true);
     expect(started.applied).toBe(true);
     const repair = save.fleet.activeShift!.repair!;
+    const preparation = save.fleet.activeShift!.preparation!;
     expect(repair.workshopServiceId).toBe(workshop.id);
-    expect(save.money).toBe(balanceBefore - repair.cost);
-    expect(save.fleet.activeShift).toMatchObject({ rides: 0, grossRevenue: 0, netProfit: -repair.cost });
+    expect(save.money).toBe(balanceBefore - preparation.total);
+    expect(save.fleet.activeShift).toMatchObject({ rides: 0, grossRevenue: 0, netProfit: -preparation.total });
     expect(sedan.state).toBe('maintenance');
 
-    const repairing = advanceFleetShift(save, repair.durationSeconds / 2);
+    const repairing = advanceFleetShift(save, preparation.durationSeconds + repair.durationSeconds / 2);
     expect(repairing.completedRides).toBe(0);
-    expect(save.fleet.activeShift).toMatchObject({ rides: 0, grossRevenue: 0, netProfit: -repair.cost });
+    expect(save.fleet.activeShift).toMatchObject({ rides: 0, grossRevenue: 0, netProfit: -preparation.total });
     expect(save.fleet.activeShift?.repair?.completedAt).toBeNull();
 
     advanceFleetShift(save, repair.durationSeconds / 2);
@@ -133,7 +136,7 @@ describe('primeira frota', () => {
     expect(sedan.position).toEqual(workshop.stopPoint);
     const duplicate = startFleetShift(save, employee.id, 'damaged-shift', new Date('2026-07-18T12:10:00.000Z'), [workshop]);
     expect(duplicate.applied).toBe(false);
-    expect(save.ledger.filter((entry) => entry.idempotencyKey === 'damaged-shift:repair')).toHaveLength(1);
+    expect(save.ledger.filter((entry) => entry.idempotencyKey === 'damaged-shift:remote-preparation')).toHaveLength(1);
   });
 
   it('informa o valor exato quando falta saldo para o reparo obrigatório', () => {
@@ -142,11 +145,12 @@ describe('primeira frota', () => {
     sedan.collisionDamage = 80;
     sedan.maintenanceWear = 12;
     save.money = 1;
-    const result = startFleetShift(save, employee.id, 'repair-no-money');
-    expect(result).toMatchObject({ applied: false, reason: 'repair-insufficient', availableValue: 1 });
+    expect(startFleetShift(save, employee.id, 'repair-no-money')).toMatchObject({ applied: false, reason: 'preparation-required' });
+    const result = startFleetShift(save, employee.id, 'repair-no-money', new Date(), [], true);
+    expect(result).toMatchObject({ applied: false, reason: 'preparation-insufficient', availableValue: 1 });
     expect('requiredValue' in result && result.requiredValue).toBeGreaterThan(1);
     expect(save.fleet.activeShift).toBeNull();
-    expect(save.ledger.some((entry) => entry.idempotencyKey === 'repair-no-money:repair')).toBe(false);
+    expect(save.ledger.some((entry) => entry.idempotencyKey === 'repair-no-money:remote-preparation')).toBe(false);
   });
 
   it('preserva o reparo ao recarregar, conclui offline e bloqueia transferência', () => {
@@ -155,11 +159,11 @@ describe('primeira frota', () => {
     sedan.collisionDamage = 60;
     sedan.maintenanceWear = 18;
     save.fleet.garages.push({ ...save.fleet.garages[0], serviceId: 'garage-second', name: 'Segunda garagem' });
-    expect(startFleetShift(save, employee.id, 'repair-reload').applied).toBe(true);
+    expect(startFleetShift(save, employee.id, 'repair-reload', new Date(), [], true).applied).toBe(true);
     expect(transferFleetEntity(save, 'vehicle', sedan.id, 'garage-second', 'locked-transfer').applied).toBe(false);
 
     const reloaded = migrateSave(JSON.parse(JSON.stringify(save)));
-    const duration = reloaded.fleet.activeShift!.repair!.durationSeconds;
+    const duration = reloaded.fleet.activeShift!.repair!.durationSeconds + reloaded.fleet.activeShift!.preparation!.durationSeconds;
     const result = advanceFleetShift(reloaded, duration + 3_600, true);
     expect(reloaded.fleet.activeShift?.repair?.completedAt).not.toBeNull();
     expect(result.completedRides).toBeGreaterThan(0);
@@ -186,6 +190,53 @@ describe('primeira frota', () => {
     const report = simulateOfflineReturn(save, new Date('2026-07-16T11:00:00.000Z'));
     expect(save.clockGuard.rollbackDetected).toBe(true);
     expect(report?.netProfit).toBe(0);
+  });
+
+  it('pausa o funcionário, preserva a operação e devolve o veículo na nova posição', () => {
+    const { save, employee, sedan } = fleetReady();
+    expect(startFleetShift(save, employee.id, 'temporary-control').applied).toBe(true);
+    const previousVehicleId = save.activeVehicleId;
+    const previousPosition = { ...save.fleet.vehicles.find((vehicle) => vehicle.id === previousVehicleId)!.position };
+    const shiftId = save.fleet.activeShift!.id;
+    const routeProgress = save.fleet.activeShift!.routeProgress;
+
+    expect(assumeFleetVehicleControl(save, sedan.id).applied).toBe(true);
+    expect(employee.state).toBe('break');
+    expect(save.activeVehicleId).toBe(sedan.id);
+    expect(save.fleet.activeShift).toMatchObject({ id: shiftId, routeProgress });
+
+    save.position = { x: sedan.position.x + 180, y: sedan.position.y + 45 };
+    save.rotation = 0.7;
+    save.fuel -= 1;
+    const reloaded = migrateSave(JSON.parse(JSON.stringify(save)));
+    expect(reloaded.temporaryVehicleControl?.vehicleId).toBe(sedan.id);
+    const returned = returnFleetVehicleControl(reloaded);
+    expect(returned.applied).toBe(true);
+    expect(reloaded.activeVehicleId).toBe(previousVehicleId);
+    expect(reloaded.fleet.vehicles.find((vehicle) => vehicle.id === previousVehicleId)?.position).toEqual(previousPosition);
+    expect(reloaded.fleet.vehicles.find((vehicle) => vehicle.id === sedan.id)?.position).toEqual(save.position);
+    expect(reloaded.fleet.activeShift?.id).toBe(shiftId);
+    expect(reloaded.temporaryVehicleControl).toBeNull();
+  });
+
+  it('permite assumir e devolver um veículo estacionado distante sem criar operação', () => {
+    const { save, sedan } = fleetReady();
+    const previousVehicleId = save.activeVehicleId;
+    sedan.position = { x: 4_200, y: -3_100 };
+
+    const assumed = assumeFleetVehicleControl(save, sedan.id);
+    expect(assumed.applied).toBe(true);
+    expect(save.activeVehicleId).toBe(sedan.id);
+    expect(save.position).toEqual(sedan.position);
+    expect(save.temporaryVehicleControl).toMatchObject({ employeeId: null, shiftId: null });
+    expect(save.fleet.activeShift).toBeNull();
+
+    save.position = { x: 4_350, y: -3_020 };
+    const returned = returnFleetVehicleControl(save);
+    expect(returned.applied).toBe(true);
+    expect(save.activeVehicleId).toBe(previousVehicleId);
+    expect(save.fleet.vehicles.find((vehicle) => vehicle.id === sedan.id)?.position).toEqual({ x: 4_350, y: -3_020 });
+    expect(save.fleet.activeShift).toBeNull();
   });
 
   it('seleciona camadas por distância', () => {

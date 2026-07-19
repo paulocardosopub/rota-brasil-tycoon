@@ -1,0 +1,162 @@
+{
+  "version": "0.8.8",
+  "measuredAt": "2026-07-19T14:14:11.110Z",
+  "target": "http://127.0.0.1:4899/?performanceWorldClock=1",
+  "baseline087": {
+    "source": "docs/performance-0.8.7.json"
+  },
+  "targets": {
+    "desktopMinimumMedianFps": 30,
+    "mobileMinimumMedianFps": 28
+  },
+  "artifacts": {
+    "initialBundleBytes": 317427,
+    "applicationBundleBytes": 2027056,
+    "routingCoreBytes": 3897629,
+    "overviewMapBytes": 95892,
+    "publishedChunkBytes": 162932322,
+    "publishedMapBytes": 166829951
+  },
+  "results": [
+    {
+      "preset": "desktop-1440x900",
+      "interfaceMs": 137,
+      "gameReadyMs": 2944,
+      "beforeReady": {
+        "transferredBytes": 95135,
+        "encodedBytes": 6153874,
+        "mapTransferredBytes": 0,
+        "mapEncodedBytes": 4350010,
+        "requests": 17
+      },
+      "afterSettle": {
+        "transferredBytes": 95135,
+        "encodedBytes": 9705620,
+        "mapTransferredBytes": 0,
+        "mapEncodedBytes": 7901756,
+        "requests": 22
+      },
+      "heapUsedMB": 73,
+      "periods": [
+        {
+          "period": "madrugada",
+          "minute": 120,
+          "minimumFps": 34,
+          "medianFps": 37,
+          "maximumFps": 41,
+          "traffic": 60,
+          "trafficMultiplier": 0.4
+        },
+        {
+          "period": "pico-manha",
+          "minute": 450,
+          "minimumFps": 32,
+          "medianFps": 32,
+          "maximumFps": 32,
+          "traffic": 69,
+          "trafficMultiplier": 1
+        },
+        {
+          "period": "dia",
+          "minute": 720,
+          "minimumFps": 31,
+          "medianFps": 31,
+          "maximumFps": 32,
+          "traffic": 61,
+          "trafficMultiplier": 0.7
+        },
+        {
+          "period": "pico-tarde",
+          "minute": 1050,
+          "minimumFps": 32,
+          "medianFps": 33,
+          "maximumFps": 33,
+          "traffic": 69,
+          "trafficMultiplier": 1
+        },
+        {
+          "period": "noite",
+          "minute": 1260,
+          "minimumFps": 32,
+          "medianFps": 32,
+          "maximumFps": 33,
+          "traffic": 61,
+          "trafficMultiplier": 0.65
+        }
+      ],
+      "buses": 8,
+      "airTraffic": 10,
+      "terrestrialEntities": 61
+    },
+    {
+      "preset": "mobile-390x844-pilot",
+      "interfaceMs": 71,
+      "gameReadyMs": 1058,
+      "beforeReady": {
+        "transferredBytes": 95135,
+        "encodedBytes": 6153874,
+        "mapTransferredBytes": 0,
+        "mapEncodedBytes": 4350010,
+        "requests": 17
+      },
+      "afterSettle": {
+        "transferredBytes": 95135,
+        "encodedBytes": 27588051,
+        "mapTransferredBytes": 0,
+        "mapEncodedBytes": 25784187,
+        "requests": 30
+      },
+      "heapUsedMB": 215,
+      "periods": [
+        {
+          "period": "madrugada",
+          "minute": 120,
+          "minimumFps": 43,
+          "medianFps": 47,
+          "maximumFps": 52,
+          "traffic": 62,
+          "trafficMultiplier": 0.4
+        },
+        {
+          "period": "pico-manha",
+          "minute": 450,
+          "minimumFps": 53,
+          "medianFps": 55,
+          "maximumFps": 56,
+          "traffic": 70,
+          "trafficMultiplier": 1
+        },
+        {
+          "period": "dia",
+          "minute": 720,
+          "minimumFps": 58,
+          "medianFps": 59,
+          "maximumFps": 59,
+          "traffic": 60,
+          "trafficMultiplier": 0.7
+        },
+        {
+          "period": "pico-tarde",
+          "minute": 1050,
+          "minimumFps": 60,
+          "medianFps": 60,
+          "maximumFps": 60,
+          "traffic": 70,
+          "trafficMultiplier": 1
+        },
+        {
+          "period": "noite",
+          "minute": 1260,
+          "minimumFps": 60,
+          "medianFps": 60,
+          "maximumFps": 60,
+          "traffic": 60,
+          "trafficMultiplier": 0.65
+        }
+      ],
+      "buses": 9,
+      "airTraffic": 10,
+      "terrestrialEntities": 61
+    }
+  ]
+}

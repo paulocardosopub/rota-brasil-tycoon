@@ -84,11 +84,15 @@ export class OnlineWorldClient {
   private warning: string | null = null;
   private state: OnlineConnectionState = 'OFFLINE';
   private sessionId: string | null = null;
+  private claimedVehicleId: string | null = null;
   private serverTimeOffset = 0;
   private debugLatencyMs = 0;
   private debugLossRate = 0;
+  private readonly handlePageHide = () => this.releaseLocalVehicle();
 
-  constructor(private readonly save: PlayerSave, private readonly client: SupabaseClient | null = supabase) {}
+  constructor(private readonly save: PlayerSave, private readonly client: SupabaseClient | null = supabase) {
+    if (typeof window !== 'undefined') window.addEventListener('pagehide', this.handlePageHide);
+  }
 
   onSnapshot(listener: SnapshotListener) { this.snapshotListeners.add(listener); return () => this.snapshotListeners.delete(listener); }
   onPresence(listener: PresenceListener) { this.presenceListeners.add(listener); return () => this.presenceListeners.delete(listener); }
@@ -157,6 +161,31 @@ export class OnlineWorldClient {
 
   isOnline() { return this.state === 'ONLINE'; }
 
+  async switchVehicleControl(vehicleId: string, stateVersion: number) {
+    if ((this.mockChannel || this.mockSocket) && this.sessionId) return this.claimLocalVehicle(vehicleId);
+    if (!this.client || !this.sessionId || this.state !== 'ONLINE') return true;
+    const publicVehicleId = this.publicVehicleId(vehicleId);
+    if (publicVehicleId === this.claimedVehicleId && this.canControl) return true;
+    const lease = await this.client.functions.invoke('claim-vehicle-control', { body: {
+      version: 1, sessionId: this.sessionId, vehicleId: publicVehicleId, stateVersion
+    }});
+    const acquired = !lease.error && (lease.data as { acquired?: boolean } | null)?.acquired !== false;
+    if (!acquired) {
+      this.warning = 'Este veículo já está sendo controlado em outra sessão.';
+      return false;
+    }
+    const previous = this.claimedVehicleId;
+    this.claimedVehicleId = publicVehicleId;
+    this.canControl = true;
+    this.warning = null;
+    if (previous && previous !== publicVehicleId) {
+      await this.client.functions.invoke('release-vehicle-control', { body: {
+        version: 1, sessionId: this.sessionId, vehicleId: previous
+      }}).catch(() => undefined);
+    }
+    return true;
+  }
+
   async createFleetDeployment() {
     if (!this.client || this.state !== 'ONLINE' || !this.save.fleet.activeShift) return;
     const shift = this.save.fleet.activeShift;
@@ -208,6 +237,7 @@ export class OnlineWorldClient {
 
   async stop(dispose = true) {
     this.disposed = dispose;
+    if (dispose && typeof window !== 'undefined') window.removeEventListener('pagehide', this.handlePageHide);
     this.started = false;
     if (this.heartbeatTimer) window.clearInterval(this.heartbeatTimer);
     if (this.reconnectTimer) window.clearTimeout(this.reconnectTimer);
@@ -225,8 +255,8 @@ export class OnlineWorldClient {
     }
     if (this.client) {
       await this.reportLocation(dispose ? 'EXIT' : 'CHECKPOINT');
-      if (this.sessionId && this.canControl && this.lastVehicle) {
-        await this.client.functions.invoke('release-vehicle-control', { body: { version: 1, sessionId: this.sessionId, vehicleId: this.publicVehicleId(this.lastVehicle.vehicleId) } });
+      if (this.sessionId && this.canControl && this.claimedVehicleId) {
+        await this.client.functions.invoke('release-vehicle-control', { body: { version: 1, sessionId: this.sessionId, vehicleId: this.claimedVehicleId } });
       }
       for (const channel of this.channels.values()) await this.client.removeChannel(channel);
       this.channels.clear();
@@ -234,6 +264,7 @@ export class OnlineWorldClient {
       this.presenceChannel = undefined;
     }
     this.presences.clear();
+    this.releaseLocalVehicle();
     this.setState(this.save.onlinePreference === 'solo' ? 'SOLO' : 'OFFLINE');
   }
 
@@ -276,6 +307,7 @@ export class OnlineWorldClient {
         version: 1, sessionId: this.sessionId, vehicleId: this.publicVehicleId(this.save.activeVehicleId), stateVersion: this.activeVehicle()?.stateVersion ?? 1
       }});
       this.canControl = !lease.error && (lease.data as { acquired?: boolean } | null)?.acquired !== false;
+      if (this.canControl) this.claimedVehicleId = this.publicVehicleId(this.save.activeVehicleId);
       if (!this.canControl) this.warning = 'Este veículo está sendo controlado em outra aba. Você está como espectador.';
       await this.subscribePresence();
       await this.subscribeChunkTopics(this.currentChunk, this.adjacentChunks);
@@ -424,6 +456,8 @@ export class OnlineWorldClient {
   private startMock() {
     this.sessionId = publicSessionId();
     this.save.lastPublicSessionId = this.sessionId;
+    this.canControl = this.claimLocalVehicle(this.save.activeVehicleId);
+    if (!this.canControl) this.warning = 'Este veículo está sendo controlado em outra aba.';
     if (typeof WebSocket !== 'undefined' && typeof location !== 'undefined') {
       this.mockSocket = new WebSocket(`ws://${location.hostname}:4175`);
       this.mockSocket.onmessage = (event) => {
@@ -507,7 +541,10 @@ export class OnlineWorldClient {
   private startHeartbeat() {
     if (this.heartbeatTimer) window.clearInterval(this.heartbeatTimer);
     this.heartbeatTimer = window.setInterval(() => {
-      if (this.mockChannel || this.mockSocket) this.broadcastPresence(false);
+      if (this.mockChannel || this.mockSocket) {
+        if (this.claimedVehicleId) this.claimLocalVehicle(this.save.activeVehicleId);
+        this.broadcastPresence(false);
+      }
       else if (this.client && this.sessionId) {
         void this.trackPresence();
         void this.client.functions.invoke('online-heartbeat', { body: {
@@ -565,6 +602,29 @@ export class OnlineWorldClient {
   private subscribedToChunk(chunkId: string) { return chunkId === this.currentChunk || this.adjacentChunks.includes(chunkId); }
   private activeVehicle() { return this.save.fleet.vehicles.find((vehicle) => vehicle.id === this.save.activeVehicleId); }
   private publicVehicleId(localVehicleId: string) { return `${this.save.publicPlayerId}__${localVehicleId}`.slice(0, 64); }
+  private claimLocalVehicle(localVehicleId: string) {
+    if (!this.sessionId || typeof localStorage === 'undefined') return true;
+    const publicVehicleId = this.publicVehicleId(localVehicleId);
+    const key = `rbt-control-lease:${publicVehicleId}`;
+    try {
+      const existing = JSON.parse(localStorage.getItem(key) ?? 'null') as { sessionId?: string; expiresAt?: number } | null;
+      if (existing?.sessionId && existing.sessionId !== this.sessionId && (existing.expiresAt ?? 0) > Date.now()) return false;
+      const previous = this.claimedVehicleId;
+      localStorage.setItem(key, JSON.stringify({ sessionId: this.sessionId, expiresAt: Date.now() + 45_000 }));
+      this.claimedVehicleId = publicVehicleId;
+      if (previous && previous !== publicVehicleId) localStorage.removeItem(`rbt-control-lease:${previous}`);
+      return true;
+    } catch { return true; }
+  }
+  private releaseLocalVehicle() {
+    if (!this.claimedVehicleId || typeof localStorage === 'undefined') return;
+    const key = `rbt-control-lease:${this.claimedVehicleId}`;
+    try {
+      const existing = JSON.parse(localStorage.getItem(key) ?? 'null') as { sessionId?: string } | null;
+      if (existing?.sessionId === this.sessionId) localStorage.removeItem(key);
+    } catch { /* armazenamento indisponível */ }
+    this.claimedVehicleId = null;
+  }
   private sequenceFor(vehicleId: string) { const next = (this.sequences.get(vehicleId) ?? 0) + 1; this.sequences.set(vehicleId, next); return next; }
   private rollRates() {
     const elapsed = (Date.now() - this.rateWindowStarted) / 1_000;
