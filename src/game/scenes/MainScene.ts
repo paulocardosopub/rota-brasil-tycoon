@@ -153,7 +153,10 @@ export class MainScene extends Phaser.Scene {
         this.worldClock.setGameMinuteForDevelopment(gameMinute);
         this.worldSnapshot = this.worldClock.snapshot();
         this.applyWorldConditions();
-        if (this.initialized) this.persist();
+        if (this.initialized) {
+          this.handleWorldPeriodTransition();
+          this.persist();
+        }
         this.emitHud();
       };
     }
@@ -280,12 +283,7 @@ export class MainScene extends Phaser.Scene {
     if (!this.initialized || !this.vehicle || !this.mission || !this.traffic || !this.vehicleVisual) return;
     this.worldSnapshot = this.worldClock.update(delta);
     this.applyWorldConditions();
-    if (this.worldSnapshot.period !== this.lastWorldPeriod) {
-      this.lastWorldPeriod = this.worldSnapshot.period;
-      if (this.worldSnapshot.period === 'pico-manha' || this.worldSnapshot.period === 'pico-tarde') {
-        this.emitToast('Horário de pico — trânsito intenso', 'warning');
-      }
-    }
+    this.handleWorldPeriodTransition();
     if (this.manuallyPaused) {
       if (time - this.lastHudUpdate > 100) { this.emitHud(time); this.lastHudUpdate = time; }
       return;
@@ -2359,6 +2357,14 @@ export class MainScene extends Phaser.Scene {
     this.mission?.setPeakDemandBonus(this.worldSnapshot.passengerDemandBonus);
     this.taxiPoints?.setDemandMultiplier(1 + this.worldSnapshot.passengerDemandBonus);
     this.fleetVehicles?.setWorldLighting(this.worldSnapshot.headlights, this.save.settings.reducedWorldEffects);
+  }
+
+  private handleWorldPeriodTransition() {
+    if (this.worldSnapshot.period === this.lastWorldPeriod) return;
+    this.lastWorldPeriod = this.worldSnapshot.period;
+    if (this.worldSnapshot.period === 'pico-manha' || this.worldSnapshot.period === 'pico-tarde') {
+      this.emitToast('Horário de pico — trânsito intenso', 'warning');
+    }
   }
 }
 
