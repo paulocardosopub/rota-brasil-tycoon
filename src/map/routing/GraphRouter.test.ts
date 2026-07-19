@@ -38,6 +38,15 @@ describe('GraphRouter', () => {
     ]);
   });
 
+  it('combina a via real com a região para formar um endereço específico', () => {
+    const laneRouter = new GraphRouter({ kind: 'lane', nodes: [
+      { id: 'a', x: 0, y: 0, laneId: 'main', edges: [{ to: 'b', distance: 100, roadId: 'road-1', laneId: 'main' }] },
+      { id: 'b', x: 100, y: 0, laneId: 'main', edges: [] }
+    ] }, [], { 'road-1': 'SQS 308, Via Leste' });
+
+    expect(laneRouter.addressAt({ x: 50, y: 1 }, 'Asa Sul')).toBe('SQS 308, Via Leste, Asa Sul, Brasília, DF');
+  });
+
   it('termina na faixa mais próxima sem desenhar um atalho final pela calçada', () => {
     const laneRouter = new GraphRouter({ kind: 'lane', nodes: [
       { id: 'a', x: 0, y: 0, laneId: 'main', edges: [{ to: 'b', distance: 100, roadId: 'main', laneId: 'main' }] },
@@ -47,6 +56,20 @@ describe('GraphRouter', () => {
 
     const route = laneRouter.drivingRoute({ x: 20, y: 0 }, { x: 150, y: 6 }, 0);
     expect(route[route.length - 1]).toEqual({ x: 150, y: 0 });
+  });
+
+  it('não volta para um trecho atrás do carro quando a faixa correta termina perto de outra', () => {
+    const laneRouter = new GraphRouter({ kind: 'lane', nodes: [
+      { id: 'a', x: 0, y: 0, laneId: 'correct', edges: [{ to: 'b', distance: 10, roadId: 'correct', laneId: 'correct' }] },
+      { id: 'b', x: -10, y: 0, laneId: 'correct', edges: [] },
+      { id: 'c', x: -3, y: 1, laneId: 'nearby', edges: [{ to: 'd', distance: 1, roadId: 'nearby', laneId: 'nearby' }] },
+      { id: 'd', x: -4, y: 1, laneId: 'nearby', edges: [{ to: 'e', distance: 9, roadId: 'nearby', laneId: 'nearby' }] },
+      { id: 'e', x: -4, y: 10, laneId: 'nearby', edges: [{ to: 'g', distance: 16, roadId: 'nearby', laneId: 'nearby' }] },
+      { id: 'g', x: -20, y: 10, laneId: 'nearby', edges: [] }
+    ] });
+
+    const route = laneRouter.drivingRoute({ x: -5, y: 0 }, { x: -20, y: 10 }, Math.PI);
+    expect(route[1]?.x).toBeLessThanOrEqual(-5);
   });
 
   it('não liga uma rua fora do grafo a uma avenida paralela atravessando a grama', () => {

@@ -1,5 +1,5 @@
 import type { GraphEdge, GraphNode, NavigationGraph, Point, RoadData } from '../../types/game';
-import { isDrivableRoad, pointInTrafficLane, visibleRoadWidth } from './roadRules';
+import { isDrivableRoad, pointInTrafficLane, visibleRoadWidthAt } from './roadRules';
 
 type DirectedSegment = {
   from: GraphNode;
@@ -14,23 +14,29 @@ type LaneAnchor = DirectedSegment & {
   t: number;
   lateralDistance: number;
   headingError: number;
+  forwardOffset: number;
   score: number;
 };
 
-type SurfaceSegment = { from: Point; to: Point; halfWidth: number };
+type SurfaceSegment = { from: Point; to: Point; halfWidthStart: number; halfWidthEnd: number };
 
 export class GraphRouter {
+  private readonly graph: NavigationGraph;
   private readonly nodes = new Map<string, GraphNode>();
   private readonly roads = new Map<string, RoadData>();
   private readonly spatialNodes = new Map<string, GraphNode[]>();
   private readonly spatialSegments = new Map<string, DirectedSegment[]>();
   private readonly surfaceCells = new Map<string, SurfaceSegment[]>();
   private readonly incomingCount = new Map<string, number>();
+  private readonly incomingNodes = new Map<string, string[]>();
   private readonly spatialCellSize = 120;
   private readonly laneGraph: boolean;
+  private readonly localGraph: boolean;
 
-  constructor(graph: NavigationGraph, roads: RoadData[] = []) {
+  constructor(graph: NavigationGraph, roads: RoadData[] = [], private readonly roadNames: Record<string, string> = {}) {
+    this.graph = graph;
     this.laneGraph = graph.kind === 'lane';
+    this.localGraph = graph.version?.endsWith('-local') ?? false;
     for (const node of graph.nodes) {
       this.nodes.set(node.id, node);
       const key = this.spatialKey(node);
@@ -40,9 +46,28 @@ export class GraphRouter {
     }
     for (const node of graph.nodes) for (const edge of node.edges) {
       this.incomingCount.set(edge.to, (this.incomingCount.get(edge.to) ?? 0) + 1);
+      const incoming = this.incomingNodes.get(edge.to) ?? [];
+      incoming.push(node.id);
+      this.incomingNodes.set(edge.to, incoming);
       const target = this.nodes.get(edge.to);
       if (this.laneGraph && target) this.indexSegment(node, target, edge);
     }
+    for (const road of roads) {
+      this.roads.set(road.id, road);
+      this.indexRoadSurface(road);
+    }
+  }
+
+  matchesGraph(graph: NavigationGraph) {
+    return this.graph === graph;
+  }
+
+  /** The navigation graph is immutable and expensive to index. Streaming only
+   * changes the nearby road surfaces, so keep the global node/edge indexes and
+   * refresh this much smaller surface lookup in place. */
+  replaceRoads(roads: RoadData[]) {
+    this.roads.clear();
+    this.surfaceCells.clear();
     for (const road of roads) {
       this.roads.set(road.id, road);
       this.indexRoadSurface(road);
@@ -66,7 +91,7 @@ export class GraphRouter {
 
   route(from: Point, to: Point): Point[] {
     const nodes = this.findRoute(from, to, undefined, false);
-    return nodes?.map(({ x, y }) => ({ x, y })) ?? [];
+    return nodes ? routeGeometry(nodes) : [];
   }
 
   drivingRoute(from: Point, to: Point, preferredStartHeading?: number): Point[] {
@@ -162,7 +187,7 @@ export class GraphRouter {
       return compactRoute([
         from,
         start.point,
-        ...route.map(({ x, y }) => ({ x, y })),
+        ...routeGeometry(route),
         goal.point
       ]);
     }
@@ -176,13 +201,18 @@ export class GraphRouter {
       const projection = projectOnSegment(point, segment.from, segment.to);
       const lateralDistance = Math.hypot(point.x - projection.point.x, point.y - projection.point.y);
       const headingError = heading === undefined ? 0 : Math.abs(angleDelta(heading, segment.heading));
+      const forwardOffset = heading === undefined
+        ? 0
+        : (projection.point.x - point.x) * Math.cos(heading) + (projection.point.y - point.y) * Math.sin(heading);
+      const behindPenalty = forwardOffset < -0.35 ? 1_000 : 0;
       return {
         ...segment,
         point: projection.point,
         t: projection.t,
         lateralDistance,
         headingError,
-        score: lateralDistance * 20 + headingError * 42 + (segment.edge.connector ? 3 : 0)
+        forwardOffset,
+        score: lateralDistance * 20 + headingError * 42 + behindPenalty + (segment.edge.connector ? 3 : 0)
       };
     });
     const nearestDistance = Math.min(...anchors.map((anchor) => anchor.lateralDistance));
@@ -191,7 +221,7 @@ export class GraphRouter {
     );
     const directionallyValid = heading === undefined
       ? nearest
-      : nearest.filter((anchor) => anchor.headingError <= 1.25);
+      : nearest.filter((anchor) => anchor.headingError <= 1.25 && anchor.forwardOffset >= -0.35);
     return (directionallyValid.length ? directionallyValid : nearest)
       .sort((a, b) => a.score - b.score)
       .slice(0, broad ? 32 : 8);
@@ -222,12 +252,14 @@ export class GraphRouter {
       const segment = {
         from: road.points[index - 1],
         to: road.points[index],
-        halfWidth: visibleRoadWidth(road) / 2
+        halfWidthStart: visibleRoadWidthAt(road, index - 1) / 2,
+        halfWidthEnd: visibleRoadWidthAt(road, index) / 2
       };
-      const minX = Math.floor((Math.min(segment.from.x, segment.to.x) - segment.halfWidth) / this.spatialCellSize);
-      const maxX = Math.floor((Math.max(segment.from.x, segment.to.x) + segment.halfWidth) / this.spatialCellSize);
-      const minY = Math.floor((Math.min(segment.from.y, segment.to.y) - segment.halfWidth) / this.spatialCellSize);
-      const maxY = Math.floor((Math.max(segment.from.y, segment.to.y) + segment.halfWidth) / this.spatialCellSize);
+      const maximumHalfWidth = Math.max(segment.halfWidthStart, segment.halfWidthEnd);
+      const minX = Math.floor((Math.min(segment.from.x, segment.to.x) - maximumHalfWidth) / this.spatialCellSize);
+      const maxX = Math.floor((Math.max(segment.from.x, segment.to.x) + maximumHalfWidth) / this.spatialCellSize);
+      const minY = Math.floor((Math.min(segment.from.y, segment.to.y) - maximumHalfWidth) / this.spatialCellSize);
+      const maxY = Math.floor((Math.max(segment.from.y, segment.to.y) + maximumHalfWidth) / this.spatialCellSize);
       for (let x = minX; x <= maxX; x += 1) for (let y = minY; y <= maxY; y += 1) {
         const key = `${x}:${y}`;
         const values = this.surfaceCells.get(key) ?? [];
@@ -273,8 +305,9 @@ export class GraphRouter {
     const cellY = Math.floor(point.y / this.spatialCellSize);
     let inset = Number.NEGATIVE_INFINITY;
     for (const segment of this.surfaceCells.get(`${cellX}:${cellY}`) ?? []) {
-      const projection = projectOnSegment(point, segment.from, segment.to).point;
-      inset = Math.max(inset, segment.halfWidth - Math.hypot(point.x - projection.x, point.y - projection.y));
+      const projection = projectOnSegment(point, segment.from, segment.to);
+      const halfWidth = segment.halfWidthStart + (segment.halfWidthEnd - segment.halfWidthStart) * projection.t;
+      inset = Math.max(inset, halfWidth - Math.hypot(point.x - projection.point.x, point.y - projection.point.y));
     }
     return inset;
   }
@@ -470,6 +503,78 @@ export class GraphRouter {
       .filter((node) => node.edges.length >= 2 && Math.hypot(node.x, node.y) > minDistanceFromCenter)
       .sort((a, b) => Math.atan2(a.y, a.x) - Math.atan2(b.y, b.x));
   }
+
+  nearestRoadName(point: Point) {
+    if (!this.laneGraph) return undefined;
+    for (const anchor of this.laneAnchors(point, undefined, true)) {
+      if (anchor.edge.connector) continue;
+      const name = this.roadNames[anchor.edge.roadId] ?? this.roads.get(anchor.edge.roadId)?.name;
+      if (name && !/^Via \d+$/.test(name)) return name;
+    }
+    return undefined;
+  }
+
+  addressAt(point: Point, regionName: string) {
+    const roadName = this.nearestRoadName(point);
+    if (roadName) {
+      const includesRegion = roadName.toLocaleLowerCase('pt-BR').includes(regionName.toLocaleLowerCase('pt-BR'));
+      return `${roadName}${includesRegion ? '' : `, ${regionName}`}, Brasília, DF`;
+    }
+    if (regionName === 'Setores Centrais') {
+      const hemisphere = point.y < 0 ? 'Norte' : 'Sul';
+      const side = point.x < 0 ? 'oeste' : 'leste';
+      return `Setor Central ${hemisphere}, faixa ${side}, Brasília, DF`;
+    }
+    return `${regionName}, setor ${point.y < 0 ? 'norte' : 'sul'} ${point.x < 0 ? 'oeste' : 'leste'}, Brasília, DF`;
+  }
+
+  supportsRegionalRoutes() {
+    return !this.localGraph;
+  }
+
+  /** Samples the spatial index instead of sorting or traversing every global
+   * graph node. One routable point per occupied cell gives mission generation
+   * broad geographic coverage without a main-thread walk over ~300k nodes. */
+  distributedCandidates(limit = 900, minDistanceFromCenter = 80): GraphNode[] {
+    const sampled: GraphNode[] = [];
+    for (const cell of this.spatialNodes.values()) {
+      const candidate = cell.find((node) =>
+        node.edges.length >= 2
+        && (this.incomingCount.get(node.id) ?? 0) > 0
+        && Math.hypot(node.x, node.y) > minDistanceFromCenter
+      );
+      if (candidate) sampled.push(candidate);
+    }
+    if (sampled.length <= limit) return sampled;
+    const result: GraphNode[] = [];
+    const step = sampled.length / limit;
+    for (let index = 0; index < limit; index += 1) result.push(sampled[Math.floor(index * step)]);
+    return result;
+  }
+
+  /** Candidate destinations in the same returnable directed component as the
+   * player. Local streamed graphs contain boundary stubs that are valid for
+   * drawing but must not become pickup or drop-off points. */
+  reachableCandidates(from: Point, minDistanceFromCenter = 120): GraphNode[] {
+    const seed = this.nearest(from);
+    const forward = this.traverse([seed.id], (id) => this.nodes.get(id)?.edges.map((edge) => edge.to) ?? []);
+    const reverse = this.traverse([seed.id], (id) => this.incomingNodes.get(id) ?? []);
+    const component = new Set([...forward].filter((id) => reverse.has(id)));
+    return this.candidates(minDistanceFromCenter).filter((node) => component.has(node.id));
+  }
+
+  private traverse(start: string[], neighbors: (id: string) => string[]) {
+    const visited = new Set(start);
+    const pending = [...start];
+    while (pending.length) {
+      const id = pending.pop()!;
+      for (const next of neighbors(id)) if (!visited.has(next)) {
+        visited.add(next);
+        pending.push(next);
+      }
+    }
+    return visited;
+  }
 }
 
 function angleDelta(from: number, to: number) {
@@ -496,6 +601,42 @@ function compactRoute(route: Point[]) {
     if (!previous || Math.hypot(previous.x - point.x, previous.y - point.y) > 0.25) compact.push({ ...point });
   }
   return compact;
+}
+
+/** Connector edges join lane centres, not road centre lines. A short cubic
+ * keeps narrow entrances on the destination edge and gives every vehicle a
+ * usable turning radius without widening the rendered intersection. */
+function routeGeometry(nodes: GraphNode[]) {
+  if (nodes.length < 2) return nodes.map(({ x, y }) => ({ x, y }));
+  const points: Point[] = [{ x: nodes[0].x, y: nodes[0].y }];
+  for (let index = 0; index < nodes.length - 1; index += 1) {
+    const from = nodes[index];
+    const to = nodes[index + 1];
+    const edge = from.edges.find((candidate) => candidate.to === to.id);
+    if (edge?.connector && index > 0 && index + 2 < nodes.length) {
+      const previous = nodes[index - 1];
+      const next = nodes[index + 2];
+      const distance = Math.hypot(to.x - from.x, to.y - from.y);
+      // Mantém a tangência de entrada/saída sem fazer a curva cúbica escapar
+      // da união real dos asfaltos em acessos muito curtos ou estreitos.
+      const handle = Math.min(6, Math.max(1, distance * 0.25));
+      const incoming = Math.atan2(from.y - previous.y, from.x - previous.x);
+      const outgoing = Math.atan2(next.y - to.y, next.x - to.x);
+      const controlA = { x: from.x + Math.cos(incoming) * handle, y: from.y + Math.sin(incoming) * handle };
+      const controlB = { x: to.x - Math.cos(outgoing) * handle, y: to.y - Math.sin(outgoing) * handle };
+      for (const t of [0.25, 0.5, 0.75]) points.push(cubicPoint(from, controlA, controlB, to, t));
+    }
+    points.push({ x: to.x, y: to.y });
+  }
+  return points;
+}
+
+function cubicPoint(a: Point, b: Point, c: Point, d: Point, t: number) {
+  const inverse = 1 - t;
+  return {
+    x: inverse ** 3 * a.x + 3 * inverse ** 2 * t * b.x + 3 * inverse * t ** 2 * c.x + t ** 3 * d.x,
+    y: inverse ** 3 * a.y + 3 * inverse ** 2 * t * b.y + 3 * inverse * t ** 2 * c.y + t ** 3 * d.y
+  };
 }
 
 function uniqueNodes(nodes: GraphNode[]) {

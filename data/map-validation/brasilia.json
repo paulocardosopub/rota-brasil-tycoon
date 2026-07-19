@@ -1,0 +1,12 @@
+{
+  "mapVersion": "brasilia-0.8.6",
+  "shortOscillationMeters": 180,
+  "maximumEndpointWidthDeltaMeters": 0.35,
+  "maximumWidthGradientPerMeter": 0.13,
+  "minimumTaperLaneWidthMeters": 2.1,
+  "maximumLaneWidthMeters": 4.25,
+  "maximumConnectorSegmentMeters": 24,
+  "maximumEntranceWidthRatio": 1.35,
+  "maximumDisconnectedLaneShare": 0.02,
+  "maximumGraphSurfaceMismatchMeters": 0.9
+}

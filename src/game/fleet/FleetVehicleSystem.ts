@@ -72,12 +72,23 @@ export class FleetVehicleSystem {
     const shift = save.fleet.activeShift;
     const employee = shift ? save.fleet.employees.find((item) => item.id === shift.employeeId) : undefined;
     const vehicle = shift ? save.fleet.vehicles.find((item) => item.id === shift.vehicleId) : undefined;
-    this.syncParkedVehicles(save, shift?.vehicleId ?? null);
+    const repairing = Boolean(shift?.repair && !shift.repair.completedAt);
+    this.syncParkedVehicles(save, repairing ? null : shift?.vehicleId ?? null);
 
     if (!shift || !employee || !vehicle) {
       if (this.activeShiftId) this.routePlan.reset();
       this.activeShiftId = null;
       this.identification = null;
+      this.destinationRemaining = 0;
+      this.routeRemaining = 0;
+      this.routeHealth.reset();
+      this.trafficRecovery.reset();
+      this.releaseActiveVehicle();
+      return;
+    }
+
+    if (repairing) {
+      this.identification = employeeIdentification(employee.name);
       this.destinationRemaining = 0;
       this.routeRemaining = 0;
       this.routeHealth.reset();
@@ -306,7 +317,7 @@ export class FleetVehicleSystem {
 
   private updateSimplified(vehicle: FleetVehicle, employee: FleetEmployee, deltaSeconds: number) {
     this.ensureRoute(vehicle.position, vehicle.rotation);
-    let budget = Math.min(2, Math.max(0, deltaSeconds)) * 7.2;
+    let budget = Math.min(2, Math.max(0, deltaSeconds)) * 7.2 * GAME_CONFIG.traffic.averageSpeedMultiplier;
     while (budget > 0 && this.route.length >= 2) {
       const target = this.route[1];
       const distance = Math.hypot(target.x - vehicle.position.x, target.y - vehicle.position.y);
@@ -412,7 +423,7 @@ export class FleetVehicleSystem {
     const visibleIds = new Set<string>();
     for (const vehicle of save.fleet.vehicles) {
       if (vehicle.id === save.activeVehicleId || vehicle.id === activeShiftVehicleId) continue;
-      if (!['parked', 'available'].includes(vehicle.state)) continue;
+      if (!['parked', 'available', 'maintenance'].includes(vehicle.state)) continue;
       visibleIds.add(vehicle.id);
       let visual = this.parkedVisuals.get(vehicle.id);
       if (!visual) {

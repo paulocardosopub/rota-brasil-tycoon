@@ -23,7 +23,10 @@ export const VEHICLE_PHYSICS = {
   offRoadResistance: 3.5,
   offRoadBrakingMps2: 14,
   offRoadMaxSpeedMps: 8,
-  autopilotCruiseSpeedMps: 16,
+  // Fluxo normal aproximadamente 30% mais rápido. O Sport usa o limite
+  // físico de cada modelo e paga a diferença no consumo.
+  autopilotCruiseSpeedMps: 20.8,
+  autopilotSportFuelMultiplier: 1.18,
   autopilotRecoverySpeedMps: 3.5,
   autopilotRoadRecoveryRadiansPerSecond: 3.2,
   lengthMeters: 4.1,

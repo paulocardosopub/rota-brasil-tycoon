@@ -200,7 +200,7 @@ export function StartScreen({ onContinue, onNewGame, onGuest }: Props) {
         <div className="hero-car"><i /><b /><em /></div>
       </div>
       <section className="start-card">
-        <div className="eyebrow">PLAYABLE {GAME_CONFIG.version} — EMPRESA DE ÔNIBUS E TRANSPORTE COLETIVO</div>
+        <div className="eyebrow">PLAYABLE {GAME_CONFIG.version} — MAPA, PILOTO E CARREGAMENTO PROGRESSIVO</div>
         <h1><span>Rota Brasil</span> Tycoon</h1>
         <p>Comece ao volante de um Hatch 1998. Busque passageiros e construa sua futura empresa de transporte.</p>
         {!authMode ? (

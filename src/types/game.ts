@@ -23,7 +23,7 @@ export type BusinessKind = 'taxi' | 'delivery' | 'light-freight' | 'bus';
 export type WorkKind = 'passenger' | 'document' | 'food' | 'small-parcel' | 'express' | 'multi-stop' | 'urban-freight' | 'large-parcel' | 'small-move' | 'supply' | 'inter-region-freight';
 export type FleetSimulationLevel = 'detailed' | 'simplified' | 'economic';
 export type FleetVehicleState = 'available' | 'player-driving' | 'employee-driving' | 'on-trip' | 'returning' | 'refueling' | 'maintenance' | 'out-of-fuel' | 'damaged' | 'parked';
-export type EmployeeState = 'available' | 'waiting-vehicle' | 'starting-shift' | 'seeking-trip' | 'en-route' | 'with-passenger' | 'returning' | 'refueling' | 'break' | 'blocked' | 'ending-shift' | 'resting';
+export type EmployeeState = 'available' | 'waiting-vehicle' | 'starting-shift' | 'preparing-vehicle' | 'going-to-repair' | 'repairing' | 'seeking-trip' | 'en-route' | 'with-passenger' | 'returning' | 'refueling' | 'break' | 'blocked' | 'ending-shift' | 'resting';
 export type OnlineModePreference = 'online' | 'solo';
 export type OnlineConnectionState = 'ONLINE' | 'INSTABLE' | 'RECONNECTING' | 'SOLO_TEMPORARY' | 'OFFLINE' | 'SOLO';
 export type AccountLinkState = 'local' | 'anonymous' | 'pending-email' | 'permanent';
@@ -57,6 +57,9 @@ export interface RoadData {
   oneway: boolean;
   lanes: number;
   width: number;
+  /** Width at each polyline point. Present only on a legitimate tapered lane
+   * transition; every visual, collision and navigation consumer uses it. */
+  widthProfile?: number[];
   points: RoadPoint[];
   osmWayId?: string;
   corridorId?: string;
@@ -163,11 +166,14 @@ export interface RegionalFamiliarity {
 
 export interface CityMapManifest {
   mapVersion: string;
+  /** Changes whenever the generated map data changes without changing the playable release number. */
+  dataRevision?: string;
   city: string;
   origin: { lat: number; lon: number };
   bbox: { south: number; west: number; north: number; east: number };
   chunkSizeMeters: number;
   graphFile: string;
+  addressFile?: string;
   signalFile: string;
   serviceBase: string;
   regions: MapRegion[];
@@ -223,6 +229,7 @@ export interface CityMapData {
   buildings: MapBuilding[];
   services: MapServiceLocation[];
   taxiPoints: TaxiPoint[];
+  roadNames?: Record<string, string>;
   manifest?: CityMapManifest;
   lanes?: LaneData[];
   loadedChunkIds?: string[];
@@ -511,6 +518,7 @@ export interface FleetShift {
   scheduledEndAt: string;
   tripId: string | null;
   routeProgress: number;
+  repair: FleetShiftRepair | null;
   policy: ShiftPolicy;
   rides: number;
   kilometers: number;
@@ -520,6 +528,21 @@ export interface FleetShift {
   maintenanceCost: number;
   fines: number;
   netProfit: number;
+}
+
+export interface FleetShiftRepair {
+  requestId: string;
+  workshopServiceId: string;
+  workshopName: string;
+  workshopPosition: Point;
+  service: 'quick' | 'partial' | 'full';
+  cost: number;
+  chargedAt: string;
+  durationSeconds: number;
+  elapsedSeconds: number;
+  originalCondition: number;
+  targetCondition: number;
+  completedAt: string | null;
 }
 
 export interface FleetReport {
@@ -621,6 +644,7 @@ export interface PlayerSave {
   settings: PlayerSettings;
   activeMission: MissionSnapshot | null;
   autopilotEnabled: boolean;
+  autopilotSportMode: boolean;
   ledger: LedgerTransaction[];
   debts: number;
   upgrades: UpgradeLevels;
@@ -745,6 +769,7 @@ export interface HudSnapshot {
   collisionSeverity: CollisionSeverity | null;
   collisionRelativeSpeedKmh: number;
   autopilotEnabled: boolean;
+  autopilotSportMode: boolean;
   autopilotNextMissionSeconds: number;
   autopilotRoadCorrections: number;
   autopilotMinRoadClearance: number;
@@ -799,6 +824,7 @@ export interface HudSnapshot {
   totalTerrestrialEntities: number;
   mapVersion: string;
   currentRegion: string;
+  currentAddress: string;
   currentChunk: string;
   loadedMapChunks: number;
   mapRegions: string[];

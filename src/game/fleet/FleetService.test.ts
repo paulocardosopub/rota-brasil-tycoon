@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { GAME_CONFIG } from '../../config/gameConfig';
-import { createNewSave } from '../../services/storage/saveService';
+import { createNewSave, migrateSave } from '../../services/storage/saveService';
 import { regularizeTaxi } from '../progression/RegularizationService';
 import type { MapServiceLocation } from '../../types/game';
-import { advanceFleetShift, assignEmployee, availableCandidates, fleetOperationalState, fleetSimulationLevel, hireEmployee, purchaseBusiness, purchaseLightVehicle, purchaseSecondVehicle, simulateOfflineReturn, startFleetShift, trainEmployee, updateEmployeeRegionalPreferences } from './FleetService';
+import { advanceFleetShift, assignEmployee, availableCandidates, fleetOperationalState, fleetSimulationLevel, hireEmployee, purchaseBusiness, purchaseLightVehicle, purchaseSecondVehicle, simulateOfflineReturn, startFleetShift, trainEmployee, transferFleetEntity, updateEmployeeRegionalPreferences } from './FleetService';
 
 function fleetReady() {
   const save = createNewSave();
@@ -88,6 +88,69 @@ describe('primeira frota', () => {
     const fleetEntries = save.ledger.filter((entry) => entry.fleetId === save.fleet.id);
     expect(fleetEntries.some((entry) => entry.category === 'commission')).toBe(true);
     expect(fleetEntries.every((entry) => entry.ownerId && entry.vehicleId && entry.driverId && entry.tripId)).toBe(true);
+  });
+
+  it('repara automaticamente antes do turno sem gerar lucro durante o reparo', () => {
+    const { save, employee, sedan } = fleetReady();
+    sedan.condition = 30;
+    sedan.collisionDamage = 55;
+    sedan.maintenanceWear = 20;
+    const workshop = {
+      id: 'workshop-test', category: 'workshop', gameName: 'Oficina Teste',
+      stopPoint: { x: 120, y: 80 }, regionId: 'centro'
+    } as MapServiceLocation;
+    const balanceBefore = save.money;
+
+    const started = startFleetShift(save, employee.id, 'damaged-shift', new Date('2026-07-18T12:00:00.000Z'), [workshop]);
+    expect(started.applied).toBe(true);
+    const repair = save.fleet.activeShift!.repair!;
+    expect(repair.workshopServiceId).toBe(workshop.id);
+    expect(save.money).toBe(balanceBefore - repair.cost);
+    expect(save.fleet.activeShift).toMatchObject({ rides: 0, grossRevenue: 0, netProfit: -repair.cost });
+    expect(sedan.state).toBe('maintenance');
+
+    const repairing = advanceFleetShift(save, repair.durationSeconds / 2);
+    expect(repairing.completedRides).toBe(0);
+    expect(save.fleet.activeShift).toMatchObject({ rides: 0, grossRevenue: 0, netProfit: -repair.cost });
+    expect(save.fleet.activeShift?.repair?.completedAt).toBeNull();
+
+    advanceFleetShift(save, repair.durationSeconds / 2);
+    expect(save.fleet.activeShift?.repair?.completedAt).not.toBeNull();
+    expect(sedan.condition).toBeGreaterThanOrEqual(45);
+    expect(sedan.position).toEqual(workshop.stopPoint);
+    const duplicate = startFleetShift(save, employee.id, 'damaged-shift', new Date('2026-07-18T12:10:00.000Z'), [workshop]);
+    expect(duplicate.applied).toBe(false);
+    expect(save.ledger.filter((entry) => entry.idempotencyKey === 'damaged-shift:repair')).toHaveLength(1);
+  });
+
+  it('informa o valor exato quando falta saldo para o reparo obrigatório', () => {
+    const { save, employee, sedan } = fleetReady();
+    sedan.condition = 15;
+    sedan.collisionDamage = 80;
+    sedan.maintenanceWear = 12;
+    save.money = 1;
+    const result = startFleetShift(save, employee.id, 'repair-no-money');
+    expect(result).toMatchObject({ applied: false, reason: 'repair-insufficient', availableValue: 1 });
+    expect('requiredValue' in result && result.requiredValue).toBeGreaterThan(1);
+    expect(save.fleet.activeShift).toBeNull();
+    expect(save.ledger.some((entry) => entry.idempotencyKey === 'repair-no-money:repair')).toBe(false);
+  });
+
+  it('preserva o reparo ao recarregar, conclui offline e bloqueia transferência', () => {
+    const { save, employee, sedan } = fleetReady();
+    sedan.condition = 28;
+    sedan.collisionDamage = 60;
+    sedan.maintenanceWear = 18;
+    save.fleet.garages.push({ ...save.fleet.garages[0], serviceId: 'garage-second', name: 'Segunda garagem' });
+    expect(startFleetShift(save, employee.id, 'repair-reload').applied).toBe(true);
+    expect(transferFleetEntity(save, 'vehicle', sedan.id, 'garage-second', 'locked-transfer').applied).toBe(false);
+
+    const reloaded = migrateSave(JSON.parse(JSON.stringify(save)));
+    const duration = reloaded.fleet.activeShift!.repair!.durationSeconds;
+    const result = advanceFleetShift(reloaded, duration + 3_600, true);
+    expect(reloaded.fleet.activeShift?.repair?.completedAt).not.toBeNull();
+    expect(result.completedRides).toBeGreaterThan(0);
+    expect(reloaded.fleet.activeShift?.grossRevenue).toBeGreaterThan(0);
   });
 
   it('limita o retorno offline a oito horas com eficiência reduzida', () => {

@@ -3,10 +3,13 @@ import { promisify } from 'node:util';
 import { readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import type { CityMapManifest, NavigationGraph } from '../../src/types/game';
+import type { PackedNavigationGraph } from '../../src/map/pipeline/RoadPipeline';
 
 const root = path.resolve('public/data/cities/brasilia');
 const manifest = JSON.parse(await readFile(path.join(root, 'manifest.json'), 'utf8')) as CityMapManifest;
-const graph = JSON.parse((await promisify(gunzip)(await readFile(path.join(root, manifest.graphFile)))).toString('utf8')) as NavigationGraph;
+const graph = unpackNavigationGraph(JSON.parse(
+  (await promisify(gunzip)(await readFile(path.join(root, manifest.graphFile)))).toString('utf8')
+) as NavigationGraph | PackedNavigationGraph);
 const nodes = new Map(graph.nodes.map((node) => [node.id, node]));
 const globalComponent = largestStrongComponent(graph);
 const candidates = graph.nodes.filter((node) => globalComponent.has(node.id) && node.edges.length > 1);
@@ -14,7 +17,7 @@ const densities = [20, 40, 72, 100];
 const results = densities.map(simulate);
 const failures = results.filter((result) => result.deadlocks || result.collisions || result.headOnConflicts || result.routeLoops);
 
-const report = `# Simulação de trânsito — 0.8.2
+const report = `# Simulação de trânsito — 0.8.6
 
 Simulação determinística sobre o mesmo grafo dirigido por faixa usado por jogador, piloto, NPCs e funcionários.
 
@@ -37,11 +40,31 @@ ${results.map((result) => `| ${result.vehicleCount} | ${result.movements} | ${re
 
 ${failures.length ? `Falha em ${failures.length} densidade(s).` : 'Aprovado: nenhum deadlock permanente, colisão de reserva, conflito frente a frente ou loop de rota.'}
 `;
-await writeFile(path.resolve('docs/traffic-simulation-0.8.2.md'), report);
+await writeFile(path.resolve('docs/traffic-simulation-0.8.6.md'), report);
 if (failures.length) {
   console.error(report);
   process.exitCode = 1;
-} else console.log(`Trânsito 0.8.2 aprovado em ${densities.join('/')}: sem deadlock, colisão, contramão ou loop.`);
+} else console.log(`Trânsito 0.8.6 aprovado em ${densities.join('/')}: sem deadlock, colisão, contramão ou loop.`);
+
+function unpackNavigationGraph(graph: NavigationGraph | PackedNavigationGraph): NavigationGraph {
+  if (graph.kind !== 'packed-lane') return graph;
+  return {
+    kind: 'lane',
+    version: graph.version,
+    nodes: graph.nodes.map((packed, index) => ({
+      id: index.toString(36),
+      x: packed[0] / graph.precision,
+      y: packed[1] / graph.precision,
+      edges: packed[2].map((edge) => ({
+        to: edge[0].toString(36),
+        distance: edge[1] / graph.precision,
+        roadId: graph.roads[edge[2]],
+        highway: edge[3] >= 0 ? graph.highways[edge[3]] : undefined,
+        connector: edge[4] === 1 || undefined
+      }))
+    }))
+  };
+}
 
 function simulate(vehicleCount: number) {
   const vehicles = Array.from({ length: vehicleCount }, (_, index) => {

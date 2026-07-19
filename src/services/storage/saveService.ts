@@ -57,6 +57,7 @@ export function createNewSave(position = { x: 0, y: 0 }): PlayerSave {
     settings: { ...DEFAULT_SETTINGS },
     activeMission: null,
     autopilotEnabled: false,
+    autopilotSportMode: false,
     ledger: [],
     debts: 0,
     upgrades: { ...DEFAULT_UPGRADES },
@@ -141,6 +142,7 @@ export function migrateSave(input: unknown): PlayerSave {
     settings: migrateSettings(raw.settings),
     activeMission: validMission(raw.activeMission) ? raw.activeMission : null,
     autopilotEnabled: raw.autopilotEnabled === true,
+    autopilotSportMode: raw.autopilotSportMode === true,
     ledger,
     debts: finiteMoney(raw.debts, 0),
     upgrades,
@@ -351,6 +353,7 @@ function migrateFleet(input: Partial<PlayerFleet> | undefined, save: PlayerSave)
     employees: Array.isArray(input?.employees) ? input.employees.map(migrateEmployee) : [],
     activeShift: input?.activeShift && typeof input.activeShift === 'object' ? {
       ...input.activeShift,
+      repair: input.activeShift.repair ?? null,
       policy: {
         ...input.activeShift.policy,
         regional: migrateEmployeeRegionalPreferences(input.activeShift.policy?.regional)

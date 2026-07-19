@@ -1,13 +1,13 @@
-import { useEffect, useState } from 'react';
-import { GameCanvas } from './game/GameCanvas';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import { gameEvents } from './game/events';
 import { createNewSave, deleteSave, loadSave, replaceSave } from './services/storage/saveService';
-import { findCloudSaveConflict, resolveCloudSaveConflict, syncCloudSave, type CloudSaveConflict } from './services/supabase/cloudSaveService';
+import type { CloudSaveConflict } from './services/supabase/cloudSaveService';
 import type { PlayerSave } from './types/game';
-import { Hud } from './ui/hud/Hud';
 import { StartScreen } from './ui/screens/StartScreen';
-import { ensureGuestSession } from './services/supabase/authService';
 import { CloudSyncAcknowledgement } from './services/supabase/CloudSyncAcknowledgement';
+
+const GameCanvas = lazy(() => import('./game/GameCanvas').then((module) => ({ default: module.GameCanvas })));
+const Hud = lazy(() => import('./ui/hud/Hud').then((module) => ({ default: module.Hud })));
 
 let cloudSyncQueue: Promise<void> = Promise.resolve();
 const cloudSyncAcknowledgement = new CloudSyncAcknowledgement();
@@ -19,6 +19,7 @@ export default function App() {
 
   useEffect(() => gameEvents.on('save', (next) => {
     cloudSyncQueue = cloudSyncQueue.then(async () => {
+      const { syncCloudSave } = await import('./services/supabase/cloudSaveService');
       const current = loadSave();
       const candidate = cloudSyncAcknowledgement.merge(
         current.cloudLineageId === next.cloudLineageId && current.revision >= next.revision ? current : next
@@ -33,6 +34,7 @@ export default function App() {
   }), []);
 
   const continueGame = async () => {
+    const { findCloudSaveConflict, syncCloudSave } = await import('./services/supabase/cloudSaveService');
     const local = loadSave();
     const conflict = await findCloudSaveConflict(local).catch(() => null);
     if (conflict) { setCloudConflict(conflict); return; }
@@ -48,12 +50,25 @@ export default function App() {
     setPlaying(true);
   };
   const guestGame = async () => {
+    const local = loadSave();
+    if (local.lastCloudRevision === 0) {
+      // A primeira partida local não possui um conflito remoto possível. A
+      // identidade anônima pode ser preparada em segundo plano sem impedir o
+      // jogador de dirigir; o fluxo normal de saves fará a sincronização.
+      setSave(local);
+      setPlaying(true);
+      const { ensureGuestSession } = await import('./services/supabase/authService');
+      void ensureGuestSession().catch((error) => console.warn('Visitante online adiado:', error));
+      return;
+    }
+    const { ensureGuestSession } = await import('./services/supabase/authService');
     await ensureGuestSession().catch((error) => console.warn('Visitante online adiado:', error));
     await continueGame();
   };
 
   const chooseConflict = async (choice: 'local' | 'cloud') => {
     if (!cloudConflict) return;
+    const { resolveCloudSaveConflict } = await import('./services/supabase/cloudSaveService');
     const selected = await resolveCloudSaveConflict(cloudConflict, choice).catch(() => choice === 'cloud' ? cloudConflict.remote : cloudConflict.local);
     cloudSyncAcknowledgement.remember(selected);
     setCloudConflict(null);
@@ -70,5 +85,7 @@ export default function App() {
     </div>
   </section></main>;
   if (!playing) return <StartScreen onContinue={continueGame} onNewGame={newGame} onGuest={guestGame} />;
-  return <main className="game-shell"><GameCanvas save={save} /><Hud /></main>;
+  return <Suspense fallback={<main className="start-screen"><section className="start-card"><div className="eyebrow">CARREGANDO REGIAO</div><h1>Preparando o trecho atual...</h1></section></main>}>
+    <main className="game-shell"><GameCanvas save={save} /><Hud /></main>
+  </Suspense>;
 }

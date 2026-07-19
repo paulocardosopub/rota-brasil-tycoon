@@ -72,6 +72,7 @@ export class TrafficSystem {
   private readonly signalByNode = new Map<string, MapSignal>();
   private readonly signalIndex = new Map<string, number>();
   private readonly nodesBySource = new Map<string, GraphNode[]>();
+  private readonly nodesByCell = new Map<string, GraphNode[]>();
   private readonly laneGraph: boolean;
   private signals: MapSignal[] = [];
   private readonly vehicles: TrafficVehicle[] = [];
@@ -107,6 +108,10 @@ export class TrafficSystem {
     this.crowdGraphics = scene.add.graphics().setDepth(23);
     for (const node of graph.nodes) {
       this.nodes.set(node.id, node);
+      const cellKey = `${Math.floor(node.x / 50)}:${Math.floor(node.y / 50)}`;
+      const cellNodes = this.nodesByCell.get(cellKey) ?? [];
+      cellNodes.push(node);
+      this.nodesByCell.set(cellKey, cellNodes);
       if (node.sourceNodeId) {
         const sourceNodes = this.nodesBySource.get(node.sourceNodeId) ?? [];
         sourceNodes.push(node);
@@ -720,14 +725,21 @@ export class TrafficSystem {
     vehicle.visual?.setVisible(true);
   }
 
-  debugPlaceTrafficJam(position: Point, heading: number) {
+  debugPlaceTrafficJam(position: Point, heading: number, playerSpeed = 0) {
     // Keep the synthetic deadlock focused on traffic recovery. A red signal at
     // the player's current node can otherwise keep the player correctly
     // stopped after the four NPCs have escaped, making the diagnostic depend
     // on the signal phase chosen for this particular map spawn.
     this.signalOverride = 'green';
+    // O cenário pode ser acionado quando o piloto já está rápido. Colocar
+    // a primeira fila a apenas 10 m inventava um impacto inevitável antes de
+    // os freios responderem, sobretudo após o aumento de velocidade da 0.8.6.
+    const safeFirstDistance = Math.max(
+      10,
+      playerSpeed * playerSpeed / (2 * GAME_CONFIG.vehicle.brakeMps2) + 12
+    );
     for (const [offset, vehicle] of this.vehicles.slice(0, 4).entries()) {
-      const distance = 10 + offset * 8;
+      const distance = safeFirstDistance + offset * 8;
       vehicle.position = {
         x: position.x + Math.cos(heading) * distance,
         y: position.y + Math.sin(heading) * distance
@@ -839,11 +851,26 @@ export class TrafficSystem {
     this.signalByNode.clear();
     this.signalIndex.clear();
     signals.forEach((signal, index) => {
-      const laneNodes = this.nodesBySource.get(signal.nodeId);
+      const laneNodes = this.nodesBySource.get(signal.nodeId) ?? this.nodesNearSignal(signal);
       if (this.laneGraph && laneNodes?.length) for (const node of laneNodes) this.signalByNode.set(node.id, signal);
       else this.signalByNode.set(signal.nodeId, signal);
       this.signalIndex.set(signal.id, index);
     });
+  }
+
+  private nodesNearSignal(signal: MapSignal) {
+    const centerX = Math.floor(signal.x / 50);
+    const centerY = Math.floor(signal.y / 50);
+    const candidates: GraphNode[] = [];
+    for (let x = centerX - 1; x <= centerX + 1; x += 1) for (let y = centerY - 1; y <= centerY + 1; y += 1) {
+      candidates.push(...(this.nodesByCell.get(`${x}:${y}`) ?? []));
+    }
+    return candidates
+      .map((node) => ({ node, distance: Math.hypot(node.x - signal.x, node.y - signal.y) }))
+      .filter((candidate) => candidate.distance <= 18)
+      .sort((a, b) => a.distance - b.distance)
+      .slice(0, 12)
+      .map((candidate) => candidate.node);
   }
 
   private isNarrowingMerge(vehicle: TrafficVehicle) {
@@ -950,9 +977,10 @@ function distanceToSegment(point: Point, start: Point, end: Point) {
 }
 
 function vehicleSpec(kind: VehicleKind, index: number) {
-  if (kind === 'bus') return { length: 11.5, width: 2.55, maxSpeed: 6.8 + index % 2 * 0.35, acceleration: 1.25, braking: 3.2 };
-  if (kind === 'utility') return { length: 6.1, width: 2.15, maxSpeed: 7.5 + index % 3 * 0.3, acceleration: 1.8, braking: 3.8 };
-  return { length: 4.4, width: 1.9, maxSpeed: GAME_CONFIG.traffic.npcSpeedMps * (0.82 + index % 4 * 0.06), acceleration: 2.4, braking: 4.8 };
+  const speedMultiplier = GAME_CONFIG.traffic.averageSpeedMultiplier;
+  if (kind === 'bus') return { length: 11.5, width: 2.55, maxSpeed: (6.8 + index % 2 * 0.35) * speedMultiplier, acceleration: 1.25 * speedMultiplier, braking: 3.2 };
+  if (kind === 'utility') return { length: 6.1, width: 2.15, maxSpeed: (7.5 + index % 3 * 0.3) * speedMultiplier, acceleration: 1.8 * speedMultiplier, braking: 3.8 };
+  return { length: 4.4, width: 1.9, maxSpeed: GAME_CONFIG.traffic.npcSpeedMps * speedMultiplier * (0.82 + index % 4 * 0.06), acceleration: 2.4 * speedMultiplier, braking: 4.8 };
 }
 
 function rotateTowards(current: number, target: number, maxStep: number) {

@@ -1,0 +1,141 @@
+{
+  "version": "0.8.6",
+  "measuredAt": "2026-07-19T00:37:15.573Z",
+  "target": "http://127.0.0.1:4186",
+  "baseline085": {
+    "desktop": {
+      "interfaceMs": 142,
+      "gameReadyMs": 7901,
+      "medianFps": 35
+    },
+    "mobile": {
+      "interfaceMs": 151,
+      "gameReadyMs": 4030,
+      "medianFps": 54
+    },
+    "initialBundleBytes": 1910005,
+    "routingCoreBytes": 16284335,
+    "publishedChunkBytes": 161267637
+  },
+  "artifacts": {
+    "initialBundleBytes": 298841,
+    "applicationBundleBytes": 1975946,
+    "routingCoreBytes": 3897629,
+    "publishedChunkBytes": 162931686,
+    "publishedMapBytes": 166829315
+  },
+  "results": [
+    {
+      "preset": "desktop-1440x900",
+      "cache": "cold",
+      "interfaceMs": 121,
+      "gameReadyMs": 2835,
+      "beforeReady": {
+        "transferredBytes": 90400,
+        "encodedBytes": 6078762,
+        "mapTransferredBytes": 0,
+        "mapEncodedBytes": 4312157,
+        "requests": 17
+      },
+      "afterSettle": {
+        "transferredBytes": 90400,
+        "encodedBytes": 9630503,
+        "mapTransferredBytes": 0,
+        "mapEncodedBytes": 7863898,
+        "requests": 22
+      },
+      "heapUsedMB": 58,
+      "minimumFps": 29,
+      "medianFps": 32,
+      "maximumFps": 38,
+      "traffic": 72,
+      "buses": 9,
+      "airTraffic": 10,
+      "terrestrialEntities": 73
+    },
+    {
+      "preset": "desktop-1440x900",
+      "cache": "warm",
+      "interfaceMs": 102,
+      "gameReadyMs": 1919,
+      "beforeReady": {
+        "transferredBytes": 0,
+        "encodedBytes": 2466274,
+        "mapTransferredBytes": 0,
+        "mapEncodedBytes": 490194,
+        "requests": 7
+      },
+      "afterSettle": {
+        "transferredBytes": 0,
+        "encodedBytes": 2466274,
+        "mapTransferredBytes": 0,
+        "mapEncodedBytes": 490194,
+        "requests": 7
+      },
+      "heapUsedMB": 58,
+      "minimumFps": 29,
+      "medianFps": 34,
+      "maximumFps": 37,
+      "traffic": 72,
+      "buses": 9,
+      "airTraffic": 10,
+      "terrestrialEntities": 73
+    },
+    {
+      "preset": "mobile-390x844-pilot",
+      "cache": "cold",
+      "interfaceMs": 112,
+      "gameReadyMs": 1366,
+      "beforeReady": {
+        "transferredBytes": 90400,
+        "encodedBytes": 6078762,
+        "mapTransferredBytes": 0,
+        "mapEncodedBytes": 4312157,
+        "requests": 17
+      },
+      "afterSettle": {
+        "transferredBytes": 90400,
+        "encodedBytes": 25028995,
+        "mapTransferredBytes": 0,
+        "mapEncodedBytes": 23262390,
+        "requests": 26
+      },
+      "heapUsedMB": 202,
+      "minimumFps": 40,
+      "medianFps": 48,
+      "maximumFps": 51,
+      "traffic": 72,
+      "buses": 9,
+      "airTraffic": 10,
+      "terrestrialEntities": 73
+    },
+    {
+      "preset": "mobile-390x844-pilot",
+      "cache": "warm",
+      "interfaceMs": 63,
+      "gameReadyMs": 1070,
+      "beforeReady": {
+        "transferredBytes": 0,
+        "encodedBytes": 2466274,
+        "mapTransferredBytes": 0,
+        "mapEncodedBytes": 490194,
+        "requests": 7
+      },
+      "afterSettle": {
+        "transferredBytes": 0,
+        "encodedBytes": 2466274,
+        "mapTransferredBytes": 0,
+        "mapEncodedBytes": 490194,
+        "requests": 7
+      },
+      "heapUsedMB": 202,
+      "minimumFps": 51,
+      "medianFps": 53,
+      "maximumFps": 54,
+      "traffic": 72,
+      "buses": 9,
+      "airTraffic": 10,
+      "terrestrialEntities": 73
+    }
+  ]
+}

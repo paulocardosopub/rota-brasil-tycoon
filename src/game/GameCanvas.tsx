@@ -46,11 +46,12 @@ export function GameCanvas({ save }: { save: PlayerSave }) {
 }
 
 function scaledGameSize(container: HTMLDivElement) {
-  // A folga de 5% em telas grandes recupera o orçamento de GPU sem repetir a
-  // ampliação borrada de 20% que existia na 0.7.0.
+  // A folga de 6% em telas grandes recupera o orçamento de GPU sem repetir a
+  // ampliação borrada de 20% que existia antes da 0.7.0. Mobile permanece nativo.
+  const scale = container.clientWidth >= 900 ? 0.94 : 1;
   return {
-    width: Math.max(1, Math.round(container.clientWidth)),
-    height: Math.max(1, Math.round(container.clientHeight))
+    width: Math.max(1, Math.round(container.clientWidth * scale)),
+    height: Math.max(1, Math.round(container.clientHeight * scale))
   };
 }
 

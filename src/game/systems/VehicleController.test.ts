@@ -24,6 +24,18 @@ describe('VehicleController', () => {
     expect(vehicle.fuelUsed).toBeGreaterThan(0);
   });
 
+  it('aplica o consumo adicional do Modo Sport sem alterar o limite físico', () => {
+    const surface = new RoadSurfaceIndex([road]);
+    const normal = new VehicleController({ x: -80, y: 2.5 }, 0, surface);
+    const sport = new VehicleController({ x: -80, y: -2.5 }, 0, surface);
+    for (let frame = 0; frame < 180; frame += 1) {
+      normal.update({ throttle: 1, steering: 0, handbrake: false }, 1 / 60, 18);
+      sport.update({ throttle: 1, steering: 0, handbrake: false, fuelConsumptionMultiplier: GAME_CONFIG.vehicle.autopilotSportFuelMultiplier }, 1 / 60, 18);
+    }
+    expect(sport.maximumSpeedMps()).toBe(normal.maximumSpeedMps());
+    expect(sport.fuelUsed).toBeGreaterThan(normal.fuelUsed * 1.17);
+  });
+
   it('reduz a velocidade fora do asfalto sem criar uma trava', () => {
     const vehicle = new VehicleController({ x: 0, y: 0 }, Math.PI / 2, new RoadSurfaceIndex([road]));
     vehicle.speed = 15;

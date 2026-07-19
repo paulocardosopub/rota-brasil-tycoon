@@ -75,4 +75,24 @@ describe('progresso da rota', () => {
 
     expect(mission.remainingDistance({ x: 0, y: 0 })).toBe(420);
   });
+
+  it('substitui um alvo provisório inalcançável quando o grafo global assume a rota', () => {
+    const mission = missionWithRoute([]);
+    mission.mission = {
+      id: 'global-recovery', passengerName: 'Teste', phase: 'pickup',
+      pickup: { x: 80, y: 0 }, destination: { x: 1_200, y: 0 },
+      pickupLabel: 'Origem provisória', destinationLabel: 'Destino',
+      distanceTravelled: 0, elapsedSeconds: 0, distanceBand: 'short'
+    };
+    const router = {
+      reachableCandidates: () => [{ id: 'reachable', x: 600, y: 0, edges: [] }],
+      drivingRoute: (from: { x: number; y: number }, to: { x: number; y: number }) => [{ x: from.x, y: from.y }, { x: to.x, y: to.y }],
+      distance: (route: Array<{ x: number; y: number }>) => Math.hypot(route[1].x - route[0].x, route[1].y - route[0].y)
+    };
+    Object.assign(mission as unknown as object, { router, vehicleContext: {} });
+
+    expect(mission.recoverTargetRoute({ x: 0, y: 0 }, 0)).toEqual([{ x: 0, y: 0 }, { x: 600, y: 0 }]);
+    expect(mission.mission.pickup).toEqual({ x: 600, y: 0 });
+    expect(mission.mission.pickupDistanceKm).toBe(0.6);
+  });
 });
