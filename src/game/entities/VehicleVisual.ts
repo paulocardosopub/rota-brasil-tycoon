@@ -27,7 +27,7 @@ export function createCarVisual(scene: Phaser.Scene, color: number, worn = false
     car.fillStyle(0x8a4928, 0.9).fillCircle(-2.1, 1.25, 0.28).fillCircle(1.75, -1.35, 0.2);
     car.lineStyle(0.12, 0xf3d19c, 0.65).lineBetween(-0.4, -1.48, 0.6, -1.48);
   }
-  container.add([shadow, car]);
+  container.add([shadow, car, ...createVehicleLighting(scene, 3.1, 1.05)]);
   if (taxi) {
     const taxiSign = scene.add.graphics();
     taxiSign.fillStyle(0xf6d34a, 1).fillRoundedRect(-1.45, -2.25, 2.9, 0.8, 0.25);
@@ -50,7 +50,7 @@ export function createBusVisual(scene: Phaser.Scene, color = 0x2b7a78) {
   bus.fillStyle(0x162a3a).fillRoundedRect(3.8, -1.4, 1.4, 2.8, 0.35);
   bus.fillStyle(0xfff1b8).fillCircle(5.35, -1.05, 0.3).fillCircle(5.35, 1.05, 0.3);
   bus.fillStyle(0x162a3a).fillRect(-2.7, -1.5, 0.22, 3).fillRect(-0.5, -1.5, 0.22, 3).fillRect(1.7, -1.5, 0.22, 3);
-  container.add([shadow, bus]).setDepth(25);
+  container.add([shadow, bus, ...createVehicleLighting(scene, 5.7, 1.25)]).setDepth(25);
   return container;
 }
 
@@ -67,7 +67,7 @@ export function createUtilityVehicleVisual(scene: Phaser.Scene, color = 0xe8ecef
   ], true);
   van.fillStyle(0xffc857).fillRect(-2.7, -0.12, 2.6, 0.24);
   van.fillStyle(0xfff1b8).fillCircle(3.72, -0.9, 0.28).fillCircle(3.72, 0.9, 0.28);
-  container.add([shadow, van]).setDepth(25);
+  container.add([shadow, van, ...createVehicleLighting(scene, 4, 1.05)]).setDepth(25);
   return container;
 }
 
@@ -86,7 +86,7 @@ export function createMotorcycleVisual(scene: Phaser.Scene, color = 0x32c48d, ca
   rider.fillStyle(0x27384d).fillRoundedRect(-0.55, -2.3, 1.2, 1.5, 0.38);
   rider.fillStyle(0xd69b72).fillCircle(0.12, -2.85, 0.58);
   rider.fillStyle(0x202c39).fillCircle(0.12, -3.05, 0.62);
-  container.add([shadow, bike, rider]);
+  container.add([shadow, bike, rider, ...createVehicleLighting(scene, 2.1, 0.45)]);
   if (cargo) {
     const box = scene.add.graphics();
     box.fillStyle(0xf2b134).fillRoundedRect(-2.15, -2.45, 1.45, 1.55, 0.2);
@@ -124,4 +124,23 @@ export function createPassengerVisual(scene: Phaser.Scene, color = 0x17b890) {
   container.add([person, marker]);
   container.setDepth(28);
   return container;
+}
+
+export function setVehicleLighting(container: Phaser.GameObjects.Container | undefined, intensity: number, braking = false, reduced = false) {
+  if (!container) return;
+  const light = container.getByName('night-lights') as Phaser.GameObjects.Graphics | null;
+  const brakes = container.getByName('brake-lights') as Phaser.GameObjects.Graphics | null;
+  const value = Math.max(0, Math.min(1, intensity)) * (reduced ? 0.55 : 1);
+  light?.setVisible(value > 0.02).setAlpha(value);
+  brakes?.setVisible(value > 0.02).setAlpha(Math.min(1, value * (braking ? 1.8 : 0.72)));
+}
+
+function createVehicleLighting(scene: Phaser.Scene, frontX: number, sideY: number) {
+  const light = scene.add.graphics().setName('night-lights').setVisible(false).setBlendMode(Phaser.BlendModes.ADD);
+  light.fillStyle(0xfff0b3, 0.16).fillTriangle(frontX, -sideY, frontX + 12, -4.2, frontX + 12, 0);
+  light.fillStyle(0xfff0b3, 0.16).fillTriangle(frontX, sideY, frontX + 12, 0, frontX + 12, 4.2);
+  light.fillStyle(0xfff5cf, 0.9).fillCircle(frontX, -sideY, 0.34).fillCircle(frontX, sideY, 0.34);
+  const brakes = scene.add.graphics().setName('brake-lights').setVisible(false).setBlendMode(Phaser.BlendModes.ADD);
+  brakes.fillStyle(0xff2f3e, 0.88).fillCircle(-frontX, -sideY, 0.4).fillCircle(-frontX, sideY, 0.4);
+  return [light, brakes];
 }

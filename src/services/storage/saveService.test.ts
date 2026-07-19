@@ -54,6 +54,9 @@ describe('save local versionado', () => {
     expect(migrated.favoriteServiceIds).toEqual([]);
     expect(migrated.cloudLineageId).toMatch(/^rbl_/);
     expect(migrated.autopilotSportMode).toBe(false);
+    expect(migrated.worldClock.gameMinute).toBeGreaterThanOrEqual(0);
+    expect(migrated.worldClock.gameMinute).toBeLessThan(1_440);
+    expect(migrated.settings.reducedWorldEffects).toBe(false);
   });
 
   it('preserva a preferência do Modo Sport ao salvar e migrar', () => {
@@ -61,6 +64,15 @@ describe('save local versionado', () => {
     save.autopilotSportMode = true;
     expect(migrateSave(save).autopilotSportMode).toBe(true);
     expect(migrateSave({ ...save, autopilotSportMode: undefined }).autopilotSportMode).toBe(false);
+  });
+
+  it('preserva relógio e preferência de iluminação no save v11', () => {
+    const save = createNewSave();
+    save.worldClock = { gameMinute: 1_020, targetGameMinute: 1_021, savedAtRealTimeMs: 123_000, lastServerTimeMs: 123_456, lastPeriod: 'pico-tarde' };
+    save.settings.reducedWorldEffects = true;
+    const migrated = migrateSave(JSON.parse(JSON.stringify(save)));
+    expect(migrated.worldClock).toEqual(save.worldClock);
+    expect(migrated.settings.reducedWorldEffects).toBe(true);
   });
 
   it('migra funcionário antigo com política regional idempotente', () => {

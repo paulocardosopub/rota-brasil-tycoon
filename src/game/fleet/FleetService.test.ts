@@ -90,6 +90,19 @@ describe('primeira frota', () => {
     expect(fleetEntries.every((entry) => entry.ownerId && entry.vehicleId && entry.driverId && entry.tripId)).toBe(true);
   });
 
+  it('pondera proporcionalmente trânsito e demanda atravessados pelo funcionário', () => {
+    const { save, employee } = fleetReady();
+    expect(startFleetShift(save, employee.id, 'shift-world-time').applied).toBe(true);
+    advanceFleetShift(save, 1_800, false, { trafficMultiplier: 0.7, passengerDemandBonus: 0 });
+    advanceFleetShift(save, 1_800, false, { trafficMultiplier: 1, passengerDemandBonus: 0.1 });
+    const shift = save.fleet.activeShift!;
+    expect(shift.operatingSeconds).toBe(3_600);
+    expect((shift.trafficExposure ?? 0) / shift.operatingSeconds!).toBeCloseTo(0.85, 5);
+    expect((shift.passengerDemandExposure ?? 0) / shift.operatingSeconds!).toBeCloseTo(0.05, 5);
+    expect(shift.startedWorldMinute).toBe(save.worldClock.gameMinute);
+    expect(shift.rides).toBeGreaterThan(0);
+  });
+
   it('repara automaticamente antes do turno sem gerar lucro durante o reparo', () => {
     const { save, employee, sedan } = fleetReady();
     sedan.condition = 30;

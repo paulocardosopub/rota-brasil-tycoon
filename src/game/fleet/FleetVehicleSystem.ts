@@ -3,7 +3,7 @@ import { GAME_CONFIG } from '../../config/gameConfig';
 import { GraphRouter } from '../../map/routing/GraphRouter';
 import { regionAt } from '../../map/regions/RegionCatalog';
 import type { FleetEmployee, FleetVehicle, MapRegion, PlayerSave, Point, TaxiPoint } from '../../types/game';
-import { createCarVisual } from '../entities/VehicleVisual';
+import { createCarVisual, setVehicleLighting } from '../entities/VehicleVisual';
 import { automaticThrottle, missionApproachTargetSpeed } from '../systems/Autopilot';
 import { RoadSurfaceIndex } from '../systems/RoadSurfaceIndex';
 import { advanceActiveRoute, pointAlongRoute, routeRemainingDistance } from '../systems/RouteProgress';
@@ -48,6 +48,8 @@ export class FleetVehicleSystem {
   private readonly parkedVisuals = new Map<string, Phaser.GameObjects.Container>();
   private readonly cityWaypoints: Point[];
   private waypoints: Point[];
+  private headlightIntensity = 0;
+  private reducedWorldEffects = false;
 
   constructor(
     private readonly scene: Phaser.Scene,
@@ -303,6 +305,7 @@ export class FleetVehicleSystem {
     vehicle.rotation = this.controller.rotation;
     vehicle.updatedAt = new Date().toISOString();
     this.placeVisual(this.visual, vehicle.position, vehicle.rotation);
+    setVehicleLighting(this.visual, this.headlightIntensity, false, this.reducedWorldEffects);
     this.placeDriverLabel(vehicle.position);
     const activeTarget = this.routePlan.current(this.waypoints);
     this.destinationRemaining = activeTarget ? Math.hypot(vehicle.position.x - activeTarget.x, vehicle.position.y - activeTarget.y) : 0;
@@ -432,6 +435,7 @@ export class FleetVehicleSystem {
       }
       visual.setVisible(true);
       this.placeVisual(visual, vehicle.position, vehicle.rotation);
+      setVehicleLighting(visual, this.headlightIntensity, false, this.reducedWorldEffects);
     }
     for (const [id, visual] of this.parkedVisuals) visual.setVisible(visibleIds.has(id));
   }
@@ -450,6 +454,11 @@ export class FleetVehicleSystem {
     const origin = this.project({ x: 0, y: 0 });
     const direction = this.project({ x: Math.cos(rotation), y: Math.sin(rotation) });
     visual.setPosition(projected.x, projected.y).setRotation(Math.atan2(direction.y - origin.y, direction.x - origin.x));
+  }
+
+  setWorldLighting(headlightIntensity: number, reducedEffects: boolean) {
+    this.headlightIntensity = Math.max(0, Math.min(1, headlightIntensity));
+    this.reducedWorldEffects = reducedEffects;
   }
 
   private placeDriverLabel(position: Point) {

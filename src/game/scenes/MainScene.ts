@@ -4,9 +4,9 @@ import { CityMapStream } from '../../map/loadCityMap';
 import { localMetersToLatLon } from '../../map/projection/localMeters';
 import { GraphRouter } from '../../map/routing/GraphRouter';
 import { visibleRoadWidth, visibleRoadWidthAt } from '../../map/routing/roadRules';
-import type { CollisionSeverity, CityMapData, FleetReport, HudSnapshot, MapServiceLocation, MapSignal, PlayerSave, Point, RoadData } from '../../types/game';
+import type { CollisionSeverity, CityMapData, FleetReport, HudSnapshot, MapServiceLocation, MapSignal, PlayerSave, Point, RoadData, WorldClockSnapshot } from '../../types/game';
 import { gameEvents, type GameCommand } from '../events';
-import { createFleetVehicleVisual, createPassengerVisual } from '../entities/VehicleVisual';
+import { createFleetVehicleVisual, createPassengerVisual, setVehicleLighting } from '../entities/VehicleVisual';
 import { MissionSystem } from '../missions/MissionSystem';
 import { RoadSurfaceIndex } from '../systems/RoadSurfaceIndex';
 import { advanceActiveRoute } from '../systems/RouteProgress';
@@ -41,6 +41,8 @@ import { OnlineWorldClient, type LocalMovementState } from '../../online/OnlineW
 import { RemoteVehicleSystem } from '../../online/RemoteVehicleSystem';
 import { BUS_LINES, busCapacity, busStopPoint } from '../bus/BusTransitConfig';
 import { advanceBusDwell, arriveAtBusStop, departBusStop, serviceBusStop, startBusOperation } from '../bus/BusOperationSystem';
+import { WorldClock } from '../time/WorldClock';
+import { WorldLightingSystem } from '../environment/WorldLightingSystem';
 
 type SignalVisual = { signal: MapSignal; graphics: Phaser.GameObjects.Graphics };
 const DETAILED_ROAD_MARKINGS = new Set(['motorway', 'motorway_link', 'trunk', 'trunk_link', 'primary', 'primary_link', 'secondary', 'secondary_link']);
@@ -117,6 +119,12 @@ export class MainScene extends Phaser.Scene {
   private onlineUnsubscribers: Array<() => void> = [];
   private debugOnlineLatencyMs = 0;
   private debugOnlineLossRate = 0;
+  private readonly worldClock: WorldClock;
+  private worldSnapshot: WorldClockSnapshot;
+  private lastWorldPeriod: WorldClockSnapshot['period'];
+  private developmentWorldClockOverride = false;
+  private worldLighting?: WorldLightingSystem;
+  private lastPlayerBraking = false;
 
   constructor(initialSave: PlayerSave) {
     super('MainScene');
@@ -124,6 +132,9 @@ export class MainScene extends Phaser.Scene {
     this.cameraMode = initialSave.settings.cameraMode;
     this.autopilotEnabled = initialSave.autopilotEnabled;
     this.autopilotSportMode = initialSave.autopilotSportMode;
+    this.worldClock = new WorldClock(initialSave.worldClock);
+    this.worldSnapshot = this.worldClock.snapshot();
+    this.lastWorldPeriod = this.worldSnapshot.period;
   }
 
   create() {
@@ -137,12 +148,28 @@ export class MainScene extends Phaser.Scene {
       camera.setZoom(Phaser.Math.Clamp(camera.zoom - dy * 0.0015, GAME_CONFIG.camera.minZoom, GAME_CONFIG.camera.maxZoom));
     });
     this.unsubscribe = gameEvents.on('command', (command) => this.handleCommand(command));
+    const allowWorldClockControl = import.meta.env.DEV || new URLSearchParams(window.location.search).has('performanceWorldClock');
+    if (allowWorldClockControl) {
+      (window as typeof window & { __RBT_SET_WORLD_TIME__?: (gameMinute: number) => void }).__RBT_SET_WORLD_TIME__ = (gameMinute) => {
+        this.developmentWorldClockOverride = true;
+        this.worldClock.setGameMinuteForDevelopment(gameMinute);
+        this.worldSnapshot = this.worldClock.snapshot();
+        this.applyWorldConditions();
+        if (this.initialized) {
+          this.handleWorldPeriodTransition();
+          this.persist();
+        }
+        this.emitHud();
+      };
+    }
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       this.unsubscribe?.();
       for (const unsubscribe of this.onlineUnsubscribers) unsubscribe();
       this.onlineUnsubscribers = [];
       this.remoteVehicles?.destroy();
+      this.worldLighting?.destroy();
       void this.online?.stop();
+      if (allowWorldClockControl) delete (window as typeof window & { __RBT_SET_WORLD_TIME__?: (gameMinute: number) => void }).__RBT_SET_WORLD_TIME__;
     });
     document.addEventListener('visibilitychange', this.handleVisibility);
     this.events.once(Phaser.Scenes.Events.DESTROY, () => {
@@ -193,8 +220,9 @@ export class MainScene extends Phaser.Scene {
       this.cameras.main.setRotation(this.cameraRotation);
       this.cameras.main.startFollow(this.vehicleVisual, true, GAME_CONFIG.camera.followLerp, GAME_CONFIG.camera.followLerp);
       this.cameras.main.setZoom(GAME_CONFIG.camera.zoomPresets[this.save.settings.cameraZoom]);
-      this.traffic = new TrafficSystem(this, this.map.graph, this.map.roads, this.map.signals, this.project, spawn);
+      this.traffic = new TrafficSystem(this, this.map.graph, this.map.roads, this.map.signals, this.project, spawn, this.map.manifest?.regions ?? []);
       this.traffic.setDensity(this.save.settings.trafficDensity);
+      this.applyWorldConditions();
       this.mission = new MissionSystem(this.router, this.vehicle.position, this.save.completedRides, this.save.activeMission, {
         condition: this.save.condition,
         comfortLevel: this.save.upgrades.comfort,
@@ -205,7 +233,8 @@ export class MainScene extends Phaser.Scene {
         preferredRegionId: this.save.preferredRegionId,
         regionalFamiliarity: this.save.regionalFamiliarity,
         services: this.map.services,
-        fuelLiters: this.save.fuel
+        fuelLiters: this.save.fuel,
+        peakDemandBonus: this.worldSnapshot.passengerDemandBonus
       });
       this.services = new ServiceSystem(this, this.map.services, this.project);
       this.taxiPoints = new TaxiPointSystem(this, this.map.taxiPoints, this.project);
@@ -218,9 +247,11 @@ export class MainScene extends Phaser.Scene {
         this.online.onPresence((profiles) => this.remoteVehicles?.updateProfiles(profiles)),
         this.online.onConnection((state) => {
           if (state === 'SOLO' || state === 'SOLO_TEMPORARY' || state === 'OFFLINE') this.remoteVehicles?.clear();
-        })
+        }),
+        this.online.onClockReference((serverTimeMs) => this.worldClock.synchronize(serverTimeMs))
       );
       this.airTraffic = new AirTrafficSystem(this);
+      this.worldLighting = new WorldLightingSystem(this, this.project);
       this.routeGraphics = this.add.graphics().setDepth(18);
       this.passengerVisual = createPassengerVisual(this).setPosition(0, 0);
       this.destinationVisual = this.createDestinationMarker().setVisible(false);
@@ -251,7 +282,16 @@ export class MainScene extends Phaser.Scene {
   }
 
   update(time: number, delta: number) {
-    if (!this.initialized || !this.vehicle || !this.mission || !this.traffic || !this.vehicleVisual || this.manuallyPaused) return;
+    if (!this.initialized || !this.vehicle || !this.mission || !this.traffic || !this.vehicleVisual) return;
+    this.worldSnapshot = this.developmentWorldClockOverride
+      ? this.worldClock.snapshot()
+      : this.worldClock.update(delta);
+    this.applyWorldConditions();
+    this.handleWorldPeriodTransition();
+    if (this.manuallyPaused) {
+      if (time - this.lastHudUpdate > 100) { this.emitHud(time); this.lastHudUpdate = time; }
+      return;
+    }
     // Never replay a long blocked frame. Catching up several seconds after map
     // parsing or route work made the vehicle visibly jump along the road.
     const frameSeconds = Math.min(0.1, Math.max(0, delta / 1000));
@@ -269,7 +309,7 @@ export class MainScene extends Phaser.Scene {
     this.taxiPoints?.update(this.simulationSeconds);
     this.airTraffic?.update(Math.min(0.1, delta / 1000), this.simulationSeconds);
     this.updateMapStreaming();
-    if (this.remoteVehicles?.count()) this.remoteVehicles.update(Date.now(), this.vehicle.position, this.save.settings);
+    if (this.remoteVehicles?.count()) this.remoteVehicles.update(Date.now(), this.vehicle.position, this.save.settings, this.worldSnapshot.headlights);
     if (this.online?.isOnline()) this.publishOnlineMovement();
 
     if ((this.mission.mission.phase !== 'completed' || this.services?.selected) && time - this.lastRouteUpdate > 500) {
@@ -281,6 +321,8 @@ export class MainScene extends Phaser.Scene {
       this.lastSignalUpdate = time;
     }
     this.updateVisualTransform(this.vehicleVisual, this.vehicle.position, this.vehicle.rotation);
+    setVehicleLighting(this.vehicleVisual, this.worldSnapshot.headlights, this.lastPlayerBraking, this.save.settings.reducedWorldEffects);
+    this.worldLighting?.update(Math.min(0.1, delta / 1_000), this.worldSnapshot, this.vehicle.position, this.map?.buildings ?? [], this.map?.signals ?? [], this.save.settings.reducedWorldEffects);
     if (this.cameraMode === 'follow') {
       const targetRotation = -this.projectedAngle(this.vehicle.rotation) + Math.PI / 2;
       this.cameraRotation = Phaser.Math.Angle.RotateTo(this.cameraRotation, targetRotation, 0.035);
@@ -315,13 +357,14 @@ export class MainScene extends Phaser.Scene {
     if (!this.vehicle || !this.mission || !this.traffic) return;
     this.simulationSeconds += dt;
     if (this.save.busOperation.doors === 'open') this.save.busOperation = advanceBusDwell(this.save.busOperation, dt);
-    const fleetResult = advanceFleetShift(this.save, dt);
+    const fleetResult = advanceFleetShift(this.save, dt, false, this.worldSnapshot);
     if (fleetResult.report && fleetResult.report.id !== this.fleetReportNotifiedId) {
       this.fleetReportNotifiedId = fleetResult.report.id;
       this.emitToast(`Turno encerrado: ${fleetResult.report.rides} corridas, lucro ${this.formatMoney(fleetResult.report.netProfit)}.`, 'success');
       this.persist();
     }
     const input = this.readInput();
+    this.lastPlayerBraking = input.handbrake || input.throttle < -0.05;
     this.audio.update(this.vehicle.speed, input.throttle, input.handbrake || input.throttle < 0, this.save.settings);
     const previousPosition = { ...this.vehicle.position };
     const travelled = this.vehicle.update(input, dt, this.save.fuel);
@@ -1169,6 +1212,14 @@ export class MainScene extends Phaser.Scene {
       this.save.settings.cameraShake = command.enabled;
       return;
     }
+    if (command.type === 'set-reduced-world-effects') {
+      this.save.settings.reducedWorldEffects = command.enabled;
+      this.applyWorldConditions();
+      this.emitToast(command.enabled ? 'Efeitos de iluminação reduzidos.' : 'Iluminação completa ativada.', 'info');
+      this.persist();
+      this.emitHud();
+      return;
+    }
     if (command.type === 'set-traffic-density') {
       this.save.settings.trafficDensity = command.density;
       this.traffic?.setDensity(command.density);
@@ -1372,7 +1423,7 @@ export class MainScene extends Phaser.Scene {
     if (command.type === 'service-bus-stop') {
       const line = BUS_LINES.find((item) => item.id === this.save.busOperation.lineId);
       if (!line) return;
-      try { this.save.busOperation = serviceBusStop(this.save.busOperation, line); this.emitToast(`${this.save.busOperation.boarded} embarques acumulados • lotação ${this.save.busOperation.occupancy}/${this.save.busOperation.capacity}.`, 'success'); this.persist(); }
+      try { this.save.busOperation = serviceBusStop(this.save.busOperation, line, 1 + this.worldSnapshot.passengerDemandBonus); this.emitToast(`${this.save.busOperation.boarded} embarques acumulados • lotação ${this.save.busOperation.occupancy}/${this.save.busOperation.capacity}.`, 'success'); this.persist(); }
       catch { this.emitToast('Pare completamente no ponto antes de abrir as portas.', 'warning'); }
       return;
     }
@@ -1750,7 +1801,8 @@ export class MainScene extends Phaser.Scene {
       preferredRegionId: this.save.preferredRegionId,
       regionalFamiliarity: this.save.regionalFamiliarity,
       services: this.map?.services ?? [],
-      fuelLiters: this.save.fuel
+      fuelLiters: this.save.fuel,
+      peakDemandBonus: this.worldSnapshot.passengerDemandBonus
     });
   }
 
@@ -1805,6 +1857,19 @@ export class MainScene extends Phaser.Scene {
   }
 
   private handleDevAction(action: string) {
+    const worldTimes: Record<string, number> = {
+      'world-0000': 0, 'world-0500': 300, 'world-0659': 419, 'world-0700': 420,
+      'world-0859': 539, 'world-0900': 540, 'world-1659': 1_019, 'world-1700': 1_020,
+      'world-1859': 1_139, 'world-1900': 1_140, 'world-2200': 1_320
+    };
+    if (action in worldTimes) {
+      this.worldClock.setGameMinuteForDevelopment(worldTimes[action]);
+      this.worldSnapshot = this.worldClock.snapshot();
+      this.applyWorldConditions();
+      this.persist();
+      this.emitHud();
+      return;
+    }
     if (action === 'online-latency') {
       this.debugOnlineLatencyMs = this.debugOnlineLatencyMs === 0 ? 120 : this.debugOnlineLatencyMs === 120 ? 300 : 0;
       this.online?.setDebugNetwork(this.debugOnlineLatencyMs, this.debugOnlineLossRate);
@@ -2088,6 +2153,7 @@ export class MainScene extends Phaser.Scene {
     const snapshot: HudSnapshot = {
       ready: this.initialized,
       settings: { ...this.save.settings },
+      worldClock: { ...this.worldSnapshot },
       money: this.save.money,
       speedKmh: Math.abs(this.vehicle.speed) * 3.6,
       fuel: this.save.fuel,
@@ -2221,6 +2287,7 @@ export class MainScene extends Phaser.Scene {
   private persist() {
     if (!this.vehicle) return;
     this.save.position = { ...this.vehicle.position };
+    this.save.worldClock = this.worldClock.saveState();
     this.save.localPosition = { ...this.vehicle.position };
     this.save.geographicPosition = localMetersToLatLon(
       this.vehicle.position.x,
@@ -2286,6 +2353,22 @@ export class MainScene extends Phaser.Scene {
     } : null, now);
     this.lastOnlineSpeed = this.vehicle.speed;
     this.lastOnlineUpdateAt = now;
+  }
+
+  private applyWorldConditions() {
+    this.traffic?.setWorldConditions(this.worldSnapshot.trafficMultiplier, this.worldSnapshot.directionalFlow);
+    this.traffic?.setWorldLighting(this.worldSnapshot.headlights, this.save.settings.reducedWorldEffects);
+    this.mission?.setPeakDemandBonus(this.worldSnapshot.passengerDemandBonus);
+    this.taxiPoints?.setDemandMultiplier(1 + this.worldSnapshot.passengerDemandBonus);
+    this.fleetVehicles?.setWorldLighting(this.worldSnapshot.headlights, this.save.settings.reducedWorldEffects);
+  }
+
+  private handleWorldPeriodTransition() {
+    if (this.worldSnapshot.period === this.lastWorldPeriod) return;
+    this.lastWorldPeriod = this.worldSnapshot.period;
+    if (this.worldSnapshot.period === 'pico-manha' || this.worldSnapshot.period === 'pico-tarde') {
+      this.emitToast('Horário de pico — trânsito intenso', 'warning');
+    }
   }
 }
 

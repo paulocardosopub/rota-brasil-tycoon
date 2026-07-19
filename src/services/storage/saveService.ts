@@ -4,6 +4,7 @@ import { createFleetVehicle } from '../../game/fleet/FleetService';
 import { createTaxiMeter } from '../../game/taxi/TaxiMeter';
 import { localMetersToLatLon } from '../../map/projection/localMeters';
 import { DEFAULT_EMPLOYEE_REGIONAL_PREFERENCES } from '../../game/regions/RegionalDefaults';
+import { periodAt, sharedGameMinuteAt } from '../../game/time/WorldClock';
 
 const MAP_ORIGIN = { lat: -15.7942, lon: -47.8822 };
 const MAP_CHUNK_SIZE = 800;
@@ -23,7 +24,8 @@ const DEFAULT_SETTINGS: PlayerSettings = {
   showPlayersOnMap: true,
   remoteSounds: true,
   onlineVisualLimit: GAME_CONFIG.online.maximumVisibleRemotes,
-  publicPresence: true
+  publicPresence: true,
+  reducedWorldEffects: false
 };
 
 export const DEFAULT_UPGRADES: UpgradeLevels = { engine: 0, brakes: 0, tires: 0, suspension: 0, economy: 0, comfort: 0 };
@@ -34,6 +36,7 @@ export const DEFAULT_GOALS: DriverGoals = {
 
 export function createNewSave(position = { x: 0, y: 0 }): PlayerSave {
   const now = new Date().toISOString();
+  const gameMinute = sharedGameMinuteAt(Date.now());
   const publicPlayerId = createPublicId('player');
   const ownerId = 'local-owner';
   const fleetId = 'fleet-local-owner';
@@ -85,6 +88,7 @@ export function createNewSave(position = { x: 0, y: 0 }): PlayerSave {
       garages: [centralGarage(now)]
     },
     clockGuard: { lastSeenAt: now, lastTrustedAt: now, rollbackDetected: false, unvalidated: true },
+    worldClock: { gameMinute, targetGameMinute: gameMinute, savedAtRealTimeMs: Date.now(), lastServerTimeMs: null, lastPeriod: periodAt(gameMinute) },
     mapVersion: GAME_CONFIG.mapVersion,
     currentChunk: chunkFor(position),
     currentRegion: 'Setores Centrais',
@@ -166,6 +170,7 @@ export function migrateSave(input: unknown): PlayerSave {
     activeVehicleId: typeof raw.activeVehicleId === 'string' ? raw.activeVehicleId : fresh.activeVehicleId,
     fleet: fresh.fleet,
     clockGuard: migrateClockGuard(raw.clockGuard, fresh.clockGuard),
+    worldClock: migrateWorldClock(raw.worldClock, fresh.worldClock),
     mapVersion: GAME_CONFIG.mapVersion,
     currentChunk: typeof raw.currentChunk === 'string' ? raw.currentChunk : chunkFor(raw.position ?? fresh.position),
     currentRegion: typeof raw.currentRegion === 'string' ? raw.currentRegion : 'Setores Centrais',
@@ -282,7 +287,8 @@ function migrateSettings(input: Partial<PlayerSettings> | undefined): PlayerSett
     showPlayersOnMap: input?.showPlayersOnMap !== false,
     remoteSounds: input?.remoteSounds !== false,
     onlineVisualLimit: clamp(Math.floor(finite(input?.onlineVisualLimit, DEFAULT_SETTINGS.onlineVisualLimit)), 0, 50),
-    publicPresence: input?.publicPresence !== false
+    publicPresence: input?.publicPresence !== false,
+    reducedWorldEffects: input?.reducedWorldEffects === true
   };
 }
 
@@ -330,6 +336,18 @@ function migrateClockGuard(input: Partial<ClockGuard> | undefined, fallback: Clo
     lastTrustedAt: validDate(input?.lastTrustedAt) ?? fallback.lastTrustedAt,
     rollbackDetected: input?.rollbackDetected === true,
     unvalidated: input?.unvalidated !== false
+  };
+}
+
+function migrateWorldClock(input: Partial<PlayerSave['worldClock']> | undefined, fallback: PlayerSave['worldClock']): PlayerSave['worldClock'] {
+  const gameMinute = Number.isFinite(input?.gameMinute) ? ((input!.gameMinute! % 1_440) + 1_440) % 1_440 : fallback.gameMinute;
+  const targetGameMinute = Number.isFinite(input?.targetGameMinute) ? ((input!.targetGameMinute! % 1_440) + 1_440) % 1_440 : gameMinute;
+  return {
+    gameMinute,
+    targetGameMinute,
+    savedAtRealTimeMs: Number.isFinite(input?.savedAtRealTimeMs) ? input!.savedAtRealTimeMs! : Date.now(),
+    lastServerTimeMs: Number.isFinite(input?.lastServerTimeMs) ? input!.lastServerTimeMs! : null,
+    lastPeriod: periodAt(gameMinute)
   };
 }
 

@@ -329,6 +329,7 @@ export interface MissionSnapshot {
   destinationRegionId?: string;
   regionalCategory?: 'within-region' | 'neighbor-region' | 'between-sectors' | 'long' | 'return' | 'comfort' | 'urgent' | 'taxi';
   demandLevel?: RegionDemandLevel;
+  peakDemandBonusPercent?: number;
   familiarityLevel?: RegionFamiliarityLevel;
   recommendedFuelLiters?: number;
   routeDistanceMeters?: number;
@@ -528,6 +529,10 @@ export interface FleetShift {
   maintenanceCost: number;
   fines: number;
   netProfit: number;
+  startedWorldMinute?: number;
+  operatingSeconds?: number;
+  trafficExposure?: number;
+  passengerDemandExposure?: number;
 }
 
 export interface FleetShiftRepair {
@@ -603,6 +608,32 @@ export interface ClockGuard {
   unvalidated: boolean;
 }
 
+export type WorldPeriodId = 'madrugada' | 'amanhecer' | 'pico-manha' | 'dia' | 'transicao-tarde' | 'pico-tarde' | 'noite' | 'noite-avancada';
+export type DirectionalTrafficFlow = 'balanced' | 'toward-central' | 'toward-residential';
+
+export interface WorldClockSave {
+  gameMinute: number;
+  targetGameMinute: number;
+  savedAtRealTimeMs: number;
+  lastServerTimeMs: number | null;
+  lastPeriod: WorldPeriodId;
+}
+
+export interface WorldClockSnapshot {
+  gameMinute: number;
+  formattedTime: string;
+  period: WorldPeriodId;
+  periodLabel: string;
+  trafficMultiplier: number;
+  passengerDemandBonus: number;
+  directionalFlow: DirectionalTrafficFlow;
+  daylight: number;
+  darkness: number;
+  warmth: number;
+  headlights: number;
+  synchronized: boolean;
+}
+
 export interface RideHistoryEntry {
   id: string;
   passengerName: string;
@@ -670,6 +701,7 @@ export interface PlayerSave {
   businesses: PlayerBusiness[];
   busOperation: BusOperationSnapshot;
   clockGuard: ClockGuard;
+  worldClock: WorldClockSave;
   mapVersion: string;
   currentChunk: string;
   currentRegion: string;
@@ -717,6 +749,7 @@ export interface PlayerSettings {
   remoteSounds: boolean;
   onlineVisualLimit: number;
   publicPresence: boolean;
+  reducedWorldEffects: boolean;
 }
 
 export interface OnlineHudSnapshot {
@@ -748,6 +781,7 @@ export type TrafficVehicleState = 'cruising' | 'following' | 'braking' | 'stoppe
 export interface HudSnapshot {
   ready: boolean;
   settings: PlayerSettings;
+  worldClock: WorldClockSnapshot;
   money: number;
   speedKmh: number;
   fuel: number;

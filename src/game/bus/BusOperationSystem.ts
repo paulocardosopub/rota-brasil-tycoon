@@ -16,11 +16,11 @@ export function arriveAtBusStop(operation: BusOperationSnapshot) {
   return { ...operation, status: 'at-stop' as const, doors: 'closed' as const };
 }
 
-export function serviceBusStop(operation: BusOperationSnapshot, line: BusLine) {
+export function serviceBusStop(operation: BusOperationSnapshot, line: BusLine, demandMultiplier = 1) {
   if (operation.status !== 'at-stop' || operation.doors !== 'closed') throw new Error('O ônibus precisa estar parado e com as portas fechadas antes de abri-las.');
   const seed = line.publicCode.split('').reduce((sum, value) => sum + value.charCodeAt(0), 0) + operation.currentStopIndex * 17;
   const alighted = Math.min(operation.occupancy, operation.currentStopIndex === line.stops.length - 1 ? operation.occupancy : Math.floor(operation.occupancy * (0.16 + (seed % 12) / 100)));
-  const waiting = 5 + seed % 19;
+  const waiting = Math.max(1, Math.round((5 + seed % 19) * Math.max(0.8, Math.min(1.1, demandMultiplier))));
   const freeSeats = operation.capacity - (operation.occupancy - alighted);
   const boarded = Math.min(waiting, freeSeats);
   const refused = waiting - boarded;
