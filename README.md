@@ -1,14 +1,24 @@
-# Rota Brasil Tycoon — PLAYABLE 0.8.7
+# Rota Brasil Tycoon — PLAYABLE 0.8.8
+
+## Ritmo acelerado e controle da frota
+
+- `GAMEPLAY_SPEED_MULTIPLIER = 2` centraliza o ritmo físico e operacional, sem espalhar valores literais pela simulação;
+- um dia completo dura 48 minutos reais, com relógio compartilhado de 24 horas e o mesmo ritmo no modo online;
+- piloto, trânsito, missões, funcionários, reparos, treinamentos e esperas avançam em 2× com passos físicos pequenos;
+- o piloto filtra duplicatas, ruído geométrico e emendas de chunks, classifica curvas e usa perfis por categoria de veículo;
+- o carregamento prioriza o bloco atual, antecipa direção/rota, usa worker para JSON grande e cancela pré-buscas obsoletas;
+- a preparação remota mostra combustível, reparo, taxa de 10% (mínimo R$ 5), tempo e total antes de cobrar uma única vez;
+- o jogador pode visualizar qualquer veículo, assumir temporariamente uma operação e devolvê-la na nova posição sem duplicar renda;
+- o mapa geral de Brasília usa uma imagem WebP estática derivada dos dados OSM e atualiza apenas marcadores da frota, garagens e jogadores online;
+- save v12 preserva o veículo visualizado, controle temporário, operação pausada, preparação e custos já cobrados.
 
 ## Ciclo de 24 horas, trânsito e demanda
-
-- um dia completo dura 96 minutos reais, com relógio compartilhado de 24 horas e continuidade segura no modo solo;
 - amanhecer, dia, pôr do sol e noite alteram gradualmente a iluminação, com faróis, lanternas, postes e luzes próximas;
 - a densidade do trânsito acompanha oito períodos do dia sem reduzir artificialmente a velocidade dos NPCs;
 - os picos de 07:00–09:00 e 17:00–19:00 direcionam os deslocamentos e aumentam a demanda de passageiros em até 10%;
 - turnos de funcionários e operações offline consideram proporcionalmente o trânsito e a demanda atravessados;
 - o modo online sincroniza apenas a referência do relógio, preservando baixo uso de mensagens e funcionamento integral sem backend;
-- save v11 migra jogos anteriores e preserva horário, turnos, economia, frota e a opção de efeitos visuais reduzidos.
+- saves anteriores migram automaticamente e preservam horário, turnos, economia, frota e a opção de efeitos visuais reduzidos.
 
 ## Malha viária, piloto e carregamento progressivo
 
@@ -140,6 +150,9 @@ O workflow `.github/workflows/web.yml` testa, compila e publica `main`. Em **Set
 
 ## Auditorias
 
+- [auditoria final da PLAYABLE 0.8.8](./docs/playable-0.8.8-audit.md)
+- [desempenho nos cinco períodos da 0.8.8](./docs/performance-0.8.8.json)
+- [simulação de trânsito e ciclo diário 0.8.8](./docs/traffic-simulation-0.8.8.md)
 - [auditoria final da PLAYABLE 0.8.7](./docs/playable-0.8.7-audit.md)
 - [desempenho nos cinco períodos da 0.8.7](./docs/performance-0.8.7.json)
 - [simulação de trânsito e ciclo diário 0.8.7](./docs/traffic-simulation-0.8.7.md)

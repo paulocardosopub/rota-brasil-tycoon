@@ -2,7 +2,9 @@ import { chromium, type Page } from '@playwright/test';
 import { readFile, readdir, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
-const target = process.argv[2] ?? 'http://127.0.0.1:4173';
+const targetUrl = new URL(process.argv[2] ?? 'http://127.0.0.1:4173');
+targetUrl.searchParams.set('performanceWorldClock', '1');
+const target = targetUrl.toString();
 const browser = await chromium.launch({ headless: true });
 
 type ResourceTotals = {
@@ -31,15 +33,15 @@ try {
 
   const artifacts = await artifactStats();
   const report = {
-    version: '0.8.7',
+    version: '0.8.8',
     measuredAt: new Date().toISOString(),
     target,
-    baseline086: { source: 'docs/performance-0.8.6.json' },
+    baseline087: { source: 'docs/performance-0.8.7.json' },
     targets: { desktopMinimumMedianFps: 30, mobileMinimumMedianFps: 28 },
     artifacts,
     results
   };
-  await writeFile(path.resolve('docs/performance-0.8.7.json'), `${JSON.stringify(report, null, 2)}\n`);
+  await writeFile(path.resolve('docs/performance-0.8.8.json'), `${JSON.stringify(report, null, 2)}\n`);
   const failed = results.some((result) => result.periods.some((period) => period.medianFps < (result.preset.startsWith('mobile') ? 28 : 30))
     || result.terrestrialEntities > 350
     || (result.preset.startsWith('desktop') && result.gameReadyMs > 3_000)
@@ -128,6 +130,7 @@ async function artifactStats() {
   const sizes = await Promise.all(assets.map(async (name) => ({ name, bytes: (await stat(path.join(assetDirectory, name))).size })));
   const initial = sizes.filter((asset) => asset.name.startsWith('index-'));
   const graphFile = path.resolve('public/data/cities/brasilia/routing-core-0.8.6.json.gz');
+  const overviewFile = path.resolve('public/data/cities/brasilia/overview-map.webp');
   const manifest = JSON.parse(await readFile(path.resolve('public/data/cities/brasilia/manifest.json'), 'utf8')) as { chunks: Array<{ file: string }> };
   const chunkBytes = (await Promise.all(manifest.chunks.map(async (chunk) =>
     (await stat(path.resolve('public/data/cities/brasilia', chunk.file))).size
@@ -136,6 +139,7 @@ async function artifactStats() {
     initialBundleBytes: initial.reduce((sum, asset) => sum + asset.bytes, 0),
     applicationBundleBytes: sizes.reduce((sum, asset) => sum + asset.bytes, 0),
     routingCoreBytes: (await stat(graphFile)).size,
+    overviewMapBytes: (await stat(overviewFile)).size,
     publishedChunkBytes: chunkBytes,
     publishedMapBytes: chunkBytes + (await stat(graphFile)).size
   };

@@ -519,6 +519,7 @@ export interface FleetShift {
   scheduledEndAt: string;
   tripId: string | null;
   routeProgress: number;
+  preparation: FleetShiftPreparation | null;
   repair: FleetShiftRepair | null;
   policy: ShiftPolicy;
   rides: number;
@@ -533,6 +534,31 @@ export interface FleetShift {
   operatingSeconds?: number;
   trafficExposure?: number;
   passengerDemandExposure?: number;
+}
+
+export interface FleetShiftPreparation {
+  requestId: string;
+  requiredFuelLiters: number;
+  fuelCost: number;
+  repairCost: number;
+  convenienceFee: number;
+  total: number;
+  durationSeconds: number;
+  elapsedSeconds: number;
+  chargedAt: string;
+  fuelAppliedAt: string | null;
+  completedAt: string | null;
+}
+
+export interface FleetPreparationQuote {
+  employeeId: string;
+  vehicleId: string;
+  requiredFuelLiters: number;
+  fuelCost: number;
+  repairCost: number;
+  convenienceFee: number;
+  preparationSeconds: number;
+  total: number;
 }
 
 export interface FleetShiftRepair {
@@ -697,6 +723,8 @@ export interface PlayerSave {
   taxiMeter: TaxiMeterSnapshot;
   officialTaxiRides: number;
   activeVehicleId: string;
+  viewedVehicleId: string | null;
+  temporaryVehicleControl: TemporaryVehicleControl | null;
   fleet: PlayerFleet;
   businesses: PlayerBusiness[];
   busOperation: BusOperationSnapshot;
@@ -778,9 +806,30 @@ export interface OnlineHudSnapshot {
 export type CollisionSeverity = 'contact' | 'light' | 'moderate' | 'severe';
 export type TrafficVehicleState = 'cruising' | 'following' | 'braking' | 'stopped-signal' | 'stopped-traffic' | 'stunned' | 'recovering';
 
+export interface OverviewMapBounds { minX: number; minY: number; maxX: number; maxY: number }
+export interface OverviewMapMarker {
+  id: string;
+  kind: 'player' | 'employee' | 'fleet' | 'online' | 'garage';
+  position: Point;
+  label: string;
+  detail: string;
+  meta?: string[];
+  vehicleId?: string;
+  employeeId?: string;
+  garageId?: string;
+  status: string;
+}
+export interface OverviewMapSnapshot {
+  cityId: string;
+  imageUrl: string;
+  bounds: OverviewMapBounds;
+  markers: OverviewMapMarker[];
+}
+
 export interface HudSnapshot {
   ready: boolean;
   settings: PlayerSettings;
+  gameplaySpeedMultiplier: number;
   worldClock: WorldClockSnapshot;
   money: number;
   speedKmh: number;
@@ -844,6 +893,9 @@ export interface HudSnapshot {
   taxiMeter: TaxiMeterSnapshot;
   officialTaxiRides: number;
   activeVehicleId: string;
+  viewedVehicleId: string | null;
+  temporaryVehicleControl: TemporaryVehicleControl | null;
+  pendingFleetPreparation: FleetPreparationQuote | null;
   fleet: PlayerFleet;
   businesses: PlayerBusiness[];
   busOperation: BusOperationSnapshot;
@@ -866,5 +918,19 @@ export interface HudSnapshot {
   preferredRegionId: RegionPreference;
   currentRegionId: string;
   regionalFamiliarity: Record<string, RegionalFamiliarity>;
+  overviewMap: OverviewMapSnapshot;
   online: OnlineHudSnapshot;
+}
+
+export interface TemporaryVehicleControl {
+  vehicleId: string;
+  previousActiveVehicleId: string;
+  employeeId: string | null;
+  shiftId: string | null;
+  previousEmployeeState: EmployeeState | null;
+  previousVehicleState: FleetVehicleState;
+  previousControllerType: FleetControllerType;
+  previousControllerId: string | null;
+  previousSimulationLevel: FleetSimulationLevel;
+  startedAt: string;
 }

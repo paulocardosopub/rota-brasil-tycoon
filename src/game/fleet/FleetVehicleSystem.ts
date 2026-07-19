@@ -7,7 +7,7 @@ import { createCarVisual, setVehicleLighting } from '../entities/VehicleVisual';
 import { automaticThrottle, missionApproachTargetSpeed } from '../systems/Autopilot';
 import { RoadSurfaceIndex } from '../systems/RoadSurfaceIndex';
 import { advanceActiveRoute, pointAlongRoute, routeRemainingDistance } from '../systems/RouteProgress';
-import { guidanceForRoute } from '../systems/RouteSteeringAssist';
+import { autopilotProfileForVehicle, guidanceForRoute } from '../systems/RouteSteeringAssist';
 import { VehicleController } from '../systems/VehicleController';
 import { RecklessRecovery } from '../traffic/RecklessRecovery';
 import { TrafficSystem } from '../traffic/TrafficSystem';
@@ -74,8 +74,10 @@ export class FleetVehicleSystem {
     const shift = save.fleet.activeShift;
     const employee = shift ? save.fleet.employees.find((item) => item.id === shift.employeeId) : undefined;
     const vehicle = shift ? save.fleet.vehicles.find((item) => item.id === shift.vehicleId) : undefined;
-    const repairing = Boolean(shift?.repair && !shift.repair.completedAt);
-    this.syncParkedVehicles(save, repairing ? null : shift?.vehicleId ?? null);
+    const preparing = Boolean(
+      shift && (shift.preparation && !shift.preparation.completedAt || shift.repair && !shift.repair.completedAt)
+    );
+    this.syncParkedVehicles(save, preparing ? null : shift?.vehicleId ?? null);
 
     if (!shift || !employee || !vehicle) {
       if (this.activeShiftId) this.routePlan.reset();
@@ -89,7 +91,7 @@ export class FleetVehicleSystem {
       return;
     }
 
-    if (repairing) {
+    if (preparing) {
       this.identification = employeeIdentification(employee.name);
       this.destinationRemaining = 0;
       this.routeRemaining = 0;
@@ -156,8 +158,22 @@ export class FleetVehicleSystem {
     return this.visual?.visible ? this.visual : null;
   }
 
+  viewedObject(vehicleId: string) {
+    if (vehicleId === this.activeVehicleId && this.visual?.visible) return this.visual;
+    const parked = this.parkedVisuals.get(vehicleId);
+    return parked?.visible ? parked : null;
+  }
+
   setFollowEnabled(enabled: boolean) {
     this.followEnabled = enabled;
+  }
+
+  releaseForControlChange() {
+    this.followEnabled = false;
+    this.activeShiftId = null;
+    this.route = [];
+    this.routePlan.reset();
+    this.releaseActiveVehicle();
   }
 
   activePosition() {
@@ -233,7 +249,8 @@ export class FleetVehicleSystem {
       this.controller.speed,
       route,
       GAME_CONFIG.vehicle.autopilotCruiseSpeedMps * 0.88,
-      GAME_CONFIG.vehicle.brakeMps2
+      GAME_CONFIG.vehicle.brakeMps2,
+      autopilotProfileForVehicle(vehicle.model)
     );
     const recklessRecovery = this.trafficRecovery.active;
     const trafficAdvice = this.traffic.playerDrivingAdvice(

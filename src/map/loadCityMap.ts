@@ -2,6 +2,7 @@ import type {
   CityMapChunk, CityMapData, CityMapManifest, MapMetadata, MapServiceLocation,
   NavigationGraph, Point, TaxiPoint
 } from '../types/game';
+import { GAMEPLAY_SPEED_MULTIPLIER } from '../config/gameConfig';
 import { buildLaneGraph, type PackedNavigationGraph } from './pipeline/RoadPipeline';
 
 const ROOT = 'data/cities/brasilia';
@@ -39,7 +40,49 @@ async function loadResponse(filename: string, signal?: AbortSignal, persistent =
 }
 
 async function loadJson<T>(filename: string, signal?: AbortSignal, persistent = true, revision?: string, refresh = false): Promise<T> {
-  return loadResponse(filename, signal, persistent, revision, refresh).then((response) => response.json() as Promise<T>);
+  const response = await loadResponse(filename, signal, persistent, revision, refresh);
+  if (!filename.startsWith('chunks/')) return response.json() as Promise<T>;
+  const text = await response.text();
+  return parseChunkJson<T>(text);
+}
+
+let chunkParserWorker: Worker | null | undefined;
+let chunkParserSequence = 0;
+const chunkParserRequests = new Map<number, { resolve: (value: unknown) => void; reject: (reason: unknown) => void }>();
+
+function parseChunkJson<T>(source: string): Promise<T> {
+  const worker = chunkWorker();
+  if (!worker || source.length < 48_000) return Promise.resolve(JSON.parse(source) as T);
+  const id = ++chunkParserSequence;
+  return new Promise<T>((resolve, reject) => {
+    chunkParserRequests.set(id, { resolve: (value) => resolve(value as T), reject });
+    worker.postMessage({ id, source });
+  });
+}
+
+function chunkWorker() {
+  if (chunkParserWorker !== undefined) return chunkParserWorker;
+  if (typeof Worker === 'undefined' || typeof Blob === 'undefined' || typeof URL === 'undefined') return (chunkParserWorker = null);
+  try {
+    const source = `self.onmessage=function(event){var id=event.data.id;try{self.postMessage({id:id,value:JSON.parse(event.data.source)})}catch(error){self.postMessage({id:id,error:String(error)})}}`;
+    const url = URL.createObjectURL(new Blob([source], { type: 'text/javascript' }));
+    const worker = new Worker(url);
+    URL.revokeObjectURL(url);
+    worker.onmessage = (event: MessageEvent<{ id: number; value?: unknown; error?: string }>) => {
+      const request = chunkParserRequests.get(event.data.id);
+      if (!request) return;
+      chunkParserRequests.delete(event.data.id);
+      if (event.data.error) request.reject(new Error(event.data.error)); else request.resolve(event.data.value);
+    };
+    worker.onerror = (error) => {
+      for (const request of chunkParserRequests.values()) request.reject(error);
+      chunkParserRequests.clear();
+      chunkParserWorker = null;
+    };
+    return (chunkParserWorker = worker);
+  } catch {
+    return (chunkParserWorker = null);
+  }
 }
 
 async function loadGzipJson<T>(filename: string, signal?: AbortSignal, revision?: string): Promise<T> {
@@ -76,6 +119,7 @@ export class CityMapStream {
   private readonly entries = new Map<string, CityMapManifest['chunks'][number]>();
   private readonly protectedIds = new Set<string>();
   private readonly prefetchQueue: string[] = [];
+  private readonly prefetchControllers = new Map<string, AbortController>();
   private currentIds: string[] = [];
   private centerId: string | null = null;
   private prefetchActive = 0;
@@ -111,6 +155,7 @@ export class CityMapStream {
   async windowAt(position: Point, options: StreamWindowOptions = {}): Promise<CityMapData> {
     const initialWindow = this.centerId === null;
     const wanted = this.requiredEntries(position, options).map((entry) => entry.id);
+    this.cancelObsoletePrefetch(new Set([...wanted, ...this.protectedIds]));
     const centerId = this.entryAt(position).id;
     const settled = await Promise.allSettled(wanted.map((id) => this.loadChunk(id, options.signal)));
     const chunks = settled.flatMap((result) => result.status === 'fulfilled' ? [result.value] : []);
@@ -231,7 +276,7 @@ export class CityMapStream {
   private requiredEntries(position: Point, options: StreamWindowOptions) {
     const radius = options.radiusMeters ?? 520;
     const speed = Math.max(0, options.speedMps ?? 0);
-    const lookAheadDistance = Math.min(420, speed * 8);
+    const lookAheadDistance = Math.min(840, speed * 8 * GAMEPLAY_SPEED_MULTIPLIER);
     const lookAhead = options.heading === undefined
       ? position
       : {
@@ -275,15 +320,17 @@ export class CityMapStream {
   }
 
   private scheduleExplorationPrefetch(position: Point, heading?: number, speed = 0) {
-    if (prefetchShouldPause()) return;
+    const constrainedConnection = prefetchShouldPause();
     const center = this.entryAt(position);
     const direction = heading === undefined ? { x: 0, y: 0 } : { x: Math.cos(heading), y: Math.sin(heading) };
     const candidates = center.adjacent
       .map((id) => this.entries.get(id))
       .filter((entry): entry is NonNullable<typeof entry> => Boolean(entry))
       .sort((a, b) => directionalPriority(center, b, direction, speed) - directionalPriority(center, a, direction, speed));
-    for (const entry of candidates) this.enqueuePrefetch(entry.id, false);
-    scheduleIdle(() => this.pumpPrefetch());
+    const prioritized = constrainedConnection ? candidates.slice(0, 1) : candidates;
+    this.cancelObsoletePrefetch(new Set([center.id, ...this.currentIds, ...this.protectedIds, ...prioritized.map((entry) => entry.id)]));
+    for (const entry of prioritized) this.enqueuePrefetch(entry.id, constrainedConnection);
+    if (constrainedConnection) this.pumpPrefetch(); else scheduleIdle(() => this.pumpPrefetch());
   }
 
   private enqueuePrefetch(id: string, urgent: boolean) {
@@ -292,18 +339,29 @@ export class CityMapStream {
   }
 
   private pumpPrefetch() {
-    if (prefetchShouldPause()) return;
-    const maximum = isSlowConnection() ? 1 : 2;
+    const maximum = prefetchShouldPause() || isSlowConnection() ? 1 : 3;
     while (this.prefetchActive < maximum && this.prefetchQueue.length) {
       const id = this.prefetchQueue.shift()!;
+      const controller = new AbortController();
+      this.prefetchControllers.set(id, controller);
       this.prefetchActive += 1;
-      void this.loadChunk(id)
+      void this.loadChunk(id, controller.signal)
         .catch(() => undefined)
         .finally(() => {
+          this.prefetchControllers.delete(id);
           this.prefetchActive -= 1;
           this.trimMemory(new Set([...this.currentIds, ...this.protectedIds]));
           scheduleIdle(() => this.pumpPrefetch());
         });
+    }
+  }
+
+  private cancelObsoletePrefetch(keep: Set<string>) {
+    for (let index = this.prefetchQueue.length - 1; index >= 0; index -= 1) {
+      if (!keep.has(this.prefetchQueue[index])) this.prefetchQueue.splice(index, 1);
+    }
+    for (const [id, controller] of this.prefetchControllers) {
+      if (!keep.has(id)) controller.abort('prefetch-obsoleto');
     }
   }
 

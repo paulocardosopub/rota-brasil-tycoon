@@ -19,7 +19,7 @@ const results = densities.map(simulate);
 const failures = results.filter((result) => result.deadlocks || result.collisions || result.headOnConflicts || result.routeLoops);
 const periods = [120, 360, 450, 720, 990, 1_050, 1_260, 1_380].map((minute) => worldClockSnapshotAt(minute));
 
-const report = `# Simulação de trânsito — 0.8.7
+const report = `# Simulação de trânsito — 0.8.8
 
 Simulação determinística sobre o mesmo grafo dirigido por faixa usado por jogador, piloto, NPCs e funcionários.
 
@@ -50,11 +50,11 @@ A população muda gradualmente e somente fora da câmera. Nos picos, manhã dir
 
 ${failures.length ? `Falha em ${failures.length} densidade(s).` : 'Aprovado: nenhum deadlock permanente, colisão de reserva, conflito frente a frente ou loop de rota.'}
 `;
-await writeFile(path.resolve('docs/traffic-simulation-0.8.7.md'), report);
+await writeFile(path.resolve('docs/traffic-simulation-0.8.8.md'), report);
 if (failures.length) {
   console.error(report);
   process.exitCode = 1;
-} else console.log(`Trânsito 0.8.7 aprovado em ${densities.join('/')}: sem deadlock, colisão, contramão ou loop.`);
+} else console.log(`Trânsito 0.8.8 aprovado em ${densities.join('/')}: sem deadlock, colisão, contramão ou loop.`);
 
 function unpackNavigationGraph(graph: NavigationGraph | PackedNavigationGraph): NavigationGraph {
   if (graph.kind !== 'packed-lane') return graph;
