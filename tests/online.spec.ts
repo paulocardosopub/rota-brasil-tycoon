@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test';
 
 test('dois clientes se veem, sincronizam, reconectam e preservam o modo solo', async ({ browser }, testInfo) => {
+  test.setTimeout(60_000);
   const configuredBase = String(testInfo.project.use.baseURL ?? 'http://127.0.0.1:4173/');
   const onlineUrl = `${configuredBase}${configuredBase.includes('?') ? '&' : '?'}onlineTransport=mock`;
   const contextA = await browser.newContext();

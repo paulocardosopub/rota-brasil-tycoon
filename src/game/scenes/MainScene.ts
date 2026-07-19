@@ -55,7 +55,6 @@ export class MainScene extends Phaser.Scene {
   private mapRenderCenter: Point | null = null;
   private mapWindowRequestCenter: Point | null = null;
   private mapStreamingSafetyActive = false;
-  private mapStreamingSafetyNotified = false;
   private router?: GraphRouter;
   private vehicle?: VehicleController;
   private vehicleVisual?: Phaser.GameObjects.Container;
@@ -837,14 +836,9 @@ export class MainScene extends Phaser.Scene {
         ? Math.hypot(focusPosition.x - this.mapWindowRequestCenter.x, focusPosition.y - this.mapWindowRequestCenter.y)
         : 0;
       this.mapStreamingSafetyActive = requestDistance > 220;
-      if (this.mapStreamingSafetyActive && !this.mapStreamingSafetyNotified) {
-        this.mapStreamingSafetyNotified = true;
-        this.emitToast('Preparando o próximo trecho do mapa. Velocidade reduzida por segurança.', 'info');
-      }
       return;
     }
     this.mapStreamingSafetyActive = false;
-    this.mapStreamingSafetyNotified = false;
     if (!this.mapStream.needsWindow(focusPosition, streamOptions)) return;
     this.mapStreamLoading = true;
     this.mapWindowRequestCenter = { ...focusPosition };
