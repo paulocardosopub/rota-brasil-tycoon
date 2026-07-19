@@ -842,6 +842,8 @@ export interface HudSnapshot {
   headingDelta: number;
   vehicleHeading: number;
   fps: number;
+  cameraPlayerDistance: number;
+  mapRenderPlayerDistance: number;
   redLightWarning: boolean;
   trafficVehicles: number;
   trafficBuses: number;

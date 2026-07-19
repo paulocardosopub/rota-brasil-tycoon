@@ -217,6 +217,7 @@ describe('primeira frota', () => {
     expect(reloaded.fleet.vehicles.find((vehicle) => vehicle.id === sedan.id)?.position).toEqual(save.position);
     expect(reloaded.fleet.activeShift?.id).toBe(shiftId);
     expect(reloaded.temporaryVehicleControl).toBeNull();
+    expect(reloaded.viewedVehicleId).toBeNull();
   });
 
   it('permite assumir e devolver um veículo estacionado distante sem criar operação', () => {

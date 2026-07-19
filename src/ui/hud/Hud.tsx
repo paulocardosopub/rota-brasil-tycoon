@@ -23,7 +23,8 @@ const initialHud: HudSnapshot = {
   gameplaySpeedMultiplier: GAME_CONFIG.gameplay.speedMultiplier,
   worldClock: { gameMinute: 390, formattedTime: '06:30', period: 'amanhecer', periodLabel: 'Amanhecer', trafficMultiplier: 0.6, passengerDemandBonus: 0, directionalFlow: 'balanced', daylight: 0.8, darkness: 0.2, warmth: 0.7, headlights: 0, synchronized: false },
   money: 100, speedKmh: 0, fuel: 18, fuelCapacity: 40, condition: 70, objective: 'Carregando o mapa de Brasília…',
-  distanceRemaining: 0, etaSeconds: 0, headingDelta: 0, vehicleHeading: 0, fps: 0, redLightWarning: false,
+  distanceRemaining: 0, etaSeconds: 0, headingDelta: 0, vehicleHeading: 0, fps: 0,
+  cameraPlayerDistance: 0, mapRenderPlayerDistance: 0, redLightWarning: false,
   trafficVehicles: 0, trafficBuses: 0, trafficStunned: 0, trafficGhosted: 0, autopilotDeadlockRecoveries: 0,
   collisionEvents: 0, collisionSeverity: null, collisionRelativeSpeedKmh: 0, autopilotEnabled: false, autopilotSportMode: false,
   autopilotNextMissionSeconds: 0, autopilotRoadCorrections: 0, autopilotMinRoadClearance: 0, simulationSeconds: 0,
@@ -94,6 +95,7 @@ export function Hud() {
   return (
     <div className="hud" data-game-ready={hud.ready ? 'true' : 'false'} data-vehicle-name={hud.ready ? activeVehicle?.model ?? 'Hatch 1998' : ''}
       data-speed-kmh={hud.speedKmh.toFixed(2)} data-fps={hud.fps} data-vehicle-heading={hud.vehicleHeading.toFixed(4)}
+      data-camera-player-distance={hud.cameraPlayerDistance.toFixed(2)} data-map-render-player-distance={hud.mapRenderPlayerDistance.toFixed(2)}
       data-traffic-vehicles={hud.trafficVehicles} data-traffic-capacity={hud.trafficCapacity} data-traffic-buses={hud.trafficBuses}
       data-traffic-stunned={hud.trafficStunned} data-traffic-ghosted={hud.trafficGhosted}
       data-autopilot-deadlock-recoveries={hud.autopilotDeadlockRecoveries} data-collision-events={hud.collisionEvents}
