@@ -4,6 +4,7 @@ import { EconomyService } from '../economy/EconomyService';
 import { roundMoney } from '../economy/TransactionLedger';
 import { DEFAULT_SHIFT_POLICY, EMPLOYEE_CANDIDATES } from './FleetConfig';
 import { DEFAULT_EMPLOYEE_REGIONAL_PREFERENCES } from '../regions/RegionalDefaults';
+import { averageWorldConditions, periodAt } from '../time/WorldClock';
 import { ECONOMY_CONFIG } from '../economy/EconomyConfig';
 import { workshopPrice } from '../economy/ExpenseCalculator';
 
@@ -417,7 +418,8 @@ export function startFleetShift(save: PlayerSave, employeeId: string, requestId:
       regional: { ...employee.regionalPreferences, allowedRegionIds: [...employee.regionalPreferences.allowedRegionIds] }
     },
     rides: 0, kilometers: 0, grossRevenue: 0, fuelCost: 0, commission: 0,
-    maintenanceCost: repair?.cost ?? 0, fines: 0, netProfit: repair ? -repair.cost : 0
+    maintenanceCost: repair?.cost ?? 0, fines: 0, netProfit: repair ? -repair.cost : 0,
+    startedWorldMinute: save.worldClock.gameMinute, operatingSeconds: 0, trafficExposure: 0, passengerDemandExposure: 0
   };
   save.fleet.activeShift = shift;
   employee.state = shift.state;
@@ -426,7 +428,12 @@ export function startFleetShift(save: PlayerSave, employeeId: string, requestId:
   return { applied: true, shift };
 }
 
-export function advanceFleetShift(save: PlayerSave, elapsedSeconds: number, offline = false) {
+export function advanceFleetShift(
+  save: PlayerSave,
+  elapsedSeconds: number,
+  offline = false,
+  world = { trafficMultiplier: 0.7, passengerDemandBonus: 0 }
+) {
   const shift = save.fleet.activeShift;
   if (!shift || elapsedSeconds <= 0 || !Number.isFinite(elapsedSeconds)) return { completedRides: 0, report: null as FleetReport | null };
   const employee = save.fleet.employees.find((item) => item.id === shift.employeeId);
@@ -446,15 +453,24 @@ export function advanceFleetShift(save: PlayerSave, elapsedSeconds: number, offl
   const operationSeconds = Math.max(0, seconds - repairSeconds);
   if (!operationSeconds) return { completedRides: 0, report: null as FleetReport | null };
 
+  const trafficMultiplier = Math.max(0.4, Math.min(1, world.trafficMultiplier));
+  const passengerDemandBonus = Math.max(0, Math.min(0.1, world.passengerDemandBonus));
+  const travelTimeFactor = 0.85 + (trafficMultiplier - 0.4) * 0.5;
   const tripSeconds = Math.max(190, (430 - employee.efficiency * 1.45) / GAME_CONFIG.traffic.averageSpeedMultiplier);
-  const totalProgress = shift.routeProgress + operationSeconds;
+  const totalProgress = shift.routeProgress + operationSeconds / travelTimeFactor;
   const completedRides = Math.floor(totalProgress / tripSeconds);
   shift.routeProgress = totalProgress % tripSeconds;
+  shift.operatingSeconds = (shift.operatingSeconds ?? 0) + operationSeconds;
+  shift.trafficExposure = (shift.trafficExposure ?? 0) + operationSeconds * trafficMultiplier;
+  shift.passengerDemandExposure = (shift.passengerDemandExposure ?? 0) + operationSeconds * passengerDemandBonus;
   shift.lastSimulatedAt = new Date(Date.parse(shift.lastSimulatedAt) + operationSeconds * 1_000).toISOString();
   shift.state = fleetOperationalState(shift.routeProgress, tripSeconds);
   employee.state = shift.state;
 
-  if (completedRides) settleFleetBatch(save, shift, employee, vehicle, completedRides, offline);
+  if (completedRides) {
+    const averageDemandBonus = (shift.passengerDemandExposure ?? 0) / Math.max(1, shift.operatingSeconds ?? operationSeconds);
+    settleFleetBatch(save, shift, employee, vehicle, completedRides, offline, averageDemandBonus);
+  }
   const outOfFuel = vehicle.fuel <= 0.2;
   const maintenanceStop = vehicle.condition < shift.policy.minimumCondition;
   const scheduledEnd = Date.parse(shift.lastSimulatedAt) >= Date.parse(shift.scheduledEndAt) - 1;
@@ -489,7 +505,11 @@ export function simulateOfflineReturn(save: PlayerSave, now = new Date()) {
   const reduced = Math.max(0, capped - first) * 0.65;
   save.clockGuard.unvalidated = true;
   if (rawSeconds > maximum) save.clockGuard.unvalidated = true;
-  const result = advanceFleetShift(save, first + reduced, true);
+  const world = averageWorldConditions(save.worldClock.gameMinute, first + reduced);
+  const result = advanceFleetShift(save, first + reduced, true, world);
+  save.worldClock.gameMinute = world.endGameMinute;
+  save.worldClock.targetGameMinute = world.endGameMinute;
+  save.worldClock.lastPeriod = periodAt(world.endGameMinute);
   const report = result.report ?? snapshotFleetReport(save, [
     'Operação offline calculada por veículo, motorista, combustível e condição.',
     ...(rawSeconds > maximum ? [`Acúmulo limitado a ${GAME_CONFIG.fleet.offlineMaximumHours} horas.`] : [])
@@ -534,14 +554,14 @@ export function acknowledgeFleetReport(save: PlayerSave) {
   if (save.fleet.lastReport) save.fleet.lastReport.acknowledged = true;
 }
 
-function settleFleetBatch(save: PlayerSave, shift: FleetShift, employee: FleetEmployee, vehicle: FleetVehicle, rides: number, offline: boolean) {
+function settleFleetBatch(save: PlayerSave, shift: FleetShift, employee: FleetEmployee, vehicle: FleetVehicle, rides: number, offline: boolean, demandBonus = 0) {
   const startRide = shift.rides;
   const distancePerRide = vehicle.model === 'Sedan 2012' ? 1.55 : 1.35;
   const grossPerRide = ECONOMY_CONFIG.fleet.grossBasePerRide
     + employee.service * ECONOMY_CONFIG.fleet.serviceFactor
     + employee.efficiency * ECONOMY_CONFIG.fleet.efficiencyFactor
     + (vehicle.model === 'Sedan 2012' ? ECONOMY_CONFIG.fleet.sedanBonus : 0);
-  const gross = roundMoney(grossPerRide * rides);
+  const gross = roundMoney(grossPerRide * rides * (1 + Math.max(0, Math.min(0.1, demandBonus))));
   const commission = roundMoney(gross * employee.commissionPercent / 100);
   const kilometers = distancePerRide * rides;
   const kmPerLiter = (vehicle.model === 'Sedan 2012' ? 9.7 : 8.8) * (0.9 + employee.efficiency / 1_000);

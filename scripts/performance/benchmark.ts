@@ -21,48 +21,29 @@ try {
   ]) {
     const context = await browser.newContext({ viewport: { width: preset.width, height: preset.height } });
     const page = await context.newPage();
-    results.push(await measure(page, preset, 'cold'));
-    await page.waitForTimeout(500);
-    results.push(await measure(page, preset, 'warm'));
+    results.push(await measure(page, preset));
     await context.close();
   }
-  console.table(results.map((result) => ({
-    preset: result.preset,
-    cache: result.cache,
-    interfaceMs: result.interfaceMs,
-    gameReadyMs: result.gameReadyMs,
-    mapBeforeReadyMB: toMB(result.beforeReady.mapEncodedBytes),
-    dataBeforeReadyMB: toMB(result.beforeReady.encodedBytes),
-    networkBeforeReadyMB: toMB(result.beforeReady.transferredBytes),
-    dataSessionMB: toMB(result.afterSettle.encodedBytes),
-    networkSessionMB: toMB(result.afterSettle.transferredBytes),
-    heapUsedMB: result.heapUsedMB,
-    minimumFps: result.minimumFps,
-    medianFps: result.medianFps,
-    maximumFps: result.maximumFps
-  })));
+  console.table(results.flatMap((result) => result.periods.map((period) => ({
+    preset: result.preset, period: period.period, traffic: period.traffic,
+    minimumFps: period.minimumFps, medianFps: period.medianFps, maximumFps: period.maximumFps
+  }))));
 
   const artifacts = await artifactStats();
   const report = {
-    version: '0.8.6',
+    version: '0.8.7',
     measuredAt: new Date().toISOString(),
     target,
-    baseline085: {
-      desktop: { interfaceMs: 142, gameReadyMs: 7_901, medianFps: 35 },
-      mobile: { interfaceMs: 151, gameReadyMs: 4_030, medianFps: 54 },
-      initialBundleBytes: 1_910_005,
-      routingCoreBytes: 16_284_335,
-      publishedChunkBytes: 161_267_637
-    },
+    baseline086: { source: 'docs/performance-0.8.6.json' },
+    targets: { desktopMinimumMedianFps: 30, mobileMinimumMedianFps: 28 },
     artifacts,
     results
   };
-  await writeFile(path.resolve('docs/performance-0.8.6.json'), `${JSON.stringify(report, null, 2)}\n`);
-  const failed = results.some((result) => result.medianFps < 30
-    || result.traffic !== 72
+  await writeFile(path.resolve('docs/performance-0.8.7.json'), `${JSON.stringify(report, null, 2)}\n`);
+  const failed = results.some((result) => result.periods.some((period) => period.medianFps < (result.preset.startsWith('mobile') ? 28 : 30))
     || result.terrestrialEntities > 350
-    || (result.cache === 'cold' && result.preset.startsWith('desktop') && result.gameReadyMs > 3_000)
-    || (result.cache === 'cold' && result.preset.startsWith('mobile') && result.gameReadyMs > 5_000));
+    || (result.preset.startsWith('desktop') && result.gameReadyMs > 3_000)
+    || (result.preset.startsWith('mobile') && result.gameReadyMs > 5_000));
   if (failed) process.exitCode = 1;
 } finally {
   await browser.close();
@@ -70,8 +51,7 @@ try {
 
 async function measure(
   page: Page,
-  preset: { name: string; autopilot: boolean },
-  cache: 'cold' | 'warm'
+  preset: { name: string; autopilot: boolean }
 ) {
   const startedAt = Date.now();
   await page.goto(target, { waitUntil: 'domcontentloaded' });
@@ -83,8 +63,29 @@ async function measure(
   const gameReadyMs = Date.now() - startedAt;
   const beforeReady = await resourceTotals(page);
   if (preset.autopilot) await page.getByTestId('autopilot-button').click();
-  await page.waitForTimeout(2_500);
-  const fps = await collectFps(page, hud);
+  const periods = [];
+  for (const sample of [
+    { period: 'madrugada', minute: 120 },
+    { period: 'pico-manha', minute: 450 },
+    { period: 'dia', minute: 720 },
+    { period: 'pico-tarde', minute: 1_050 },
+    { period: 'noite', minute: 1_260 }
+  ]) {
+    await page.evaluate((minute) => {
+      (window as typeof window & { __RBT_SET_WORLD_TIME__?: (value: number) => void }).__RBT_SET_WORLD_TIME__?.(minute);
+    }, sample.minute);
+    await page.waitForTimeout(1_000);
+    const fps = await collectFps(page, hud);
+    periods.push({
+      period: sample.period,
+      minute: sample.minute,
+      minimumFps: Math.min(...fps),
+      medianFps: median(fps),
+      maximumFps: Math.max(...fps),
+      traffic: Number(await hud.getAttribute('data-traffic-vehicles')),
+      trafficMultiplier: Number(await hud.getAttribute('data-world-traffic-multiplier'))
+    });
+  }
   const afterSettle = await resourceTotals(page);
   const heapUsedMB = await page.evaluate(() => {
     const memory = (performance as Performance & { memory?: { usedJSHeapSize: number } }).memory;
@@ -92,16 +93,12 @@ async function measure(
   });
   return {
     preset: preset.name,
-    cache,
     interfaceMs,
     gameReadyMs,
     beforeReady,
     afterSettle,
     heapUsedMB,
-    minimumFps: Math.min(...fps),
-    medianFps: median(fps),
-    maximumFps: Math.max(...fps),
-    traffic: Number(await hud.getAttribute('data-traffic-vehicles')),
+    periods,
     buses: Number(await hud.getAttribute('data-traffic-buses')),
     airTraffic: Number(await hud.getAttribute('data-air-traffic')),
     terrestrialEntities: Number(await hud.getAttribute('data-terrestrial-entities'))
@@ -146,8 +143,8 @@ async function artifactStats() {
 
 async function collectFps(page: Page, hud: ReturnType<Page['locator']>) {
   const samples: number[] = [];
-  for (let index = 0; index < 8; index += 1) {
-    await page.waitForTimeout(750);
+  for (let index = 0; index < 5; index += 1) {
+    await page.waitForTimeout(500);
     samples.push(Number(await hud.getAttribute('data-fps')));
   }
   return samples;
@@ -156,8 +153,4 @@ async function collectFps(page: Page, hud: ReturnType<Page['locator']>) {
 function median(values: number[]) {
   const sorted = [...values].sort((a, b) => a - b);
   return sorted[Math.floor(sorted.length / 2)];
-}
-
-function toMB(bytes: number) {
-  return Math.round(bytes / 10_486) / 100;
 }

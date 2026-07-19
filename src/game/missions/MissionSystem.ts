@@ -18,6 +18,7 @@ type MissionVehicleContext = {
   regionalFamiliarity?: Record<string, RegionalFamiliarity>;
   services?: MapServiceLocation[];
   fuelLiters?: number;
+  peakDemandBonus?: number;
 };
 
 export class MissionSystem {
@@ -120,7 +121,8 @@ export class MissionSystem {
     const familiarityBonus = familiarityClass === 'favorite'
       ? ECONOMY_CONFIG.regional.favoriteEfficiencyBonus
       : familiarityClass === 'known' ? ECONOMY_CONFIG.regional.knownEfficiencyBonus : 0;
-    const demand = demandMultiplier(pickupRegion?.demandLevel, rideIndex) * (1 + familiarityBonus);
+    const peakDemandBonus = Math.max(0, Math.min(0.1, this.vehicleContext.peakDemandBonus ?? 0));
+    const demand = demandMultiplier(pickupRegion?.demandLevel, rideIndex) * (1 + familiarityBonus) * (1 + peakDemandBonus);
     const recommendedFuelLiters = Math.ceil((pickupDistance + rideDistance) / 8.8 * 1.15 / 100) / 10;
     const usesTaxiPoint = taxiPoint && Math.hypot(pickup.x - taxiPoint.entrance.x, pickup.y - taxiPoint.entrance.y) < 2;
     return {
@@ -158,10 +160,15 @@ export class MissionSystem {
       destinationRegionId: destinationRegion?.id,
       regionalCategory: regionalCategory(regionalPlan.kind, category, official),
       demandLevel: pickupRegion?.demandLevel ?? 'medium',
+      peakDemandBonusPercent: Math.round(peakDemandBonus * 100),
       familiarityLevel: familiarityClass,
       recommendedFuelLiters,
       routeDistanceMeters: rideDistance
     };
+  }
+
+  setPeakDemandBonus(bonus: number) {
+    this.vehicleContext.peakDemandBonus = Math.max(0, Math.min(0.1, Number.isFinite(bonus) ? bonus : 0));
   }
 
   update(

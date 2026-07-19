@@ -44,6 +44,7 @@ export interface LocalMovementState {
 type SnapshotListener = (snapshot: MovementSnapshot, presence?: PublicPresence) => void;
 type PresenceListener = (presences: Map<string, PublicPresence>) => void;
 type ConnectionListener = (state: OnlineConnectionState) => void;
+type ClockReferenceListener = (serverTimeMs: number) => void;
 type MockMessage =
   | { type: 'presence'; sender: string; presence: PublicPresence; requestReply: boolean }
   | { type: 'leave'; sender: string; sessionId: string }
@@ -54,6 +55,7 @@ export class OnlineWorldClient {
   private readonly snapshotListeners = new Set<SnapshotListener>();
   private readonly presenceListeners = new Set<PresenceListener>();
   private readonly connectionListeners = new Set<ConnectionListener>();
+  private readonly clockReferenceListeners = new Set<ClockReferenceListener>();
   private readonly channels = new Map<string, RealtimeChannel>();
   private readonly presences = new Map<string, PublicPresence>();
   private readonly sequences = new Map<string, number>();
@@ -91,6 +93,7 @@ export class OnlineWorldClient {
   onSnapshot(listener: SnapshotListener) { this.snapshotListeners.add(listener); return () => this.snapshotListeners.delete(listener); }
   onPresence(listener: PresenceListener) { this.presenceListeners.add(listener); return () => this.presenceListeners.delete(listener); }
   onConnection(listener: ConnectionListener) { this.connectionListeners.add(listener); return () => this.connectionListeners.delete(listener); }
+  onClockReference(listener: ClockReferenceListener) { this.clockReferenceListeners.add(listener); return () => this.clockReferenceListeners.delete(listener); }
 
   async start(chunkId: string, adjacentChunks: string[]) {
     if (this.started || this.disposed) return;
@@ -267,6 +270,7 @@ export class OnlineWorldClient {
       this.save.lastPublicSessionId = this.sessionId;
       this.save.lastOnlineWorld = GAME_CONFIG.online.worldId;
       this.serverTimeOffset = response.serverTime ? Date.parse(response.serverTime) - Date.now() : 0;
+      if (response.serverTime) this.emitClockReference(Date.parse(response.serverTime));
       this.pingMs = Date.now() - joinedAt;
       const lease = await this.client.functions.invoke('claim-vehicle-control', { body: {
         version: 1, sessionId: this.sessionId, vehicleId: this.publicVehicleId(this.save.activeVehicleId), stateVersion: this.activeVehicle()?.stateVersion ?? 1
@@ -427,6 +431,7 @@ export class OnlineWorldClient {
       };
       this.mockSocket.onopen = () => {
         this.setState('ONLINE');
+        this.emitClockReference(Date.now());
         this.broadcastPresence(true);
         this.startHeartbeat();
       };
@@ -443,6 +448,7 @@ export class OnlineWorldClient {
     this.mockChannel = new BroadcastChannel(`rbt-online-v${GAME_CONFIG.online.protocolVersion}:${GAME_CONFIG.online.worldId}`);
     this.mockChannel.onmessage = (event: MessageEvent<MockMessage>) => this.handleMockMessage(event.data);
     this.setState('ONLINE');
+    this.emitClockReference(Date.now());
     this.broadcastPresence(true);
     this.startHeartbeat();
   }
@@ -508,7 +514,15 @@ export class OnlineWorldClient {
           version: 1, sessionId: this.sessionId, vehicleId: this.publicVehicleId(this.lastVehicle?.vehicleId ?? this.save.activeVehicleId),
           chunkId: this.currentChunk, authorizedChunks: [this.currentChunk, ...this.adjacentChunks],
           stateVersion: this.activeVehicle()?.stateVersion ?? 1
-        }}).then(({ error }) => { if (error) this.handleConnectionLoss(); });
+        }}).then(({ data, error }) => {
+          if (error) { this.handleConnectionLoss(); return; }
+          const response = data as { serverTime?: string } | null;
+          if (response?.serverTime) {
+            const serverTimeMs = Date.parse(response.serverTime);
+            this.serverTimeOffset = serverTimeMs - Date.now();
+            this.emitClockReference(serverTimeMs);
+          }
+        });
       }
     }, GAME_CONFIG.online.heartbeatMs);
   }
@@ -541,6 +555,11 @@ export class OnlineWorldClient {
   private setState(state: OnlineConnectionState) {
     this.state = state;
     for (const listener of this.connectionListeners) listener(state);
+  }
+
+  private emitClockReference(serverTimeMs: number) {
+    if (!Number.isFinite(serverTimeMs)) return;
+    for (const listener of this.clockReferenceListeners) listener(serverTimeMs);
   }
 
   private subscribedToChunk(chunkId: string) { return chunkId === this.currentChunk || this.adjacentChunks.includes(chunkId); }

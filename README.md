@@ -1,4 +1,14 @@
-# Rota Brasil Tycoon — PLAYABLE 0.8.6
+# Rota Brasil Tycoon — PLAYABLE 0.8.7
+
+## Ciclo de 24 horas, trânsito e demanda
+
+- um dia completo dura 96 minutos reais, com relógio compartilhado de 24 horas e continuidade segura no modo solo;
+- amanhecer, dia, pôr do sol e noite alteram gradualmente a iluminação, com faróis, lanternas, postes e luzes próximas;
+- a densidade do trânsito acompanha oito períodos do dia sem reduzir artificialmente a velocidade dos NPCs;
+- os picos de 07:00–09:00 e 17:00–19:00 direcionam os deslocamentos e aumentam a demanda de passageiros em até 10%;
+- turnos de funcionários e operações offline consideram proporcionalmente o trânsito e a demanda atravessados;
+- o modo online sincroniza apenas a referência do relógio, preservando baixo uso de mensagens e funcionamento integral sem backend;
+- save v11 migra jogos anteriores e preserva horário, turnos, economia, frota e a opção de efeitos visuais reduzidos.
 
 ## Malha viária, piloto e carregamento progressivo
 
@@ -33,8 +43,6 @@
 - rotas de posto, oficina e garagem recalculam sozinhas quando o jogador assume a direção manual e se afasta;
 - piloto, funcionários e NPCs ativam recuperação imprudente após 10 segundos de bloqueio persistente;
 - save v10 preserva patrimônio anterior e acrescenta região, familiaridade, preferências regionais e linhagem segura da nuvem.
-
-As alterações da 0.8.6 permanecem somente locais até a autorização da publicação, preservando todo o histórico anterior.
 
 Jogo 2.5D de transporte brasileiro para navegador. Você começa ao volante de um Hatch 1998 em Brasília, atende passageiros, torna-se taxista e monta uma frota com funcionários que percorrem a mesma cidade física do jogador.
 
@@ -132,6 +140,9 @@ O workflow `.github/workflows/web.yml` testa, compila e publica `main`. Em **Set
 
 ## Auditorias
 
+- [auditoria final da PLAYABLE 0.8.7](./docs/playable-0.8.7-audit.md)
+- [desempenho nos cinco períodos da 0.8.7](./docs/performance-0.8.7.json)
+- [simulação de trânsito e ciclo diário 0.8.7](./docs/traffic-simulation-0.8.7.md)
 - [malha viária 0.8.6](./docs/road-network-audit-0.8.6.md)
 - [desempenho 0.8.6](./docs/performance-0.8.6.json)
 - [auditoria final da PLAYABLE 0.8.6](./docs/playable-0.8.6-audit.md)

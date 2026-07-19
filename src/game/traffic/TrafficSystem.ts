@@ -1,11 +1,12 @@
 import Phaser from 'phaser';
 import { GAME_CONFIG } from '../../config/gameConfig';
 import { directionalLaneCount, isDrivableRoad, pointInTrafficLane } from '../../map/routing/roadRules';
-import type { CollisionSeverity, GraphEdge, GraphNode, MapSignal, NavigationGraph, Point, RoadData, TrafficDensity, TrafficVehicleState } from '../../types/game';
-import { createBusVisual, createCarVisual, createUtilityVehicleVisual } from '../entities/VehicleVisual';
+import type { CollisionSeverity, DirectionalTrafficFlow, GraphEdge, GraphNode, MapRegion, MapSignal, NavigationGraph, Point, RoadData, TrafficDensity, TrafficVehicleState } from '../../types/game';
+import { createBusVisual, createCarVisual, createUtilityVehicleVisual, setVehicleLighting } from '../entities/VehicleVisual';
 import { distanceAhead, distanceAlongRoute, impactMetrics, pathsConflict, pointOverlapsVehicle, sweptPointOverlapsVehicle, yieldingPathsConflict } from './TrafficPhysics';
 import { selectMergeOwner } from './TrafficMerge';
 import { RecklessRecovery } from './RecklessRecovery';
+import { selectTrafficDestinationRegion, targetNpcPopulation } from './TrafficWorldFlow';
 
 type Project = (point: Point) => Point;
 type SignalState = 'green' | 'yellow' | 'red';
@@ -39,6 +40,8 @@ type TrafficVehicle = {
   state: TrafficVehicleState;
   stopReason: 'clear' | 'signal' | 'traffic' | 'player' | 'collision';
   color: number;
+  active: boolean;
+  destinationRegionId: string | null;
 };
 
 export type PlayerCollisionResult = {
@@ -84,6 +87,13 @@ export class TrafficSystem {
   private readonly playerRecovery = new RecklessRecovery(RECKLESS_RECOVERY_OPTIONS);
   private activeVehicleLimit = Number.POSITIVE_INFINITY;
   private requestedVehicleLimit = Number.POSITIVE_INFINITY;
+  private densitySettingMultiplier = 1;
+  private worldTrafficMultiplier = 1;
+  private desiredActiveVehicleCount = Number.POSITIVE_INFINITY;
+  private populationAdjustmentElapsed = 0;
+  private directionalFlow: DirectionalTrafficFlow = 'balanced';
+  private headlightIntensity = 0;
+  private reducedWorldEffects = false;
   private reservedSlots = 0;
   private fleetReservedSlots = 0;
   private onlineReservedSlots = 0;
@@ -102,7 +112,8 @@ export class TrafficSystem {
     roads: RoadData[],
     signals: MapSignal[],
     private readonly project: Project,
-    spawn: Point
+    spawn: Point,
+    private readonly regions: readonly MapRegion[] = []
   ) {
     this.laneGraph = graph.kind === 'lane';
     this.crowdGraphics = scene.add.graphics().setDepth(23);
@@ -190,6 +201,8 @@ export class TrafficSystem {
         state: 'cruising',
         stopReason: 'clear',
         color,
+        active: true,
+        destinationRegionId: this.destinationRegionFor(index, 'balanced')?.id ?? null,
         ...spec
       });
     }
@@ -236,10 +249,11 @@ export class TrafficSystem {
     deltaSeconds = Math.min(0.2, this.pendingUpdateSeconds);
     this.pendingUpdateSeconds = 0;
     this.elapsed += deltaSeconds * this.timeScale;
+    this.adjustActivePopulation(deltaSeconds, playerPosition);
     this.crowdGraphics.clear();
     this.rebuildSpatialIndex();
     for (const vehicle of this.vehicles) {
-      if (vehicle.index >= this.activeVehicleLimit) {
+      if (!vehicle.active) {
         vehicle.visual?.setVisible(false);
         continue;
       }
@@ -402,7 +416,10 @@ export class TrafficSystem {
       const nextHeading = Math.atan2(vehicle.targetPosition.y - vehicle.position.y, vehicle.targetPosition.x - vehicle.position.x);
       vehicle.heading = rotateTowards(vehicle.heading, nextHeading, 2.8 * deltaSeconds);
       const projected = this.project(vehicle.position);
-      if (vehicle.visual) vehicle.visual.setPosition(projected.x, projected.y).setRotation(projectedHeading(this.project, vehicle.position, vehicle.heading));
+      if (vehicle.visual) {
+        vehicle.visual.setPosition(projected.x, projected.y).setRotation(projectedHeading(this.project, vehicle.position, vehicle.heading));
+        setVehicleLighting(vehicle.visual, this.headlightIntensity, vehicle.state === 'braking' || vehicle.state === 'stopped-signal', this.reducedWorldEffects);
+      }
       else if (distanceFromPlayer < 520) this.drawCrowdVehicle(vehicle, projected);
     }
     return { autopilotDeadlockRecovery };
@@ -449,7 +466,7 @@ export class TrafficSystem {
     let best: TrafficVehicle | null = null;
     let bestGap = Number.POSITIVE_INFINITY;
     for (const vehicle of this.vehicles) {
-      if (vehicle.index >= this.activeVehicleLimit || this.elapsed < vehicle.ghostWithPlayerUntil || vehicle.recovery.active) continue;
+      if (!vehicle.active || this.elapsed < vehicle.ghostWithPlayerUntil || vehicle.recovery.active) continue;
       const gap = distanceAhead(playerPosition, playerHeading, vehicle.position, 4.2);
       const crossing = yieldingPathsConflict(
         { position: playerPosition, heading: playerHeading, speed: 0 },
@@ -583,9 +600,17 @@ export class TrafficSystem {
   }
 
   setDensity(density: TrafficDensity) {
-    const multiplier = GAME_CONFIG.traffic.densityMultipliers[density];
-    this.requestedVehicleLimit = Math.max(8, Math.round(this.vehicles.length * multiplier));
-    this.activeVehicleLimit = Math.max(0, this.requestedVehicleLimit - this.reservedSlots);
+    this.densitySettingMultiplier = GAME_CONFIG.traffic.densityMultipliers[density];
+    this.rebuildExternalTraffic();
+  }
+
+  setWorldConditions(trafficMultiplier: number, directionalFlow: DirectionalTrafficFlow) {
+    this.worldTrafficMultiplier = clamp(trafficMultiplier, 0.35, 1);
+    if (directionalFlow !== this.directionalFlow) {
+      this.directionalFlow = directionalFlow;
+      for (const vehicle of this.vehicles) vehicle.destinationRegionId = this.destinationRegionFor(vehicle.index, directionalFlow)?.id ?? null;
+    }
+    this.rebuildExternalTraffic();
   }
 
   setReservedSlots(count: number) {
@@ -600,7 +625,9 @@ export class TrafficSystem {
 
   private rebuildExternalTraffic() {
     this.reservedSlots = this.fleetReservedSlots + this.onlineReservedSlots;
-    this.activeVehicleLimit = Math.max(0, this.requestedVehicleLimit - this.reservedSlots);
+    this.requestedVehicleLimit = Math.max(8, Math.round(this.vehicles.length * this.densitySettingMultiplier * this.worldTrafficMultiplier));
+    this.desiredActiveVehicleCount = targetNpcPopulation(this.vehicles.length, this.densitySettingMultiplier, this.worldTrafficMultiplier, this.reservedSlots);
+    if (!Number.isFinite(this.activeVehicleLimit)) this.activeVehicleLimit = this.vehicles.filter((vehicle) => vehicle.active).length;
     this.priorityVehicles = [...this.fleetPriorityVehicles, ...this.onlinePriorityVehicles].slice(0, 32);
   }
 
@@ -621,7 +648,7 @@ export class TrafficSystem {
     let strongest: ReturnType<typeof impactMetrics> | null = null;
     let resolvedPosition: Point | null = null;
     for (const vehicle of this.vehicles) {
-      if (vehicle.index >= this.activeVehicleLimit) continue;
+      if (!vehicle.active) continue;
       if (Math.abs(vehicle.position.x - position.x) > 18 || Math.abs(vehicle.position.y - position.y) > 18) continue;
       const sweptContact = sweptPointOverlapsVehicle(
         previousPosition,
@@ -787,17 +814,20 @@ export class TrafficSystem {
 
   stats() {
     return {
-      total: Math.min(this.vehicles.length, this.activeVehicleLimit),
+      total: this.vehicles.filter((vehicle) => vehicle.active).length,
       capacity: this.vehicles.length,
       hardCeiling: GAME_CONFIG.traffic.maximumTerrestrialEntities,
       reservedSlots: this.reservedSlots,
-      buses: this.vehicles.filter((vehicle) => vehicle.index < this.activeVehicleLimit && vehicle.kind === 'bus').length,
-      utility: this.vehicles.filter((vehicle) => vehicle.index < this.activeVehicleLimit && vehicle.kind === 'utility').length,
-      stunned: this.vehicles.filter((vehicle) => vehicle.index < this.activeVehicleLimit && (vehicle.contactWithPlayer || this.elapsed < vehicle.stunnedUntil)).length,
-      ghosted: this.vehicles.filter((vehicle) => vehicle.index < this.activeVehicleLimit && (this.elapsed < vehicle.ghostWithPlayerUntil || vehicle.recovery.active)).length,
+      buses: this.vehicles.filter((vehicle) => vehicle.active && vehicle.kind === 'bus').length,
+      utility: this.vehicles.filter((vehicle) => vehicle.active && vehicle.kind === 'utility').length,
+      stunned: this.vehicles.filter((vehicle) => vehicle.active && (vehicle.contactWithPlayer || this.elapsed < vehicle.stunnedUntil)).length,
+      ghosted: this.vehicles.filter((vehicle) => vehicle.active && (this.elapsed < vehicle.ghostWithPlayerUntil || vehicle.recovery.active)).length,
       deadlockRecoveries: this.deadlockRecoveries,
       brakeReason: this.playerBrakeReason,
-      stopReason: mostCommonStopReason(this.vehicles.filter((vehicle) => vehicle.index < this.activeVehicleLimit))
+      stopReason: mostCommonStopReason(this.vehicles.filter((vehicle) => vehicle.active)),
+      worldMultiplier: this.worldTrafficMultiplier,
+      directionalFlow: this.directionalFlow,
+      regionalDestinations: new Set(this.vehicles.filter((vehicle) => vehicle.active).map((vehicle) => vehicle.destinationRegionId).filter(Boolean)).size
     };
   }
 
@@ -833,7 +863,15 @@ export class TrafficSystem {
       vehicle.speed = 0;
       return;
     }
-    const edge = choices[(vehicle.index + Math.floor(this.elapsed / 4)) % choices.length];
+    const destination = this.regions.find((region) => region.id === vehicle.destinationRegionId);
+    const ranked = destination ? [...choices].sort((a, b) => {
+      const aNode = this.nodes.get(a.to);
+      const bNode = this.nodes.get(b.to);
+      const aDistance = aNode ? Math.hypot(aNode.x - destination.center.x, aNode.y - destination.center.y) : Number.POSITIVE_INFINITY;
+      const bDistance = bNode ? Math.hypot(bNode.x - destination.center.x, bNode.y - destination.center.y) : Number.POSITIVE_INFINITY;
+      return aDistance - bDistance;
+    }) : choices;
+    const edge = ranked[(vehicle.index + Math.floor(this.elapsed / 12)) % Math.min(3, ranked.length)];
     const target = this.nodes.get(edge.to);
     if (!target) return;
     const road = this.roads.get(edge.roadId);
@@ -882,7 +920,7 @@ export class TrafficSystem {
 
   private hasNodeEntryPriority(vehicle: TrafficVehicle, remaining: number) {
     const candidates = this.vehicles
-      .filter((other) => other.index < this.activeVehicleLimit && !other.recovery.active && other.target.id === vehicle.target.id)
+      .filter((other) => other.active && !other.recovery.active && other.target.id === vehicle.target.id)
       .map((other) => ({
         index: other.index,
         remaining: other === vehicle ? remaining : Math.hypot(other.targetPosition.x - other.position.x, other.targetPosition.y - other.position.y)
@@ -921,12 +959,46 @@ export class TrafficSystem {
   private rebuildSpatialIndex() {
     this.spatialVehicles.clear();
     for (const vehicle of this.vehicles) {
-      if (vehicle.index >= this.activeVehicleLimit) continue;
+      if (!vehicle.active) continue;
       const key = spatialKey(vehicle.position);
       const bucket = this.spatialVehicles.get(key);
       if (bucket) bucket.push(vehicle);
       else this.spatialVehicles.set(key, [vehicle]);
     }
+  }
+
+  setWorldLighting(headlightIntensity: number, reducedEffects: boolean) {
+    this.headlightIntensity = clamp(headlightIntensity, 0, 1);
+    this.reducedWorldEffects = reducedEffects;
+  }
+
+  private adjustActivePopulation(deltaSeconds: number, playerPosition: Point) {
+    this.populationAdjustmentElapsed += deltaSeconds;
+    if (this.populationAdjustmentElapsed < GAME_CONFIG.worldClock.populationAdjustmentSeconds) return;
+    this.populationAdjustmentElapsed = 0;
+    const active = this.vehicles.filter((vehicle) => vehicle.active);
+    const current = active.length;
+    if (current === this.desiredActiveVehicleCount) { this.activeVehicleLimit = current; return; }
+    const minimumDistance = GAME_CONFIG.worldClock.offscreenPopulationDistanceMeters;
+    if (current > this.desiredActiveVehicleCount) {
+      const candidate = active
+        .map((vehicle) => ({ vehicle, distance: Math.hypot(vehicle.position.x - playerPosition.x, vehicle.position.y - playerPosition.y) }))
+        .filter(({ distance }) => distance > minimumDistance)
+        .sort((a, b) => b.distance - a.distance)[0]?.vehicle;
+      if (candidate) { candidate.active = false; candidate.visual?.setVisible(false); }
+    } else {
+      const candidate = this.vehicles
+        .filter((vehicle) => !vehicle.active)
+        .map((vehicle) => ({ vehicle, distance: Math.hypot(vehicle.position.x - playerPosition.x, vehicle.position.y - playerPosition.y) }))
+        .filter(({ distance }) => distance > minimumDistance)
+        .sort((a, b) => b.distance - a.distance)[0]?.vehicle;
+      if (candidate) candidate.active = true;
+    }
+    this.activeVehicleLimit = this.vehicles.filter((vehicle) => vehicle.active).length;
+  }
+
+  private destinationRegionFor(index: number, flow: DirectionalTrafficFlow) {
+    return selectTrafficDestinationRegion(this.regions, index, flow);
   }
 
   private nearbyVehicles(position: Point) {
@@ -954,6 +1026,13 @@ export class TrafficSystem {
     this.crowdGraphics.fillStyle(vehicle.color, 0.94)
       .fillTriangle(a.x, a.y, b.x, b.y, c.x, c.y)
       .fillTriangle(a.x, a.y, c.x, c.y, d.x, d.y);
+    if (this.headlightIntensity > 0.03) {
+      const glow = this.reducedWorldEffects ? this.headlightIntensity * 0.08 : this.headlightIntensity * 0.14;
+      const nose = { x: projected.x + forward.x, y: projected.y + forward.y };
+      const far = { x: nose.x + Math.cos(heading) * 9, y: nose.y + Math.sin(heading) * 9 };
+      this.crowdGraphics.fillStyle(0xffefb0, glow).fillTriangle(nose.x, nose.y, far.x + side.x * 1.8, far.y + side.y * 1.8, far.x - side.x * 1.8, far.y - side.y * 1.8);
+      this.crowdGraphics.fillStyle(0xff3b48, this.headlightIntensity * 0.78).fillCircle(projected.x - forward.x, projected.y - forward.y, 0.35);
+    }
   }
 }
 

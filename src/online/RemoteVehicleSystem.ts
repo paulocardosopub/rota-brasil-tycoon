@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 import { GAME_CONFIG } from '../config/gameConfig';
 import type { OnlineHudSnapshot, PlayerSettings, Point } from '../types/game';
-import { createFleetVehicleVisual } from '../game/entities/VehicleVisual';
+import { createFleetVehicleVisual, setVehicleLighting } from '../game/entities/VehicleVisual';
 import type { PriorityTrafficVehicle, TrafficSystem } from '../game/traffic/TrafficSystem';
 import { interestLevel } from './adaptiveRate';
 import { RemoteInterpolationBuffer } from './interpolation';
@@ -57,7 +57,7 @@ export class RemoteVehicleSystem {
     return remote.buffer.push(snapshot);
   }
 
-  update(now: number, localPosition: Point, settings: PlayerSettings) {
+  update(now: number, localPosition: Point, settings: PlayerSettings, headlightIntensity = 0) {
     const priorities: PriorityTrafficVehicle[] = [];
     let visible = 0;
     for (const [vehicleId, remote] of this.remotes) {
@@ -76,6 +76,7 @@ export class RemoteVehicleSystem {
       const projected = this.project(state.position);
       const projectedAhead = this.project({ x: state.position.x + Math.cos(state.heading), y: state.position.y + Math.sin(state.heading) });
       remote.visual.setPosition(projected.x, projected.y).setRotation(Math.atan2(projectedAhead.y - projected.y, projectedAhead.x - projected.x));
+      setVehicleLighting(remote.visual, headlightIntensity, remote.snapshot.braking, settings.reducedWorldEffects);
       remote.visual.setAlpha(state.stale ? 0.55 : 1).setScale(interest === 'NEAR' ? 0.78 : interest === 'MEDIUM' ? 0.65 : 0.48);
       this.placeLabel(remote, projected, settings, interest);
       if (interest === 'NEAR' || interest === 'MEDIUM') priorities.push({ id: `online-${vehicleId}`, position: state.position, heading: state.heading, speed: state.speed });

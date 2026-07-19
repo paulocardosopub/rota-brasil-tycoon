@@ -1,8 +1,8 @@
 import { COLLISION_PHYSICS, VEHICLE_PHYSICS } from './vehiclePhysics';
 
 export const GAME_CONFIG = {
-  version: '0.8.6',
-  saveVersion: 10,
+  version: '0.8.7',
+  saveVersion: 11,
   mapVersion: 'brasilia-0.8.6',
   map: {
     city: 'Brasília',
@@ -82,6 +82,24 @@ export const GAME_CONFIG = {
     densityMultipliers: { low: 0.28, medium: 0.56, high: 1, automatic: 1 },
     signal: { greenSeconds: 12, yellowSeconds: 3, allRedSeconds: 1 },
     redLightPenalty: 2
+  },
+  worldClock: {
+    realDayMinutes: 96,
+    referenceEpochMs: Date.UTC(2026, 0, 1, 0, 0, 0),
+    referenceGameMinute: 390,
+    maximumVisualCorrectionGameMinutesPerSecond: 6,
+    periods: {
+      madrugada: { startMinute: 0, endMinute: 300, trafficMultiplier: 0.4, passengerDemandBonus: 0 },
+      amanhecer: { startMinute: 300, endMinute: 420, trafficMultiplier: 0.75, passengerDemandBonus: 0 },
+      picoManha: { startMinute: 420, endMinute: 540, trafficMultiplier: 1, passengerDemandBonus: 0.1 },
+      dia: { startMinute: 540, endMinute: 960, trafficMultiplier: 0.7, passengerDemandBonus: 0 },
+      transicaoTarde: { startMinute: 960, endMinute: 1020, trafficMultiplier: 0.85, passengerDemandBonus: 0 },
+      picoTarde: { startMinute: 1020, endMinute: 1140, trafficMultiplier: 1, passengerDemandBonus: 0.1 },
+      noite: { startMinute: 1140, endMinute: 1320, trafficMultiplier: 0.65, passengerDemandBonus: 0 },
+      noiteAvancada: { startMinute: 1320, endMinute: 1440, trafficMultiplier: 0.5, passengerDemandBonus: 0 }
+    },
+    populationAdjustmentSeconds: 0.7,
+    offscreenPopulationDistanceMeters: 540
   },
   camera: {
     defaultZoom: 4,

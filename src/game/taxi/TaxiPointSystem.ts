@@ -5,6 +5,7 @@ type Project = (point: Point) => Point;
 
 export class TaxiPointSystem {
   private readonly visuals: Phaser.GameObjects.Container[] = [];
+  private demandMultiplier = 1;
 
   constructor(scene: Phaser.Scene, readonly points: TaxiPoint[], project: Project) {
     for (const [index, point] of points.entries()) {
@@ -21,7 +22,10 @@ export class TaxiPointSystem {
       const passenger = scene.add.graphics();
       passenger.fillStyle(0x5d3f2f).fillCircle(4 + index % 2 * 2, -6, 0.65);
       passenger.fillStyle(0x35c9a0).fillRoundedRect(3.3 + index % 2 * 2, -5.3, 1.4, 2.3, 0.35);
-      container.add([pad, sign, passenger]);
+      const peakPassenger = scene.add.graphics().setName('peak-passenger').setVisible(false);
+      peakPassenger.fillStyle(0x4d352a).fillCircle(-4 - index % 2, -6, 0.65);
+      peakPassenger.fillStyle(0xf0a34a).fillRoundedRect(-4.7 - index % 2, -5.3, 1.4, 2.3, 0.35);
+      container.add([pad, sign, passenger, peakPassenger]);
       this.visuals.push(container);
     }
   }
@@ -29,6 +33,11 @@ export class TaxiPointSystem {
   update(elapsedSeconds: number) {
     this.visuals.forEach((visual, index) => {
       visual.setScale(1 + Math.sin(elapsedSeconds * 1.8 + index) * 0.025);
+      (visual.getByName('peak-passenger') as Phaser.GameObjects.Graphics | null)?.setVisible(this.demandMultiplier > 1.05);
     });
+  }
+
+  setDemandMultiplier(multiplier: number) {
+    this.demandMultiplier = Math.max(1, Math.min(1.1, Number.isFinite(multiplier) ? multiplier : 1));
   }
 }

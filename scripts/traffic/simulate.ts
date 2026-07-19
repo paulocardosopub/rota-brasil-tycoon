@@ -4,6 +4,7 @@ import { readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import type { CityMapManifest, NavigationGraph } from '../../src/types/game';
 import type { PackedNavigationGraph } from '../../src/map/pipeline/RoadPipeline';
+import { worldClockSnapshotAt } from '../../src/game/time/WorldClock';
 
 const root = path.resolve('public/data/cities/brasilia');
 const manifest = JSON.parse(await readFile(path.join(root, 'manifest.json'), 'utf8')) as CityMapManifest;
@@ -16,14 +17,23 @@ const candidates = graph.nodes.filter((node) => globalComponent.has(node.id) && 
 const densities = [20, 40, 72, 100];
 const results = densities.map(simulate);
 const failures = results.filter((result) => result.deadlocks || result.collisions || result.headOnConflicts || result.routeLoops);
+const periods = [120, 360, 450, 720, 990, 1_050, 1_260, 1_380].map((minute) => worldClockSnapshotAt(minute));
 
-const report = `# Simulação de trânsito — 0.8.6
+const report = `# Simulação de trânsito — 0.8.7
 
 Simulação determinística sobre o mesmo grafo dirigido por faixa usado por jogador, piloto, NPCs e funcionários.
 
 | Veículos | Movimentos | Maior espera | Recuperações | Deadlocks | Colisões | Frente a frente | Loops permanentes |
 |---:|---:|---:|---:|---:|---:|---:|---:|
 ${results.map((result) => `| ${result.vehicleCount} | ${result.movements} | ${result.maximumWait} ticks | ${result.recoveries} | ${result.deadlocks} | ${result.collisions} | ${result.headOnConflicts} | ${result.routeLoops} |`).join('\n')}
+
+## Ciclo diário
+
+| Período | Horário amostrado | Multiplicador | NPCs-alvo sobre 72 | Fluxo direcional |
+|---|---:|---:|---:|---|
+${periods.map((period) => `| ${period.periodLabel} | ${period.formattedTime} | ${(period.trafficMultiplier * 100).toFixed(0)}% | ${Math.round(72 * period.trafficMultiplier)} | ${period.directionalFlow} |`).join('\n')}
+
+A população muda gradualmente e somente fora da câmera. Nos picos, manhã direciona o fluxo às áreas centrais/comerciais/UnB e tarde às áreas residenciais, Lago Sul, Sudoeste e Jardim Botânico. Jogadores online e veículos de funcionários ocupam primeiro as vagas do teto, substituindo NPCs.
 
 ## Cenários cobertos
 
@@ -40,11 +50,11 @@ ${results.map((result) => `| ${result.vehicleCount} | ${result.movements} | ${re
 
 ${failures.length ? `Falha em ${failures.length} densidade(s).` : 'Aprovado: nenhum deadlock permanente, colisão de reserva, conflito frente a frente ou loop de rota.'}
 `;
-await writeFile(path.resolve('docs/traffic-simulation-0.8.6.md'), report);
+await writeFile(path.resolve('docs/traffic-simulation-0.8.7.md'), report);
 if (failures.length) {
   console.error(report);
   process.exitCode = 1;
-} else console.log(`Trânsito 0.8.6 aprovado em ${densities.join('/')}: sem deadlock, colisão, contramão ou loop.`);
+} else console.log(`Trânsito 0.8.7 aprovado em ${densities.join('/')}: sem deadlock, colisão, contramão ou loop.`);
 
 function unpackNavigationGraph(graph: NavigationGraph | PackedNavigationGraph): NavigationGraph {
   if (graph.kind !== 'packed-lane') return graph;

@@ -10,6 +10,7 @@ export type GameCommand =
   | { type: 'set-quality'; quality: Quality }
   | { type: 'set-camera-zoom'; zoom: CameraZoom }
   | { type: 'set-camera-shake'; enabled: boolean }
+  | { type: 'set-reduced-world-effects'; enabled: boolean }
   | { type: 'set-traffic-density'; density: TrafficDensity }
   | { type: 'set-audio'; enabled: boolean; masterVolume?: number; engineVolume?: number; effectsVolume?: number }
   | { type: 'set-online-mode'; mode: 'online' | 'solo' }

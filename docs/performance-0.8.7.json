@@ -1,0 +1,161 @@
+{
+  "version": "0.8.7",
+  "measuredAt": "2026-07-19T01:58:26.774Z",
+  "target": "http://127.0.0.1:4190/?performanceWorldClock=1",
+  "baseline086": {
+    "source": "docs/performance-0.8.6.json"
+  },
+  "targets": {
+    "desktopMinimumMedianFps": 30,
+    "mobileMinimumMedianFps": 28
+  },
+  "artifacts": {
+    "initialBundleBytes": 305445,
+    "applicationBundleBytes": 1993923,
+    "routingCoreBytes": 3897629,
+    "publishedChunkBytes": 162932322,
+    "publishedMapBytes": 166829951
+  },
+  "results": [
+    {
+      "preset": "desktop-1440x900",
+      "interfaceMs": 111,
+      "gameReadyMs": 1753,
+      "beforeReady": {
+        "transferredBytes": 92479,
+        "encodedBytes": 6130067,
+        "mapTransferredBytes": 0,
+        "mapEncodedBytes": 4350010,
+        "requests": 17
+      },
+      "afterSettle": {
+        "transferredBytes": 92479,
+        "encodedBytes": 9681813,
+        "mapTransferredBytes": 0,
+        "mapEncodedBytes": 7901756,
+        "requests": 22
+      },
+      "heapUsedMB": 48,
+      "periods": [
+        {
+          "period": "madrugada",
+          "minute": 120,
+          "minimumFps": 40,
+          "medianFps": 44,
+          "maximumFps": 48,
+          "traffic": 67,
+          "trafficMultiplier": 0.4
+        },
+        {
+          "period": "pico-manha",
+          "minute": 450,
+          "minimumFps": 35,
+          "medianFps": 36,
+          "maximumFps": 37,
+          "traffic": 71,
+          "trafficMultiplier": 1
+        },
+        {
+          "period": "dia",
+          "minute": 720,
+          "minimumFps": 34,
+          "medianFps": 34,
+          "maximumFps": 34,
+          "traffic": 66,
+          "trafficMultiplier": 0.7
+        },
+        {
+          "period": "pico-tarde",
+          "minute": 1050,
+          "minimumFps": 33,
+          "medianFps": 33,
+          "maximumFps": 34,
+          "traffic": 71,
+          "trafficMultiplier": 1
+        },
+        {
+          "period": "noite",
+          "minute": 1260,
+          "minimumFps": 32,
+          "medianFps": 33,
+          "maximumFps": 33,
+          "traffic": 66,
+          "trafficMultiplier": 0.65
+        }
+      ],
+      "buses": 9,
+      "airTraffic": 10,
+      "terrestrialEntities": 67
+    },
+    {
+      "preset": "mobile-390x844-pilot",
+      "interfaceMs": 71,
+      "gameReadyMs": 1048,
+      "beforeReady": {
+        "transferredBytes": 92479,
+        "encodedBytes": 6130067,
+        "mapTransferredBytes": 0,
+        "mapEncodedBytes": 4350010,
+        "requests": 17
+      },
+      "afterSettle": {
+        "transferredBytes": 92479,
+        "encodedBytes": 27045473,
+        "mapTransferredBytes": 0,
+        "mapEncodedBytes": 25265416,
+        "requests": 29
+      },
+      "heapUsedMB": 215,
+      "periods": [
+        {
+          "period": "madrugada",
+          "minute": 120,
+          "minimumFps": 47,
+          "medianFps": 50,
+          "maximumFps": 55,
+          "traffic": 68,
+          "trafficMultiplier": 0.4
+        },
+        {
+          "period": "pico-manha",
+          "minute": 450,
+          "minimumFps": 54,
+          "medianFps": 56,
+          "maximumFps": 57,
+          "traffic": 72,
+          "trafficMultiplier": 1
+        },
+        {
+          "period": "dia",
+          "minute": 720,
+          "minimumFps": 58,
+          "medianFps": 58,
+          "maximumFps": 59,
+          "traffic": 67,
+          "trafficMultiplier": 0.7
+        },
+        {
+          "period": "pico-tarde",
+          "minute": 1050,
+          "minimumFps": 59,
+          "medianFps": 60,
+          "maximumFps": 60,
+          "traffic": 70,
+          "trafficMultiplier": 1
+        },
+        {
+          "period": "noite",
+          "minute": 1260,
+          "minimumFps": 60,
+          "medianFps": 60,
+          "maximumFps": 61,
+          "traffic": 65,
+          "trafficMultiplier": 0.65
+        }
+      ],
+      "buses": 9,
+      "airTraffic": 10,
+      "terrestrialEntities": 66
+    }
+  ]
+}
